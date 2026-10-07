@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.output/
+.nitro/
+.tanstack/
+coverage/
+.vite/
+
+# Le fichier .env n'existe que sur le PC.
+.env
+.env.*
+!.env.example
+
+# Un worktree par chantier, créé par `tools/worktree.sh` seulement (JOURNAL 2026-10-07).
+.claude/worktrees/
+
+*.log
+.DS_Store
+Thumbs.db

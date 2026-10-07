@@ -1,0 +1,27 @@
+{
+  "_": "SOURCE DE VÉRITÉ de la nomenclature — le langage du projet. Un mot par concept, un concept par mot. Lu par le gate. Ajouter un synonyme « juste pour cette fois » EST le mécanisme de la dérive : ça passe par JOURNAL.md.",
+
+  "nouns": [],
+
+  "verbs": [
+    { "canonical": "get",     "meaning": "Lire UNE ressource par son identifiant. Absente = erreur.", "banned": ["fetch", "retrieve", "load", "read", "find", "select"] },
+    { "canonical": "list",    "meaning": "Lire une collection. Vide = résultat valide, pas une erreur.", "banned": ["getAll", "fetchAll", "index", "query", "search", "browse"] },
+    { "canonical": "create",  "meaning": "Faire exister une ressource qui n'existait pas.",     "banned": ["add", "insert", "save", "store", "register", "make", "new"] },
+    { "canonical": "update",  "meaning": "Modifier une ressource existante.",                   "banned": ["edit", "modify", "patch", "change", "set"] },
+    { "canonical": "delete",  "meaning": "Retirer une ressource (soft ou hard, décidé par couche).", "banned": ["remove", "destroy", "erase", "drop", "archive"] },
+    { "canonical": "to",      "meaning": "Convertir d'une forme vers une autre (toDto, toDomain).", "banned": ["convert", "transform", "parse", "map", "serialize"] },
+    { "canonical": "assert",  "meaning": "Échouer bruyamment si l'invariant est faux.",         "banned": ["check", "verify", "ensure", "validate", "guard"] }
+  ],
+
+  "bannedNames": [
+    "util", "utils", "helper", "helpers", "manager", "handler", "service", "processor",
+    "data", "datas", "info", "infos", "misc", "common", "stuff", "thing", "things",
+    "temp", "tmp", "old", "new", "v2", "final", "wrapper"
+  ],
+  "_bannedNamesTuning": "Liste de départ, à ajuster : retirer un mot que le projet emploie légitimement est une décision (JOURNAL), en ajouter un après une dérive constatée est le fonctionnement normal du cliquet.",
+  "_bannedNames": "Ces mots ne décrivent pas une responsabilité, ils décrivent l'absence de décision. `utils.ts` est le dossier où un agent range ce qu'il n'a pas su classer — et c'est exactement là que la duplication s'installe.",
+
+  "booleanPrefixes": ["is", "has", "can", "should", "will", "was", "did"],
+
+  "ignore": ["src/**/*.generated.ts", "src/**/*.gen.ts"]
+}

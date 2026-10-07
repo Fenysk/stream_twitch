@@ -1,0 +1,63 @@
+{
+  "_": "SOURCE DE VÉRITÉ de l'architecture. Lu par le gate, pas seulement par l'humain. Modifier ce fichier change ce que le gate accepte — donc c'est une décision, et une décision s'écrit d'abord dans JOURNAL.md.",
+
+  "root": "src",
+  "aliases": { "@/*": "src/*" },
+
+  "_ignore": "Code GÉNÉRÉ, jamais écrit à la main (arbre de routes, client d'API) : hors du check, couches et cycles compris. Un import VERS ces fichiers reste contrôlé. Même rôle que `ignore` dans lexique.json — l'élargir change ce que le gate accepte, donc une ligne de JOURNAL d'abord.",
+  "ignore": ["src/**/*.gen.ts", "src/**/*.generated.ts"],
+
+  "layers": [
+    {
+      "name": "domain",
+      "_": "Le métier pur : types, schémas, règles, invariants. Ne connaît ni base de données, ni HTTP, ni React. Se teste sans rien monter.",
+      "match": "src/domain/**",
+      "canImport": ["shared"],
+      "filename": "^[a-z0-9-]+\\.(schema|types|rules)\\.ts$"
+    },
+    {
+      "name": "usecase",
+      "_": "L'orchestration : un cas d'usage = une intention métier. Dépend du domaine et de rien d'autre de concret — les accès sortants passent par des ports (interfaces) déclarés ici.",
+      "match": "src/usecase/**",
+      "canImport": ["domain", "shared"],
+      "filename": "^[a-z0-9-]+\\.usecase\\.ts$"
+    },
+    {
+      "name": "infra",
+      "_": "Le concret : base, HTTP, fichiers, SDK tiers. Implémente les ports du usecase. C'est la SEULE couche qui a le droit de connaître un fournisseur.",
+      "match": "src/infra/**",
+      "canImport": ["domain", "usecase", "shared"],
+      "filename": "^[a-z0-9-]+\\.(repository|client|gateway)\\.ts$"
+    },
+    {
+      "name": "ui",
+      "_": "Composants. Affichent et émettent des intentions. Ne parlent jamais à infra directement.",
+      "match": "src/ui/**",
+      "canImport": ["domain", "usecase", "shared"],
+      "filename": "^[A-Za-z0-9-]+\\.(tsx|ts)$"
+    },
+    {
+      "name": "app",
+      "_": "Le câblage : routes, points d'entrée, injection des implémentations dans les ports. La seule couche autorisée à tout voir, parce que c'est son rôle d'assembler.",
+      "match": "src/app/**",
+      "canImport": ["domain", "usecase", "infra", "ui", "shared"]
+    },
+    {
+      "name": "shared",
+      "_": "Utilitaires PURS et sans métier (formatage de date, Result, assertions de type). Si un fichier ici parle du métier, il est mal placé — et c'est ainsi que naissent les fourre-tout.",
+      "match": "src/shared/**",
+      "canImport": []
+    }
+  ],
+
+  "rules": {
+    "noCycles": true,
+    "noOrphans": false,
+    "entryPoints": ["src/app/**", "src/**/*.test.ts", "src/**/*.test.tsx"],
+    "unlayeredFilesAllowed": ["src/main.tsx", "src/vite-env.d.ts"],
+
+    "maxDuplicationPercent": 3,
+    "duplicationWindow": 8,
+    "duplicationIgnore": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+  }
+}
