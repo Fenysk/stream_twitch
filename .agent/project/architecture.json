@@ -13,28 +13,28 @@
       "_": "Le métier pur : types, schémas, règles, invariants. Ne connaît ni base de données, ni HTTP, ni React. Se teste sans rien monter.",
       "match": "src/domain/**",
       "canImport": ["shared"],
-      "filename": "^[a-z0-9-]+\\.(schema|types|rules)\\.ts$"
+      "filename": "^[a-z0-9-]+\\.(schema|types|rules)(\\.test)?\\.ts$"
     },
     {
       "name": "usecase",
       "_": "L'orchestration : un cas d'usage = une intention métier. Dépend du domaine et de rien d'autre de concret — les accès sortants passent par des ports (interfaces) déclarés ici.",
       "match": "src/usecase/**",
       "canImport": ["domain", "shared"],
-      "filename": "^[a-z0-9-]+\\.usecase\\.ts$"
+      "filename": "^[a-z0-9-]+\\.usecase(\\.test)?\\.ts$"
     },
     {
       "name": "infra",
       "_": "Le concret : base, HTTP, fichiers, SDK tiers. Implémente les ports du usecase. C'est la SEULE couche qui a le droit de connaître un fournisseur.",
       "match": "src/infra/**",
       "canImport": ["domain", "usecase", "shared"],
-      "filename": "^[a-z0-9-]+\\.(repository|client|gateway)\\.ts$"
+      "filename": "^[a-z0-9-]+\\.(repository|client|gateway)(\\.test)?\\.ts$"
     },
     {
       "name": "ui",
       "_": "Composants. Affichent et émettent des intentions. Ne parlent jamais à infra directement.",
       "match": "src/ui/**",
       "canImport": ["domain", "usecase", "shared"],
-      "filename": "^[A-Za-z0-9-]+\\.(tsx|ts)$"
+      "filename": "^[A-Za-z0-9-]+(\\.test)?\\.(tsx|ts)$"
     },
     {
       "name": "app",

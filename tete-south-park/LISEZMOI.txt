@@ -1,0 +1,5 @@
+Tête South Park : 3 fichiers
+- tete-bas.png : la mâchoire, fixe. À afficher en premier.
+- tete-haut.png : le crâne. À afficher par-dessus, à la même position (0, 0).
+- tete.json : les deux charnières (coupe.gauche, coupe.droite) en pixels de l'image, et les réglages de l'aperçu.
+Les deux PNG ont la taille de l'image d'origine : empilés, ils redonnent la tête fermée.

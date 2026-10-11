@@ -10,7 +10,8 @@
       "!.claude/worktrees",
       "!**/dist",
       "!**/.output",
-      "!**/*.gen.ts"
+      "!**/*.gen.ts",
+      "!tete-south-park"
     ]
   },
 
@@ -71,7 +72,7 @@
 
   "overrides": [
     {
-      "includes": ["src/infra/**", "src/app/**", "*.config.ts"],
+      "includes": ["src/infra/**", "src/app/**", "*.config.ts", "tools/**"],
       "linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
     },
     {

@@ -1,7 +1,22 @@
 {
   "_": "SOURCE DE VÉRITÉ de la nomenclature — le langage du projet. Un mot par concept, un concept par mot. Lu par le gate. Ajouter un synonyme « juste pour cette fois » EST le mécanisme de la dérive : ça passe par JOURNAL.md.",
 
-  "nouns": [],
+    "nouns": [
+    { "canonical": "head",      "meaning": "La tête d'Alexis : une image coupée en deux moitiés, haute (qui s'ouvre) et basse (fixe).", "banned": ["tete", "face"] },
+    { "canonical": "mouth",     "meaning": "L'état de la bouche : fermée, ou ouverte selon une pose.", "banned": ["bouche", "jaw", "mandible"] },
+    { "canonical": "mic",       "meaning": "L'entrée audio d'OBS qui capte la voix d'Alexis.", "banned": ["micro", "microphone"] },
+    { "canonical": "level",     "meaning": "L'intensité du son du mic, en dB (pic le plus fort sur les canaux).", "banned": ["niveau", "volume", "loudness", "gain"] },
+    { "canonical": "pose",      "meaning": "Une façon d'ouvrir la bouche : un pivot, un angle, une levée éventuelle.", "banned": ["shape", "frame"] },
+    { "canonical": "hinge",     "meaning": "Le point de la coupe autour duquel la moitié haute tourne.", "banned": ["charniere"] },
+    { "canonical": "cut",       "meaning": "La ligne qui sépare les deux moitiés de la tête, de son point gauche à son point droit.", "banned": ["coupe", "split", "slice"] },
+    { "canonical": "threshold", "meaning": "Le level en dB au-dessus duquel la tête parle.", "banned": ["seuil", "cutoff"] },
+    { "canonical": "delay",     "meaning": "Le temps en ms pendant lequel la tête continue de parler après le dernier level au-dessus du threshold.", "banned": ["delai", "timeout", "latency"] },
+    { "canonical": "rhythm",    "meaning": "Le temps en ms entre deux changements de pose pendant que la tête parle.", "banned": ["rythme", "tempo", "interval", "cadence"] },
+    { "canonical": "opening",   "meaning": "Le facteur qui multiplie la levée des poses (la moitié haute se soulève de la mâchoire).", "banned": ["ouverture", "amplitude", "aperture"] },
+    { "canonical": "scale",     "meaning": "Le facteur, entre quietScale (au quietLevel) et loudScale (au loudLevel), qui multiplie l'angle et la levée d'une pose selon le level.", "banned": ["echelle", "multiplier", "coefficient"] },
+    { "canonical": "tilt",      "meaning": "Le facteur qui multiplie l'angle des poses ; vaut opening quand les réglages ne le donnent pas.", "banned": ["inclinaison", "inclination", "slant"] },
+    { "canonical": "settings",  "meaning": "Les réglages du serveur, lus dans settings.json au démarrage.", "banned": ["reglages", "config", "configuration", "options", "preferences"] }
+  ],
 
   "verbs": [
     { "canonical": "get",     "meaning": "Lire UNE ressource par son identifiant. Absente = erreur.", "banned": ["fetch", "retrieve", "load", "read", "find", "select"] },

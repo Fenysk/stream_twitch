@@ -3,7 +3,8 @@
   "exclude": ["node_modules", ".agent", ".claude/worktrees", "dist", ".output"],
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "moduleDetection": "force",

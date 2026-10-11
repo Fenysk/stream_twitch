@@ -1,0 +1,60 @@
+{
+  "format": "tete-south-park/1",
+  "source": "tete fenysk.png",
+  "image": {
+    "largeur": 577,
+    "hauteur": 433
+  },
+  "coupe": {
+    "gauche": {
+      "x": 240.3,
+      "y": 333.2
+    },
+    "droite": {
+      "x": 345.1,
+      "y": 334.2
+    }
+  },
+  "levres": {
+    "trait": true,
+    "epaisseur": 10
+  },
+  "animation": {
+    "rythmeMs": 110,
+    "amplitude": 1.3,
+    "probabiliteFermee": 0.22,
+    "poses": [
+      {
+        "pivot": "droite",
+        "angle": 7
+      },
+      {
+        "pivot": "droite",
+        "angle": 14
+      },
+      {
+        "pivot": "gauche",
+        "angle": -7
+      },
+      {
+        "pivot": "gauche",
+        "angle": -14
+      },
+      {
+        "pivot": "centre",
+        "angle": 0,
+        "levee": 0.07
+      },
+      {
+        "pivot": "centre",
+        "angle": 3,
+        "levee": 0.11
+      },
+      {
+        "pivot": "centre",
+        "angle": -3,
+        "levee": 0.11
+      }
+    ]
+  }
+}

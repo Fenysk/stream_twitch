@@ -1,0 +1,12 @@
+{
+  "obsAddress": "ws://127.0.0.1:4455",
+  "micName": "Mic/Aux",
+  "threshold": -40,
+  "delay": 250,
+  "tilt": 1.0,
+  "opening": 1.8,
+  "quietLevel": -25,
+  "loudLevel": -10,
+  "quietScale": 0.5,
+  "loudScale": 1.5
+}
