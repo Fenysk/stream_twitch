@@ -1,4 +1,14 @@
-import type { Cut, Head, HeadView, Mouth, Pose, PoseFactors, PoseTransform, StageLayout } from "./head.types";
+import type {
+  Cut,
+  Head,
+  HeadView,
+  IdlePose,
+  Mouth,
+  Pose,
+  PoseFactors,
+  PoseTransform,
+  StageLayout,
+} from "./head.types";
 
 // Même calcul que l'aperçu de l'outil « Découpe de tête » (tilt = opening = amplitude), avec l'angle et la levée réglables séparément.
 export function toPoseTransform(pose: Pose, cut: Cut, factors: PoseFactors): PoseTransform {
@@ -24,7 +34,7 @@ export function toStageLayout(size: { width: number; height: number }): StageLay
   return { width: size.width + 2 * left, height: size.height + top, left, top };
 }
 
-export function toHeadView(head: Head, factors: PoseFactors, mouth: Mouth): HeadView {
+export function toHeadView(head: Head, factors: PoseFactors, mouth: Mouth, idle: IdlePose): HeadView {
   return {
     width: head.width,
     height: head.height,
@@ -32,6 +42,7 @@ export function toHeadView(head: Head, factors: PoseFactors, mouth: Mouth): Head
     tilt: factors.tilt,
     opening: factors.opening,
     scale: factors.scale,
+    idle,
     mouth,
   };
 }

@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-11 — `idle` entre au lexique : la tête bouge par à-coups quand Alexis ne parle pas
+
+**Contexte.** Alexis veut une tête qui vit un peu pendant les silences, discrète, dans l'esprit de South Park.
+**Décision.** `lexique.json` : nouveau nom `idle` (tant qu'elle ne parle pas, la tête entière change de pose de repos toutes les 2 à 5 s) ; `pose` couvre aussi ces poses de repos. Synonymes bannis : repos, rest, resting, calm, still.
+**Renoncement.** Un mouvement continu (respiration, balancement) : le rendu reste fait d'à-coups, comme la bouche.
+
 ## 2026-10-11 — L'ouverture de la tête suit le level de la voix (écart à la décision A2 du plan)
 
 **Contexte.** Le plan avait écarté une ouverture proportionnelle au volume ; Alexis la reprend en gardant les poses par à-coups.

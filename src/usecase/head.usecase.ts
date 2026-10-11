@@ -1,6 +1,7 @@
 import { toHeadView } from "../domain/head.rules";
 import type { Head, HeadView, Mouth } from "../domain/head.types";
-import { isLoud, type MouthRules, toNextMouth } from "../domain/mouth.rules";
+import { IDLE_START, type IdleState, isSameIdlePose, toIdleRules, toNextIdle } from "../domain/idle.rules";
+import { isLoud, isTalking, type MouthRules, toNextMouth } from "../domain/mouth.rules";
 import { toScale, toScaleCurve } from "../domain/scale.rules";
 import type { Settings } from "../domain/settings.schema";
 
@@ -47,10 +48,14 @@ export function createHeadLoop({ mic, head, settings, clock, random }: HeadLoopD
   const opening = settings.opening ?? head.opening;
   const tilt = settings.tilt ?? opening;
   const curve = toScaleCurve(settings);
+  const idleRules = toIdleRules(settings);
   const rhythm = settings.rhythm ?? head.rhythm;
   const rules: MouthRules = { poses: head.poses, closedChance: head.closedChance, delay: settings.delay };
-  const feed = createHeadFeed(toHeadView(head, { tilt, opening, scale: 1 }, { kind: "closed" }));
+  const feed = createHeadFeed(
+    toHeadView(head, { tilt, opening, scale: 1 }, { kind: "closed" }, IDLE_START.pose),
+  );
   let mouth: Mouth = { kind: "closed" };
+  let idle: IdleState = IDLE_START;
   let lastLoudAt: number | null = null;
   // Le level le plus fort depuis le pas précédent : un pic de voix entre deux pas ne doit pas se perdre.
   let peak = Number.NEGATIVE_INFINITY;
@@ -60,10 +65,23 @@ export function createHeadLoop({ mic, head, settings, clock, random }: HeadLoopD
   const step = () => {
     const scale = curve ? toScale(peak, curve) : 1;
     peak = Number.NEGATIVE_INFINITY;
-    const next = toNextMouth({ previous: mouth, lastLoudAt, now: clock(), rules, random });
-    if (next.kind === "closed" && mouth.kind === "closed") return;
+    const now = clock();
+    const next = toNextMouth({ previous: mouth, lastLoudAt, now, rules, random });
+    // Au repos (elle ne parle pas), la tête entière change de pose de repos ; dès qu'elle parle, elle redevient neutre.
+    const nextIdle = idleRules
+      ? toNextIdle({
+          previous: idle,
+          isIdle: !isTalking(lastLoudAt, now, settings.delay),
+          now,
+          rules: idleRules,
+          random,
+        })
+      : idle;
+    const isIdleChanged = !isSameIdlePose(nextIdle.pose, idle.pose);
+    idle = nextIdle;
+    if (next.kind === "closed" && mouth.kind === "closed" && !isIdleChanged) return;
     mouth = next;
-    feed.publish(toHeadView(head, { tilt, opening, scale }, next));
+    feed.publish(toHeadView(head, { tilt, opening, scale }, next, idle.pose));
   };
 
   // Chaque pas est visé à date fixe : sous Windows un minuteur arrive jusqu'à ~15 ms en retard, un `setInterval` en cumulerait.

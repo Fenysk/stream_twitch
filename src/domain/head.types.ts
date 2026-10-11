@@ -1,6 +1,6 @@
 import type { Cut, Point, Pose } from "./head-view.schema";
 
-export type { Cut, HeadPart, HeadView, Mouth, Point, Pose } from "./head-view.schema";
+export type { Cut, HeadPart, HeadView, IdlePose, Mouth, Point, Pose } from "./head-view.schema";
 
 export type Head = {
   width: number;

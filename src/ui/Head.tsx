@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { toPoseTransform, toStageLayout } from "../domain/head.rules";
-import type { HeadView, Pose } from "../domain/head.types";
+import type { HeadView, IdlePose, Pose } from "../domain/head.types";
 
 const round = (value: number) => Math.round(value * 1000) / 1000;
 const percent = (value: number, total: number) => `${round((value / total) * 100)}%`;
@@ -22,6 +22,15 @@ const toTopStyle = (view: HeadView, pose: Pose): CSSProperties => {
   };
 };
 
+// La pose de repos penche toute la tête autour de son bas-centre (le cou) et la lève d'une fraction de sa hauteur.
+const toIdleStyle = (idle: IdlePose): CSSProperties | undefined =>
+  idle.angle === 0 && idle.lift === 0
+    ? undefined
+    : {
+        transformOrigin: "50% 100%",
+        transform: `translateY(${round(0 - idle.lift * 100)}%) rotate(${round(idle.angle)}deg)`,
+      };
+
 export const Head = ({ view }: { view: HeadView }) => {
   const stage = toStageLayout(view);
   const topStyle = view.mouth.kind === "open" ? toTopStyle(view, view.mouth.pose) : undefined;
@@ -41,6 +50,7 @@ export const Head = ({ view }: { view: HeadView }) => {
             top: percent(stage.top, stage.height),
             width: percent(view.width, stage.width),
             height: percent(view.height, stage.height),
+            ...toIdleStyle(view.idle),
           }}
         >
           <img alt="" draggable={false} src="/api/head/image/bottom" style={layer} />

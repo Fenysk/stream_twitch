@@ -91,7 +91,7 @@ describe("toStageLayout", () => {
 });
 
 describe("toHeadView", () => {
-  it("garde la géométrie de la tête, le tilt, l'opening et le scale donnés et la bouche donnée", () => {
+  it("garde la géométrie de la tête, le tilt, l'opening, le scale, la bouche et la pose de repos donnés", () => {
     const head: Head = {
       width: 577,
       height: 433,
@@ -101,13 +101,15 @@ describe("toHeadView", () => {
       opening: 1.3,
       closedChance: 0.22,
     };
-    expect(toHeadView(head, { tilt: 1, opening: 2, scale: 0.5 }, { kind: "closed" })).toEqual({
+    const idle = { angle: 2, lift: 0.005 };
+    expect(toHeadView(head, { tilt: 1, opening: 2, scale: 0.5 }, { kind: "closed" }, idle)).toEqual({
       width: 577,
       height: 433,
       cut,
       tilt: 1,
       opening: 2,
       scale: 0.5,
+      idle,
       mouth: { kind: "closed" },
     });
   });

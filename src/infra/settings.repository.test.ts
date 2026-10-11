@@ -87,6 +87,29 @@ describe("getSettings", () => {
     ).toThrow(/quietScale/);
   });
 
+  it("garde les quatre réglages du repos quand ils sont tous là", () => {
+    const idle = { idleMin: 2000, idleMax: 5000, idleAngle: 2, idleLift: 0.005 };
+    expect(getSettings(writeSettings({ ...valid, ...idle }))).toEqual({ ...valid, ...idle });
+  });
+
+  it("refuse un réglage du repos sans les trois autres", () => {
+    expect(() => getSettings(writeSettings({ ...valid, idleMin: 2000 }))).toThrow(
+      /idleMin, idleMax, idleAngle et idleLift/,
+    );
+    expect(() =>
+      getSettings(writeSettings({ ...valid, idleMin: 2000, idleMax: 5000, idleAngle: 2 })),
+    ).toThrow(/idleMin, idleMax, idleAngle et idleLift/);
+  });
+
+  it("refuse un idleMax plus petit que idleMin, ou un réglage du repos nul ou négatif", () => {
+    const idle = { idleMin: 2000, idleMax: 5000, idleAngle: 2, idleLift: 0.005 };
+    expect(() => getSettings(writeSettings({ ...valid, ...idle, idleMax: 1000 }))).toThrow(/idleMax/);
+    expect(getSettings(writeSettings({ ...valid, ...idle, idleMax: 2000 })).idleMax).toBe(2000);
+    expect(() => getSettings(writeSettings({ ...valid, ...idle, idleMin: 0 }))).toThrow(/idleMin/);
+    expect(() => getSettings(writeSettings({ ...valid, ...idle, idleAngle: -1 }))).toThrow(/idleAngle/);
+    expect(() => getSettings(writeSettings({ ...valid, ...idle, idleLift: 0 }))).toThrow(/idleLift/);
+  });
+
   it("refuse une clé inconnue : une faute de frappe ne doit pas être ignorée", () => {
     expect(() => getSettings(writeSettings({ ...valid, treshold: -30 }))).toThrow(/settings\.json invalide/);
   });

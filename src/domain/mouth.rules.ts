@@ -17,7 +17,7 @@ export function isLoud(level: number, threshold: number): boolean {
 }
 
 // « Elle parle » : le level a dépassé le threshold il y a moins de `delay` ms.
-const isTalking = (lastLoudAt: number | null, now: number, delay: number): boolean =>
+export const isTalking = (lastLoudAt: number | null, now: number, delay: number): boolean =>
   lastLoudAt !== null && now - lastLoudAt < delay;
 
 // Jamais la même pose que la précédente ; l'indice est borné au cas où le hasard rendrait 1.

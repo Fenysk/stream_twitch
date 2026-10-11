@@ -8,6 +8,7 @@ const view = {
   tilt: 1,
   opening: 1.8,
   scale: 1.5,
+  idle: { angle: -2, lift: 0 },
   mouth: { kind: "open", pose: { pivot: "center", angle: 3, lift: 0.11 } },
 };
 
@@ -25,6 +26,12 @@ describe("HeadViewSchema", () => {
     const { scale: _scale, ...withoutScale } = view;
     expect(HeadViewSchema.safeParse(withoutScale).success).toBe(false);
     expect(HeadViewSchema.safeParse({ ...view, scale: 0 }).success).toBe(false);
+  });
+
+  it("refuse un état sans pose de repos : la page ne peut pas deviner l'inclinaison de la tête", () => {
+    const { idle: _idle, ...withoutIdle } = view;
+    expect(HeadViewSchema.safeParse(withoutIdle).success).toBe(false);
+    expect(HeadViewSchema.safeParse({ ...view, idle: { angle: 2 } }).success).toBe(false);
   });
 
   it("refuse un tilt ou un opening nul", () => {

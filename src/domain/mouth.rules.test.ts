@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Mouth, Pose } from "./head.types";
-import { isLoud, type MouthRules, toNextMouth } from "./mouth.rules";
+import { isLoud, isTalking, type MouthRules, toNextMouth } from "./mouth.rules";
 
 const poseA: Pose = { pivot: "right", angle: 7 };
 const poseB: Pose = { pivot: "left", angle: -14 };
@@ -37,6 +37,17 @@ describe("isLoud", () => {
   it("est faux à égalité et en dessous du threshold", () => {
     expect(isLoud(-40, -40)).toBe(false);
     expect(isLoud(-60, -40)).toBe(false);
+  });
+});
+
+describe("isTalking", () => {
+  it("est faux tant que le level n'a jamais dépassé le threshold", () => {
+    expect(isTalking(null, 5000, 250)).toBe(false);
+  });
+
+  it("est vrai moins de delay ms après le dernier level fort, faux à partir de delay", () => {
+    expect(isTalking(1000, 1249, 250)).toBe(true);
+    expect(isTalking(1000, 1250, 250)).toBe(false);
   });
 });
 

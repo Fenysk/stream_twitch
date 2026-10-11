@@ -11,6 +11,7 @@ const closed: HeadView = {
   tilt: 1,
   opening: 1,
   scale: 1,
+  idle: { angle: 0, lift: 0 },
   mouth: { kind: "closed" },
 };
 const open: HeadView = { ...closed, mouth: { kind: "open", pose: { pivot: "left", angle: -7 } } };
@@ -110,6 +111,7 @@ describe("createHeadLoop", () => {
       tilt: 1.3,
       opening: 1.3,
       scale: 1,
+      idle: { angle: 0, lift: 0 },
       mouth: { kind: "closed" },
     });
   });
@@ -240,6 +242,65 @@ describe("createHeadLoop", () => {
       mic.emit(-45);
       vi.advanceTimersByTime(1000);
       expect(views).toEqual([]);
+    });
+  });
+
+  describe("pose de repos (idle)", () => {
+    // random vaut 0.5 : premier intervalle 3500 ms ; depuis neutre la pose tirée est la penchée à droite.
+    const idle = { idleMin: 2000, idleMax: 5000, idleAngle: 2, idleLift: 0.005 };
+
+    it("ne change rien sans réglage de repos : la tête reste neutre, rien n'est publié", () => {
+      const { views } = setup();
+      vi.advanceTimersByTime(30_000);
+      expect(views).toEqual([]);
+    });
+
+    it("change de pose de repos quand l'instant prévu est passé, bouche fermée, sans publier avant", () => {
+      const { views } = setup(idle);
+      vi.advanceTimersByTime(3520);
+      expect(views).toEqual([]);
+      vi.advanceTimersByTime(110);
+      expect(views).toHaveLength(1);
+      expect(views[0]).toMatchObject({ idle: { angle: 2, lift: 0 }, mouth: { kind: "closed" } });
+    });
+
+    it("tient chaque pose de repos jusqu'au changement suivant, toujours différent", () => {
+      const { views } = setup(idle);
+      vi.advanceTimersByTime(7150);
+      expect(views).toHaveLength(2);
+      expect(views[1]?.idle).toEqual({ angle: -2, lift: 0 });
+    });
+
+    it("revient à la pose neutre dès qu'elle parle, avec la bouche qui s'ouvre", () => {
+      const { mic, views } = setup(idle);
+      vi.advanceTimersByTime(3630);
+      expect(views.at(-1)?.idle).toEqual({ angle: 2, lift: 0 });
+      mic.emit(-30);
+      vi.advanceTimersByTime(110);
+      expect(views.at(-1)).toMatchObject({ idle: { angle: 0, lift: 0 }, mouth: { kind: "open" } });
+    });
+
+    it("n'anime pas le repos tant qu'elle parle", () => {
+      const { mic, views } = setup(idle);
+      for (let elapsed = 0; elapsed < 12_000; elapsed += 100) {
+        mic.emit(-30);
+        vi.advanceTimersByTime(100);
+      }
+      expect(views.length).toBeGreaterThan(0);
+      expect(views.every((view) => view.idle.angle === 0 && view.idle.lift === 0)).toBe(true);
+    });
+
+    it("recommence un intervalle complet après la parole avant de rebouger", () => {
+      const { mic, views } = setup(idle);
+      mic.emit(-30);
+      vi.advanceTimersByTime(440);
+      expect(views.at(-1)?.mouth.kind).toBe("closed");
+      const count = views.length;
+      vi.advanceTimersByTime(3300);
+      expect(views).toHaveLength(count);
+      vi.advanceTimersByTime(330);
+      expect(views).toHaveLength(count + 1);
+      expect(views.at(-1)).toMatchObject({ idle: { angle: 2, lift: 0 }, mouth: { kind: "closed" } });
     });
   });
 

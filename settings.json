@@ -8,5 +8,9 @@
   "quietLevel": -25,
   "loudLevel": -10,
   "quietScale": 0.5,
-  "loudScale": 1.5
+  "loudScale": 1.5,
+  "idleMin": 2000,
+  "idleMax": 5000,
+  "idleAngle": 6,
+  "idleLift": 0.005
 }

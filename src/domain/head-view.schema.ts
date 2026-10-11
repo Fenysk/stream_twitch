@@ -15,6 +15,9 @@ export const MouthSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("open"), pose: PoseSchema }),
 ]);
 
+// Pose de repos de la tête entière : rotation autour du bas-centre de l'image (en degrés), puis levée (fraction de la hauteur).
+export const IdlePoseSchema = z.object({ angle: z.number(), lift: z.number() });
+
 // Ce que le serveur envoie à la page : de quoi dessiner, rien d'OBS.
 export const HeadViewSchema = z.object({
   width: z.number().positive(),
@@ -23,6 +26,7 @@ export const HeadViewSchema = z.object({
   tilt: z.number().positive(),
   opening: z.number().positive(),
   scale: z.number().positive(),
+  idle: IdlePoseSchema,
   mouth: MouthSchema,
 });
 
@@ -33,5 +37,6 @@ export type Point = z.infer<typeof PointSchema>;
 export type Cut = z.infer<typeof CutSchema>;
 export type Pose = z.infer<typeof PoseSchema>;
 export type Mouth = z.infer<typeof MouthSchema>;
+export type IdlePose = z.infer<typeof IdlePoseSchema>;
 export type HeadView = z.infer<typeof HeadViewSchema>;
 export type HeadPart = z.infer<typeof HeadPartSchema>;
