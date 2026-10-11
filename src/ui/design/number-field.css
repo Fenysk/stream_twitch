@@ -1,0 +1,28 @@
+/* Un champ nombre : le champ de texte (text-field.css), avec son unité écrite à droite, dans le champ */
+
+.lp-number-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.lp-number-input {
+  padding-right: 52px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lp-number-unit {
+  position: absolute;
+  right: 14px;
+  pointer-events: none;
+}
+
+/* Une erreur du serveur : le contour du champ prend la couleur du danger */
+.lp-number-input[aria-invalid="true"] {
+  outline: 2px solid var(--danger);
+  outline-offset: 0;
+}
+
+.lp-number-help {
+  margin: 0;
+}

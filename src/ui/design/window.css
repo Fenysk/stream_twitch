@@ -1,0 +1,304 @@
+/* La fenêtre est une pill : un `<dialog>`, dont on retire les styles du navigateur. */
+
+.lp-window {
+  /* `.lp-pill` est en `relative` : la fenêtre reprend la position fixe d'une modale, centrée */
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(760px, calc(100% - 2 * var(--space-4)));
+  height: min(520px, calc(100% - 2 * var(--space-4)));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 0;
+  flex-direction: row;
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  transition:
+    opacity var(--lp-dur-fade) ease,
+    transform var(--lp-dur) var(--lp-ease);
+}
+
+.lp-window[open] {
+  display: flex;
+}
+
+/* La fenêtre reçoit le focus à l'ouverture : ce n'est pas un contrôle, aucun anneau (ses contrôles gardent le leur) */
+.lp-window:focus {
+  outline: none;
+}
+
+/* Posée juste après l'ouverture, retirée avant la fermeture : c'est elle qui anime (window.tsx) */
+.lp-window.is-open {
+  opacity: 1;
+  transform: none;
+}
+
+/* Le voile : l'interface reste visible derrière, assombrie */
+.lp-window::backdrop {
+  background: var(--scrim, rgba(16, 18, 28, 0.4));
+  opacity: 0;
+  transition: opacity var(--lp-dur-fade) ease;
+}
+
+.lp-window.is-open::backdrop {
+  opacity: 1;
+}
+
+.lp-window-nav {
+  flex: none;
+  width: 208px;
+  box-sizing: border-box;
+  padding: var(--space-2);
+  background: var(--chip);
+}
+
+.lp-window-nav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lp-window-nav .lp-btn {
+  width: 100%;
+  justify-content: flex-start;
+  background: transparent;
+}
+
+/* Le survol, seulement avec une souris : au doigt, il resterait collé à ce qui passe sous le dernier toucher */
+@media (hover: hover) {
+  .lp-window-nav .lp-btn:hover {
+    background: var(--chip-hover);
+  }
+}
+
+/* Le fond de l'onglet choisi est son `::before` (selection-glide.css) : le survol ne le recouvre pas */
+.lp-window-nav .lp-btn.is-selected {
+  background: transparent;
+}
+
+.lp-window-grabber {
+  display: none;
+}
+
+.lp-window-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lp-window-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) 0 var(--space-4);
+  min-height: calc(var(--control-size) + var(--space-2));
+}
+
+.lp-window-head h2 {
+  margin: 0;
+  flex: 1;
+}
+
+.lp-window-body {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+}
+
+/* La hauteur de la fenêtre glisse au changement de section (use-section-morph.ts) : le contenu, plus haut qu'elle, ne montre pas de
+   barre de défilement le temps du glissement */
+.lp-window[data-morphing] .lp-window-body {
+  overflow: hidden;
+}
+
+/* Un réglage de la fenêtre : son libellé, son contrôle, sa phrase d'aide, les uns sous les autres (maquette) */
+.lp-setting {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* Le titre d'un bloc de la section, au-dessus de son contenu (la section Activité, écart §4.3, JOURNAL 2026-10-06) */
+.lp-window-subhead {
+  margin: 0;
+}
+
+.lp-window-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--control-size);
+}
+
+/* Le libellé est un profil (modérateurs, bannis) : il prend la place qui reste et son nom se coupe, les actions
+   gardent leur taille. Sur mobile, elles passent sous le profil, à droite. */
+.lp-window-row--profile {
+  flex-wrap: nowrap;
+}
+
+.lp-window-row--profile > :first-child {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.lp-window-row--profile > :not(:first-child) {
+  flex: none;
+}
+
+@media (max-width: 640px) {
+  .lp-window-row--profile {
+    flex-wrap: wrap;
+  }
+
+  .lp-window-row--profile > :first-child {
+    flex-basis: 100%;
+  }
+
+  .lp-window-row--profile > :not(:first-child) {
+    margin-left: auto;
+  }
+}
+
+/* Un signalement (JOURNAL 2026-09-28) : l'aperçu de la pose à gauche, qui, combien et les décisions à droite */
+.lp-report {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.lp-report-preview {
+  flex: none;
+  width: 88px;
+}
+
+.lp-report-body {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.lp-report-actions {
+  flex-wrap: wrap;
+}
+
+/* La petite fenêtre (JOURNAL 2026-09-25) : une question ou un avis, au centre, aussi haute que son contenu */
+.lp-window--small {
+  width: min(400px, calc(100% - 2 * var(--space-4)));
+  height: fit-content;
+}
+
+/* La grande fenêtre (JOURNAL 2026-10-07), sur PC seulement : jusqu'à 1 100 px de large et 90 % de la hauteur de l'écran,
+   avec la même marge au bord. Sur mobile, la feuille ci-dessous reste la même. */
+@media (min-width: 641px) {
+  .lp-window--large {
+    width: min(1100px, calc(100% - 2 * var(--space-4)));
+    height: min(90%, calc(100% - 2 * var(--space-4)));
+  }
+}
+
+/* Le contenu d'une section qui profite de la largeur (la fenêtre Développeur) : une colonne, deux dès que la place le
+   permet. C'est son propre conteneur, pas celui de la fenêtre : les autres sections n'ont rien à y gagner. */
+.lp-window-layout {
+  container-type: inline-size;
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+}
+
+.lp-window-split {
+  display: grid;
+  align-items: start;
+  gap: var(--space-4);
+}
+
+@container (min-width: 720px) {
+  .lp-window-split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.lp-window-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+/* Pendant l'action qu'elle a confirmée : grisée comme une pill verrouillée, et rien n'y répond */
+.lp-window.is-locked :is(.lp-window-head, .lp-window-body, .lp-window-actions) {
+  filter: grayscale(1);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Écran étroit : une feuille modale qui monte du bas, la barre latérale devient une rangée d'onglets */
+@media (max-width: 640px) {
+  .lp-window {
+    /* Ancrée en bas : sa hauteur est celle de son contenu */
+    inset: auto 0 0;
+    width: 100%;
+    height: auto;
+    max-height: calc(100dvh - 48px);
+    margin: 0;
+    border-radius: var(--lp-radius-box) var(--lp-radius-box) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    transform: translateY(100%);
+  }
+
+  .lp-window[open] {
+    flex-direction: column;
+  }
+
+  .lp-window-grabber {
+    display: block;
+    order: -1;
+    margin-top: var(--space-1);
+  }
+
+  .lp-window-nav {
+    width: auto;
+    order: 1;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .lp-window-nav ul {
+    flex-direction: row;
+  }
+
+  .lp-window-nav .lp-btn {
+    width: auto;
+  }
+
+  .lp-window-main {
+    display: contents;
+  }
+
+  /* iOS : Fermer au bord de tête de la barre */
+  .lp-window-head .lp-btn {
+    order: -1;
+  }
+
+  .lp-window-head {
+    order: 0;
+    padding-left: var(--space-4);
+  }
+
+  .lp-window-body {
+    order: 2;
+  }
+
+  .lp-window-actions {
+    order: 3;
+  }
+}

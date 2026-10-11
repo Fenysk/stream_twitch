@@ -178,6 +178,32 @@ describe("createObsClient : sources navigateur", () => {
   });
 });
 
+describe("createObsClient : un serveur d'essai sur un autre port", () => {
+  it("ne rafraîchit pas la source du stream, qui pointe vers le port 4747", async () => {
+    const fake = createFakeSocket([connected]);
+    fake.state.pages = [
+      { name: "SouthPark", url: "http://localhost:4747/head" },
+      { name: "Copie locale", url: "http://127.0.0.1:4747/head" },
+      { name: "Essai", url: "http://localhost:4748/head" },
+    ];
+    const messages: string[] = [];
+    const client = createObsClient(
+      {
+        address: "ws://x",
+        micName: "Mic/Aux",
+        pageHosts: ["localhost:4748", "127.0.0.1:4748"],
+        log: (message) => messages.push(message),
+        onExit: () => undefined,
+      },
+      fake.socket,
+    );
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.refreshed).toEqual(["Essai"]);
+    expect(messages.some((message) => message.includes("SouthPark"))).toBe(false);
+  });
+});
+
 describe("createObsClient : niveau du micro", () => {
   it("transmet en dB le pic le plus fort de l'entrée du micro, et ignore les autres entrées", async () => {
     const { fake, client } = setup([connected]);
@@ -260,5 +286,74 @@ describe("createObsClient : arrêt du serveur", () => {
     fake.sendClosed();
     await vi.advanceTimersByTimeAsync(120_000);
     expect(exits).toEqual([]);
+  });
+});
+
+describe("createObsClient : micro changé en direct", () => {
+  it("transmet le niveau de la nouvelle entrée, et plus celui de l'ancienne", async () => {
+    const { fake, client } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    const levels: number[] = [];
+    client.mic.subscribe((level) => levels.push(level));
+    client.updateMicName("Audio du bureau");
+    fake.sendLevels([
+      { name: "Mic/Aux", peaks: [1] },
+      { name: "Audio du bureau", peaks: [0.1] },
+    ]);
+    expect(levels).toHaveLength(1);
+    expect(levels[0]).toBeCloseTo(-20, 6);
+  });
+
+  it("le dit dans le journal, et annonce le niveau de la nouvelle entrée dès qu'il arrive", async () => {
+    const { fake, client, messages } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    client.updateMicName("Audio du bureau");
+    fake.sendLevels([{ name: "Audio du bureau", peaks: [0.1] }]);
+    expect(messages).toContain("Entrée du micro changée : « Audio du bureau ».");
+    expect(messages).toContain("Niveau du micro « Audio du bureau » reçu.");
+  });
+
+  it("avertit de nouveau, avec les noms reçus, si la nouvelle entrée n'apparaît pas en 5 s", async () => {
+    const { fake, client, messages } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendLevels([{ name: "Mic/Aux", peaks: [0.2] }]);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(messages.some((message) => message.startsWith("Attention"))).toBe(false);
+    client.updateMicName("Inconnue");
+    await vi.advanceTimersByTimeAsync(5000);
+    const warnings = messages.filter((message) => message.startsWith("Attention"));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("« Inconnue »");
+    expect(warnings[0]).toContain("« Mic/Aux »");
+  });
+
+  it("garde le nouveau nom pour la reconnexion : rien n'est armé tant que OBS n'est pas là", async () => {
+    const { fake, client, messages } = setup([unreachable]);
+    await vi.advanceTimersByTimeAsync(0);
+    client.updateMicName("Audio du bureau");
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(messages.some((message) => message.startsWith("Attention"))).toBe(false);
+    expect(fake.state.attempts).toBeGreaterThan(1);
+  });
+});
+
+describe("createObsClient : état", () => {
+  it("dit si OBS est joint, et quelles entrées audio sont passées", async () => {
+    const { fake, client } = setup([unreachable, connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.getStatus()).toEqual({ isLinked: false, inputNames: [] });
+    await vi.advanceTimersByTimeAsync(2000);
+    fake.sendLevels([
+      { name: "Mic/Aux", peaks: [0.1] },
+      { name: "Audio du bureau", peaks: [0.1] },
+    ]);
+    expect(client.getStatus()).toEqual({ isLinked: true, inputNames: ["Audio du bureau", "Mic/Aux"] });
+  });
+
+  it("dit que OBS n'est plus joint quand la connexion tombe", async () => {
+    const { fake, client } = setup([connected, unreachable]);
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendClosed();
+    expect(client.getStatus().isLinked).toBe(false);
   });
 });

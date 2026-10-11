@@ -34,13 +34,13 @@ describe("getSettings", () => {
     });
   });
 
-  it("garde tilt quand il est présent, et le refuse nul ou négatif", () => {
+  it("garde tilt quand il est présent, permet 0 et refuse le négatif", () => {
     expect(getSettings(writeSettings({ ...valid, tilt: 1, opening: 1.8 }))).toEqual({
       ...valid,
       tilt: 1,
       opening: 1.8,
     });
-    expect(() => getSettings(writeSettings({ ...valid, tilt: 0 }))).toThrow(/tilt/);
+    expect(getSettings(writeSettings({ ...valid, tilt: 0 })).tilt).toBe(0);
     expect(() => getSettings(writeSettings({ ...valid, tilt: -1 }))).toThrow(/tilt/);
   });
 

@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-11 — Le design system de LivePlace entre dans `src/ui/design/`
+
+**Contexte.** La première interface de stream_twitch (réglages de la tête) doit avoir le style d'Alexis, celui de LivePlace.
+**Décision.** Copie des fichiers génériques de `apps/web/src/ui/design/` (tokens, composants, CSS, hooks, tests qui tournent sous node), sans le jeu ni la langue : interface en français seulement. Deux dépendances : `@fontsource-variable/nunito`, `lucide-react`. Apparence retenue sous `stream-twitch:theme`.
+**Renoncement.** Un package partagé entre les deux dépôts : LivePlace reste en lecture seule, les deux copies divergeront.
+
 ## 2026-10-11 — `idle` entre au lexique : la tête bouge par à-coups quand Alexis ne parle pas
 
 **Contexte.** Alexis veut une tête qui vit un peu pendant les silences, discrète, dans l'esprit de South Park.

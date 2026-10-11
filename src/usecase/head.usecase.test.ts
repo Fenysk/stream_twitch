@@ -304,6 +304,85 @@ describe("createHeadLoop", () => {
     });
   });
 
+  describe("réglages changés en direct (update)", () => {
+    const idle = { idleMin: 2000, idleMax: 5000, idleAngle: 2, idleLift: 0.005 };
+
+    it("applique un nouveau threshold aussitôt : un level qui comptait ne compte plus", () => {
+      const { mic, loop, views } = setup();
+      loop.update({ ...settings, threshold: -20 });
+      mic.emit(-35);
+      vi.advanceTimersByTime(1000);
+      expect(views.filter((view) => view.mouth.kind === "open")).toEqual([]);
+    });
+
+    it("applique un nouveau delay aussitôt : elle parle plus longtemps après le dernier level fort", () => {
+      const { mic, loop, views } = setup();
+      loop.update({ ...settings, delay: 1000 });
+      mic.emit(-30);
+      vi.advanceTimersByTime(660);
+      expect(views.at(-1)?.mouth.kind).toBe("open");
+    });
+
+    it("applique un nouveau rythme aussitôt, sans attendre l'ancien pas", () => {
+      const { mic, loop, views } = setup();
+      mic.emit(-30);
+      vi.advanceTimersByTime(10);
+      loop.update({ ...settings, rhythm: 50 });
+      const count = views.length;
+      vi.advanceTimersByTime(50);
+      expect(views).toHaveLength(count + 1);
+      vi.advanceTimersByTime(50);
+      expect(views).toHaveLength(count + 2);
+    });
+
+    it("publie aussitôt la tête avec le nouveau tilt et le nouvel opening, la bouche telle qu'elle est", () => {
+      const { loop, views } = setup();
+      loop.update({ ...settings, tilt: 0.5, opening: 2.5 });
+      expect(loop.feed.getView()).toMatchObject({ tilt: 0.5, opening: 2.5, mouth: { kind: "closed" } });
+      expect(views).toHaveLength(1);
+    });
+
+    it("garde la bouche ouverte, avec sa pose, quand les facteurs changent en pleine parole", () => {
+      const { mic, loop, views } = setup();
+      mic.emit(-30);
+      vi.advanceTimersByTime(110);
+      const before = views.at(-1)?.mouth;
+      loop.update({ ...settings, opening: 2.5 });
+      expect(views.at(-1)?.mouth).toEqual(before);
+      expect(views.at(-1)?.opening).toBe(2.5);
+    });
+
+    it("remet la tête à sa pose de repos neutre, et repart d'un intervalle complet", () => {
+      const { loop, views } = setup(idle);
+      vi.advanceTimersByTime(3630);
+      expect(views.at(-1)?.idle).toEqual({ angle: 2, lift: 0 });
+      loop.update({ ...settings, ...idle, idleAngle: 4 });
+      expect(views.at(-1)?.idle).toEqual({ angle: 0, lift: 0 });
+      const count = views.length;
+      vi.advanceTimersByTime(3300);
+      expect(views).toHaveLength(count);
+      vi.advanceTimersByTime(330);
+      expect(views.at(-1)?.idle).toEqual({ angle: 4, lift: 0 });
+    });
+
+    it("arrête les changements de pose de repos quand les réglages du repos disparaissent", () => {
+      const { loop, views } = setup(idle);
+      loop.update(settings);
+      const count = views.length;
+      vi.advanceTimersByTime(30_000);
+      expect(views).toHaveLength(count);
+    });
+
+    it("garde la boucle arrêtée après stop(), même si les réglages changent ensuite", () => {
+      const { mic, loop, views } = setup();
+      loop.stop();
+      loop.update({ ...settings, rhythm: 50 });
+      mic.emit(-30);
+      vi.advanceTimersByTime(1000);
+      expect(views.filter((view) => view.mouth.kind === "open")).toEqual([]);
+    });
+  });
+
   it("se désabonne du mic et s'arrête avec stop()", () => {
     const { mic, loop, views } = setup();
     expect(mic.count()).toBe(1);

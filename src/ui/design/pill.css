@@ -1,0 +1,54 @@
+/* Géométrie : un contrôle mesure --control-size, la marge intérieure vaut --space-2, le rayon
+   control-size / 2 + space-2. Une pill d'une ligne (ou d'une colonne) est donc parfaitement ronde,
+   et son contenu concentrique à l'arrondi, à 36 px comme à 44 px. */
+
+.lp-pill {
+  /* Calculé ici et non sur :root : il suit --control-size là où il change */
+  --lp-radius-box: calc(var(--control-size) / 2 + var(--space-2));
+  position: relative;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--space-4));
+  overflow: hidden;
+  background: color-mix(in srgb, var(--pill-surface) var(--pill-opacity), transparent);
+  -webkit-backdrop-filter: blur(var(--pill-blur));
+  backdrop-filter: blur(var(--pill-blur));
+  color: var(--ink);
+  border-radius: var(--lp-radius-box);
+  /* Le contour hors du flux : la hauteur reste contrôle + 2 × marge */
+  box-shadow:
+    0 0 0 1px var(--pill-border),
+    var(--pill-shadow);
+  font-family: var(--font-sans);
+  transition:
+    opacity var(--lp-dur-fade) ease,
+    transform var(--lp-dur) var(--lp-ease);
+}
+
+/* Le contenu garde sa propre taille : c'est elle que la pill suit, et qu'elle anime (use-morph.ts) */
+.lp-pill-content {
+  width: max-content;
+  box-sizing: border-box;
+  padding: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  transition:
+    opacity var(--lp-dur-fast) ease,
+    filter var(--lp-dur-fade) ease;
+}
+
+.lp-col {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.lp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.lp-spacer {
+  flex: 1;
+}

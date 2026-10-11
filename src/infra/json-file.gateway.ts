@@ -9,7 +9,8 @@ export function getJsonFile(path: string): unknown {
     throw new Error(`${path} est introuvable ou illisible`, { cause: error });
   }
   try {
-    return JSON.parse(text);
+    // Notepad et d'autres éditeurs Windows écrivent un BOM en tête : JSON.parse le refuse.
+    return JSON.parse(text.replace(/^\uFEFF/, ""));
   } catch (error) {
     throw new Error(`${path} n'est pas du JSON valide`, { cause: error });
   }

@@ -34,8 +34,9 @@ describe("HeadViewSchema", () => {
     expect(HeadViewSchema.safeParse({ ...view, idle: { angle: 2 } }).success).toBe(false);
   });
 
-  it("refuse un tilt ou un opening nul", () => {
-    expect(HeadViewSchema.safeParse({ ...view, tilt: 0 }).success).toBe(false);
-    expect(HeadViewSchema.safeParse({ ...view, opening: 0 }).success).toBe(false);
+  it("accepte un tilt ou un opening à 0 (le curseur va jusqu'à ×0), et refuse le négatif", () => {
+    expect(HeadViewSchema.safeParse({ ...view, tilt: 0, opening: 0 }).success).toBe(true);
+    expect(HeadViewSchema.safeParse({ ...view, tilt: -1 }).success).toBe(false);
+    expect(HeadViewSchema.safeParse({ ...view, opening: -1 }).success).toBe(false);
   });
 });

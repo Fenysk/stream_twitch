@@ -31,30 +31,45 @@ const isIdleMaxAboveMin = ({ idleMin, idleMax }: IdleFields): boolean =>
 const isLoudLevelAboveQuiet = ({ threshold, quietLevel, loudLevel }: ScaleFields): boolean =>
   loudLevel === undefined || loudLevel > (quietLevel ?? threshold);
 
-// Format de `settings.json`, lu une fois au démarrage du serveur. `strict` : une faute de frappe est refusée, pas ignorée.
-export const SettingsSchema = z
+// Les messages sont lus dans l'interface : en français, et ils disent ce qui est attendu.
+const NOT_A_NUMBER = "doit être un nombre";
+const decibels = () =>
+  z.number(NOT_A_NUMBER).min(-100, "doit être d'au moins -100 dB").max(0, "doit être d'au plus 0 dB");
+const positive = () => z.number(NOT_A_NUMBER).positive("doit être supérieur à 0");
+const positiveWhole = () => positive().int("doit être un nombre entier");
+const nonNegative = () => z.number(NOT_A_NUMBER).min(0, "ne peut pas être négatif");
+
+// Tous les réglages, un par champ. `strict` : une faute de frappe est refusée, pas ignorée.
+export const SettingsFieldsSchema = z
   .object({
-    obsAddress: z.string().regex(/^wss?:\/\/.+/, "doit commencer par ws:// ou wss://"),
-    micName: z.string().min(1),
-    threshold: z.number().min(-100).max(0),
-    delay: z.number().int().positive(),
-    rhythm: z.number().int().positive().optional(),
-    tilt: z.number().positive().optional(),
-    opening: z.number().positive().optional(),
-    quietLevel: z.number().min(-100).max(0).optional(),
-    quietScale: z.number().positive().optional(),
-    loudScale: z.number().positive().optional(),
-    loudLevel: z.number().min(-100).max(0).optional(),
-    idleMin: z.number().positive().optional(),
-    idleMax: z.number().positive().optional(),
-    idleAngle: z.number().positive().optional(),
-    idleLift: z.number().positive().optional(),
+    obsAddress: z.string("doit être un texte").regex(/^wss?:\/\/.+/, "doit commencer par ws:// ou wss://"),
+    micName: z.string("doit être un texte").min(1, "ne peut pas être vide"),
+    threshold: decibels(),
+    delay: positiveWhole(),
+    rhythm: positiveWhole().optional(),
+    tilt: nonNegative().optional(),
+    opening: nonNegative().optional(),
+    voiceEffect: z
+      .number(NOT_A_NUMBER)
+      .min(0, "doit être d'au moins 0 (0 %)")
+      .max(1, "doit être d'au plus 1 (100 %)")
+      .optional(),
+    quietLevel: decibels().optional(),
+    quietScale: positive().optional(),
+    loudScale: positive().optional(),
+    loudLevel: decibels().optional(),
+    idleMin: positive().optional(),
+    idleMax: positive().optional(),
+    idleAngle: nonNegative().optional(),
+    idleLift: positive().optional(),
   })
-  .strict()
-  .refine(hasAllOrNoneOfScale, {
-    message:
-      "quietScale, loudScale et loudLevel vont ensemble : tous les trois ou aucun (quietLevel les accompagne)",
-  })
+  .strict();
+
+// Format de `settings.json` une fois les valeurs locales ajoutées : les champs, et ce qu'ils exigent entre eux.
+export const SettingsSchema = SettingsFieldsSchema.refine(hasAllOrNoneOfScale, {
+  message:
+    "quietScale, loudScale et loudLevel vont ensemble : tous les trois ou aucun (quietLevel les accompagne)",
+})
   .refine(isLoudLevelAboveQuiet, {
     message: "loudLevel doit dépasser quietLevel (ou threshold quand il n'y a pas de quietLevel)",
     path: ["loudLevel"],
@@ -68,3 +83,37 @@ export const SettingsSchema = z
   });
 
 export type Settings = z.infer<typeof SettingsSchema>;
+
+// Les cinq réglages que l'interface change. Tous les autres (le micro, le délai, le rythme, les niveaux, les extrêmes
+// de l'effet de la voix, l'intervalle et la levée du repos, l'adresse d'OBS) restent dans `settings.json` seulement.
+export const EditableSettingsSchema = SettingsFieldsSchema.pick({
+  threshold: true,
+  tilt: true,
+  opening: true,
+  voiceEffect: true,
+  idleAngle: true,
+});
+export type EditableSettings = z.infer<typeof EditableSettingsSchema>;
+
+// `settings.local.json` : seulement les valeurs qu'Alexis a changées.
+export const LocalSettingsSchema = EditableSettingsSchema.partial().strict();
+export type LocalSettings = z.infer<typeof LocalSettingsSchema>;
+
+// Ce que l'interface demande : une valeur par réglage, `null` pour revenir à la valeur par défaut de ce réglage.
+export const SettingsChangesSchema = z.object({
+  changes: z.record(z.string(), z.union([z.number(), z.string(), z.null()])),
+});
+export type SettingsChanges = z.infer<typeof SettingsChangesSchema>["changes"];
+
+// Ce que le serveur dit à l'interface : les valeurs par défaut, les valeurs locales, et celles qui s'appliquent.
+export const SettingsViewSchema = z.object({
+  defaults: EditableSettingsSchema,
+  local: LocalSettingsSchema,
+  effective: EditableSettingsSchema,
+});
+export type SettingsView = z.infer<typeof SettingsViewSchema>;
+
+// Un refus du serveur : le réglage fautif (vide pour une règle entre plusieurs) et ce qui est attendu.
+export const SettingsIssueSchema = z.object({ path: z.string(), message: z.string() });
+export type SettingsIssue = z.infer<typeof SettingsIssueSchema>;
+export const SettingsRefusalSchema = z.object({ issues: z.array(SettingsIssueSchema) });

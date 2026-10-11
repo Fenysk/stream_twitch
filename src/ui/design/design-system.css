@@ -1,0 +1,27 @@
+/* L'entrée du design system, liée une seule fois dans le `<head>` des routes de l'interface : la police, les tokens, puis
+   chaque composant. Jamais sur `/head` : `html, body` y ont un fond opaque, et la source OBS doit rester transparente. */
+
+@import "@fontsource-variable/nunito";
+@import "./tokens.css";
+@import "./pill.css";
+@import "./button.css";
+@import "./badge.css";
+@import "./selection-glide.css";
+@import "./segmented.css";
+@import "./window.css";
+@import "./arrival.css";
+@import "./grabber.css";
+@import "./slider.css";
+@import "./checkbox.css";
+@import "./text-field.css";
+@import "./number-field.css";
+@import "./choice-list.css";
+@import "./skeleton.css";
+
+html,
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}

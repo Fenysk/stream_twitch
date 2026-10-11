@@ -11,6 +11,10 @@ coverage/
 .env.*
 !.env.example
 
+# Les valeurs qu'Alexis règle dans l'interface (settings.json garde les valeurs par défaut) : elles restent sur son PC.
+settings.local.json
+settings.local.json.tmp
+
 # Un worktree par chantier, créé par `tools/worktree.sh` seulement (JOURNAL 2026-10-07).
 .claude/worktrees/
 

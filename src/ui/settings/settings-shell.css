@@ -1,0 +1,94 @@
+/* La mise en page de l'interface de réglages, et elle seule : les composants gardent leur propre CSS (design/). */
+
+@import "./mic-meter.css";
+@import "./head-settings-tab.css";
+
+/* Le texte sur le fond des pills : le `body` reste sur --void, la page le couvre. */
+.settings-page {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  background: var(--pill-surface);
+  color: var(--ink);
+}
+
+.settings-shell {
+  box-sizing: border-box;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 24px 96px;
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+}
+
+/* Le menu : collé en haut, sur le fond des contrôles, comme la barre latérale de la fenêtre de LivePlace */
+.settings-side {
+  flex: none;
+  width: 304px; /* de quoi loger Auto, Clair et Sombre côte à côte */
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--chip);
+  position: sticky;
+  top: 24px;
+}
+
+.settings-title {
+  margin: 0;
+  padding: var(--space-2) 10px 0;
+}
+
+.settings-side .lp-window-nav {
+  width: auto;
+  padding: 0;
+  background: transparent;
+}
+
+/* L'apparence, sous le menu, séparée par un filet */
+.settings-appearance {
+  padding: var(--space-3) 2px 4px;
+  border-top: 1px solid var(--chip-hover);
+}
+
+.settings-main {
+  flex: 1;
+  min-width: 0;
+  max-width: 760px;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.settings-heading {
+  margin: 0;
+}
+
+/* Écran étroit : le menu passe au-dessus, ses entrées en rangée d'onglets (window.css) */
+@media (max-width: 640px) {
+  .settings-shell {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-3) 64px;
+  }
+
+  .settings-side {
+    position: static;
+    width: auto;
+  }
+
+  .settings-title {
+    padding-bottom: 0;
+  }
+
+  /* window.css range la barre latérale en dernier (`order: 1`) : ici, le titre, les onglets, puis l'apparence */
+  .settings-side .lp-window-nav {
+    order: 0;
+  }
+
+  .settings-appearance {
+    order: 1;
+  }
+}

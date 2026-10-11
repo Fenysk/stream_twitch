@@ -104,10 +104,20 @@ export type ObsClientDeps = {
   onExit: (reason: string) => void;
 };
 
-export type ObsClient = { mic: MicPort; start(): void; stop(): void };
+// L'état d'OBS pour l'interface : est-il joint, et quelles entrées audio sont passées (de quoi choisir le micro).
+export type ObsStatus = { isLinked: boolean; inputNames: string[] };
+
+export type ObsClient = {
+  mic: MicPort;
+  start(): void;
+  stop(): void;
+  updateMicName(name: string): void;
+  getStatus(): ObsStatus;
+};
 
 export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClient {
-  const { address, micName, pageHosts, log, onExit } = deps;
+  const { address, pageHosts, log, onExit } = deps;
+  let micName = deps.micName;
   const listeners = new Set<(level: number) => void>();
   const namesSeen = new Set<string>();
   let hasConnected = false;
@@ -153,7 +163,7 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
     isMicWarned = true;
     const names = [...namesSeen].map((name) => `« ${name} »`).join(", ") || "(aucune)";
     log(
-      `Attention : l'entrée « ${micName} » n'est dans aucun évènement reçu depuis 5 s, le niveau reste à zéro. Entrées reçues : ${names}. Vérifier micName dans settings.json.`,
+      `Attention : l'entrée « ${micName} » n'est dans aucun évènement reçu depuis 5 s, le niveau reste à zéro. Entrées reçues : ${names}. Vérifier l'entrée du micro dans les réglages.`,
     );
   };
 
@@ -223,6 +233,16 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
         };
       },
     },
+    updateMicName(name) {
+      if (name === micName) return;
+      micName = name;
+      isMicSeen = false;
+      isMicWarned = false;
+      log(`Entrée du micro changée : « ${name} ».`);
+      clearTimeout(micTimer);
+      if (isLinked) micTimer = setTimeout(warnIfMicUnseen, MIC_UNSEEN_MS);
+    },
+    getStatus: () => ({ isLinked, inputNames: [...namesSeen].sort() }),
     start() {
       void connect();
     },

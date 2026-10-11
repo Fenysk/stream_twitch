@@ -11,8 +11,9 @@ pnpm gate
 
 - Lancer : `pnpm start` (construit puis sert `http://localhost:4747/head`, port 4747), ou dans OBS : Outils, Scripts, +, `obs/start-server.lua` (journal : `server.log`) ; le serveur s'arrête avec OBS.
 - Source navigateur OBS : URL `http://localhost:4747/head`, taille conseillée 800 × 700.
+- Réglages en direct : `http://localhost:4747/` (menu, vumètre du micro) ; ils restent dans `settings.local.json`, `settings.json` garde les valeurs par défaut.
 - Mot de passe du WebSocket d'OBS : copier `.env.example` en `.env`, remplir `OBS_PASSWORD`.
-- Réglages dans `settings.json`, lus au démarrage (relancer le serveur après un changement) : seuil `threshold` (dB), délai `delay` (ms), angle `tilt`, levée `opening`, et selon la voix `quietLevel`, `loudLevel` (dB), `quietScale`, `loudScale` ; au repos `idleMin`, `idleMax` (ms), `idleAngle` (°), `idleLift` (fraction de la hauteur).
+- Cinq curseurs dans l'interface : seuil du micro (`threshold`), pivot (`tilt`), ouverture (`opening`), effet de la voix (`voiceEffect`), penché au repos (`idleAngle`). Tout le reste (micro, délais, niveaux, extrêmes de l'effet…) se règle dans `settings.json`, relu au démarrage.
 
 ## Les branches et les worktrees
 

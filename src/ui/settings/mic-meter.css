@@ -1,0 +1,67 @@
+/* Le vumètre du micro : une piste sur le fond des contrôles, une barre qui la remplit, des repères verticaux dessus */
+
+.lp-meter {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.lp-meter-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* Les libellés des repères dépassent un peu de la piste aux deux bouts : la place qu'il leur faut */
+.lp-meter-scale {
+  display: grid;
+  gap: var(--space-1);
+  padding: 0 28px;
+}
+
+.lp-meter-track {
+  position: relative;
+  height: 20px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--chip);
+}
+
+.lp-meter-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transition: transform var(--lp-dur-fast) linear;
+  background: var(--muted);
+}
+
+.lp-meter-fill--talking {
+  background: var(--success);
+}
+
+.lp-meter-fill--loud {
+  background: var(--warning);
+}
+
+.lp-meter-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--ink);
+  opacity: 0.7;
+}
+
+.lp-meter-labels {
+  position: relative;
+  height: 36px;
+}
+
+.lp-meter-label {
+  position: absolute;
+  top: 0;
+  display: grid;
+  justify-items: center;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}

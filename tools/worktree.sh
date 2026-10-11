@@ -38,6 +38,7 @@ add)
     git -c core.longpaths=true worktree add -q --no-track -b "$branch" "$dir" "$base"
   fi
   if [ -f "$root/.env" ]; then cp "$root/.env" "$dir/.env"; fi
+  if [ -f "$root/settings.local.json" ]; then cp "$root/settings.local.json" "$dir/settings.local.json"; fi
   (cd "$dir" && pnpm install --frozen-lockfile --prefer-offline > /dev/null)
   echo "$dir"
   ;;

@@ -11,8 +11,17 @@ export function toScale(level: number, { quietLevel, loudLevel, quietScale, loud
 }
 
 // Sans les trois réglages, pas de courbe : le scale vaut 1 partout. Le quietLevel vaut le threshold quand il manque.
+// `quietScale` et `loudScale` sont les extrêmes, atteints quand `voiceEffect` vaut 1 (100 %) ; à 0, le scale vaut 1 partout.
+// Entre les deux c'est linéaire : voix douce = 1 - (1 - quietScale) × effet, voix forte = 1 + (loudScale - 1) × effet.
 export function toScaleCurve(settings: Settings): ScaleCurve | undefined {
   const { quietScale, loudScale, loudLevel } = settings;
   if (quietScale === undefined || loudScale === undefined || loudLevel === undefined) return undefined;
-  return { quietLevel: settings.quietLevel ?? settings.threshold, loudLevel, quietScale, loudScale };
+  const effect = settings.voiceEffect ?? 1;
+  const round = (value: number): number => Math.round(value * 1e9) / 1e9;
+  return {
+    quietLevel: settings.quietLevel ?? settings.threshold,
+    loudLevel,
+    quietScale: round(1 - (1 - quietScale) * effect),
+    loudScale: round(1 + (loudScale - 1) * effect),
+  };
 }

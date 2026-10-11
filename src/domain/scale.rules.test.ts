@@ -81,3 +81,58 @@ describe("toScaleCurve", () => {
     expect(toScaleCurve({ ...base, quietLevel: -25 })).toBeUndefined();
   });
 });
+
+describe("toScaleCurve : l'effet de la voix", () => {
+  // quietScale et loudScale sont les extrêmes, atteints à 100 % : voix douce ×0,3, voix forte ×2.
+  const extremes: Settings = {
+    obsAddress: "ws://127.0.0.1:4455",
+    micName: "Mic/Aux",
+    threshold: -40,
+    delay: 250,
+    quietLevel: -25,
+    loudLevel: -10,
+    quietScale: 0.3,
+    loudScale: 2,
+  };
+
+  it("sans effet donné, applique les extrêmes tels quels", () => {
+    expect(toScaleCurve(extremes)).toEqual({
+      quietLevel: -25,
+      loudLevel: -10,
+      quietScale: 0.3,
+      loudScale: 2,
+    });
+  });
+
+  it("à 100 %, donne ×0,3 à voix douce et ×2 à voix forte", () => {
+    const curve = toScaleCurve({ ...extremes, voiceEffect: 1 });
+    expect(curve?.quietScale).toBeCloseTo(0.3, 9);
+    expect(curve?.loudScale).toBeCloseTo(2, 9);
+  });
+
+  it("à 0 %, ne change rien : le facteur vaut 1 à tous les niveaux", () => {
+    const curve = toScaleCurve({ ...extremes, voiceEffect: 0 });
+    expect(curve).toEqual({ quietLevel: -25, loudLevel: -10, quietScale: 1, loudScale: 1 });
+    if (!curve) throw new Error("la courbe devrait exister");
+    for (const level of [-100, -40, -25, -17, -10, 0]) expect(toScale(level, curve)).toBe(1);
+  });
+
+  it("entre les deux, est linéaire : voix douce = 1 - 0,7 × effet, voix forte = 1 + effet", () => {
+    for (const effect of [0.1, 0.3, 0.5, 0.8]) {
+      const curve = toScaleCurve({ ...extremes, voiceEffect: effect });
+      expect(curve?.quietScale).toBeCloseTo(1 - 0.7 * effect, 9);
+      expect(curve?.loudScale).toBeCloseTo(1 + effect, 9);
+    }
+  });
+
+  it("garde les niveaux : l'effet ne déplace pas où la voix est douce ou forte", () => {
+    const curve = toScaleCurve({ ...extremes, voiceEffect: 0.5 });
+    expect(curve?.quietLevel).toBe(-25);
+    expect(curve?.loudLevel).toBe(-10);
+  });
+
+  it("n'invente pas de courbe sans extrêmes : l'effet seul ne fait rien", () => {
+    const { quietScale: _quiet, loudScale: _loud, loudLevel: _level, ...bare } = extremes;
+    expect(toScaleCurve({ ...bare, voiceEffect: 1 })).toBeUndefined();
+  });
+});

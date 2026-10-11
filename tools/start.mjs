@@ -5,7 +5,12 @@ import { connect } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const PORT = 4747;
+// 4747 par défaut ; la variable PORT en choisit un autre (un serveur d'essai à côté de celui du stream).
+const PORT = Number(process.env.PORT ?? 4747);
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+  console.error(`PORT n'est pas un port valide : ${process.env.PORT}`);
+  process.exit(1);
+}
 const HOST = "127.0.0.1";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(root);
