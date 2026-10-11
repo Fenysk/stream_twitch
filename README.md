@@ -13,7 +13,8 @@ pnpm gate
 - Source navigateur OBS : URL `http://localhost:4747/head`, taille conseillée 800 × 700.
 - Réglages en direct : `http://localhost:4747/` (menu, vumètre du micro) ; ils restent dans `settings.local.json`, `settings.json` garde les valeurs par défaut.
 - Mot de passe du WebSocket d'OBS : copier `.env.example` en `.env`, remplir `OBS_PASSWORD`.
-- Cinq curseurs dans l'interface : seuil du micro (`threshold`), pivot (`tilt`), ouverture (`opening`), effet de la voix (`voiceEffect`), penché au repos (`idleAngle`). Tout le reste (micro, délais, niveaux, extrêmes de l'effet…) se règle dans `settings.json`, relu au démarrage.
+- Six curseurs dans l'interface : seuil du micro (`threshold`), pivot (`tilt`), ouverture (`opening`), effet de la voix (`voiceEffect`), penché au repos (`idleAngle`), penché en parlant (`talkAngle`). Tout le reste (micro, délais, niveaux, extrêmes de l'effet…) se règle dans `settings.json`, relu au démarrage.
+- Expressions : l'onglet « Découpe » coupe une image en deux moitiés et l'enregistre dans `data/heads/` (hors de git) ; une vignette de l'onglet « Tête South Park » la montre aussitôt dans OBS.
 
 ## Les branches et les worktrees
 

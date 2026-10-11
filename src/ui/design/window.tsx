@@ -5,6 +5,7 @@
 import type { LucideIcon } from "lucide-react";
 import { X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { Badge } from "./badge";
 import { Button, blurAfterClick } from "./button";
 import { classNames } from "./class-names";
 import { DESIGN_TEXTS } from "./design-texts";
@@ -14,7 +15,8 @@ import { ToastAnnouncement } from "./toast-announcement";
 import { useSectionMorph } from "./use-section-morph";
 import { useSelectionGlide } from "./use-selection-glide";
 
-export type WindowSection<Id extends string> = { id: Id; label: string; icon: LucideIcon };
+// `isSoon` : l'onglet arrive plus tard. Il reste dans le menu, grisé, annoncé indisponible, et ne mène nulle part.
+export type WindowSection<Id extends string> = { id: Id; label: string; icon: LucideIcon; isSoon?: boolean };
 
 // Une petite fenêtre garde sa dernière valeur non nulle pendant qu'elle se ferme : son contenu ne s'efface pas avant
 // la fin de l'animation. Écrire le ref pendant le rendu (plutôt qu'un `useEffect`) évite un second rendu à chaque
@@ -47,7 +49,18 @@ export const WindowNav = <Id extends string>({
   return (
     <nav ref={selection} className="lp-window-nav lp-selection" aria-label={t.sections}>
       <ul>
-        {sections.map(({ id, label, icon: Icon }) => {
+        {sections.map(({ id, label, icon: Icon, isSoon = false }) => {
+          if (isSoon) {
+            return (
+              <li key={id}>
+                <button type="button" className="lp-btn lp-type-body" aria-disabled="true">
+                  <Icon aria-hidden="true" />
+                  {label}
+                  <Badge label={t.soon} />
+                </button>
+              </li>
+            );
+          }
           const tab = (
             <button
               type="button"

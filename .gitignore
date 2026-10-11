@@ -15,6 +15,9 @@ coverage/
 settings.local.json
 settings.local.json.tmp
 
+# Les expressions de la tête qu'Alexis enregistre (data/heads/<id>/) : elles restent sur son PC, comme ses réglages.
+data/
+
 # Un worktree par chantier, créé par `tools/worktree.sh` seulement (JOURNAL 2026-10-07).
 .claude/worktrees/
 

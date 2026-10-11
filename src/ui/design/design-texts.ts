@@ -8,6 +8,7 @@ export const DESIGN_TEXTS = {
   escapeKey: "Échap",
   loading: "Chargement…",
   sections: "Sections",
+  soon: "Bientôt",
 
   appearance: "Apparence",
   appearanceAuto: "Auto",

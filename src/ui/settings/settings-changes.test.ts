@@ -15,15 +15,24 @@ const labelsOf = (key: string): string[] => spec(key).steps.map(({ label }) => l
 const valuesOf = (key: string): number[] => spec(key).steps.map(({ value }) => value);
 
 describe("les curseurs de l'onglet", () => {
-  it("sont cinq, dans l'ordre : seuil, pivot, ouverture, effet de la voix, penché au repos", () => {
+  it("sont six, dans l'ordre : seuil, pivot, ouverture, effet de la voix, penché au repos, penché en parlant", () => {
     expect(SLIDERS.map(({ label }) => label)).toEqual([
       "Seuil du micro",
       "Pivot",
       "Ouverture",
       "Effet de la voix",
       "Penché au repos",
+      "Penché en parlant",
     ]);
-    expect(SLIDER_KEYS).toEqual(["threshold", "tilt", "opening", "voiceEffect", "idleAngle"]);
+    expect(SLIDER_KEYS).toEqual(["threshold", "tilt", "opening", "voiceEffect", "idleAngle", "talkAngle"]);
+  });
+
+  it("règlent le penché en parlant de 0 à 8° par pas de 1, avec « Quand tu parles. » comme aide", () => {
+    expect(spec("talkAngle").steps).toHaveLength(9);
+    expect(valuesOf("talkAngle").slice(0, 3)).toEqual([0, 1, 2]);
+    expect(labelsOf("talkAngle").at(-1)).toBe("8°");
+    expect(labelsOf("idleAngle").at(-1)).toBe("15°");
+    expect(spec("talkAngle").help).toBe("Quand tu parles.");
   });
 
   it("ont une aide courte, de sept mots au plus", () => {

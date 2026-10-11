@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toHeadView, toPoseTransform, toStageLayout } from "./head.rules";
+import { toClosedTransform, toHeadView, toPoseTransform, toStageLayout } from "./head.rules";
 import type { Cut, Head, Pose, PoseFactors } from "./head.types";
 
 const cut: Cut = { left: { x: 240.3, y: 333.2 }, right: { x: 345.1, y: 334.2 } };
@@ -80,13 +80,32 @@ describe("toPoseTransform", () => {
 });
 
 describe("toStageLayout", () => {
-  it("ajoute 20 % de hauteur en haut et 8 % de largeur de chaque côté, arrondis", () => {
+  it("ajoute 17 % de la largeur de chaque côté, 31 % de la hauteur en haut et 6 % en bas, arrondis", () => {
     expect(toStageLayout({ width: 577, height: 433 })).toEqual({
-      width: 669,
-      height: 520,
-      left: 46,
-      top: 87,
+      width: 773,
+      height: 593,
+      left: 98,
+      top: 134,
     });
+  });
+
+  it("laisse la même part de marge à toutes les images, hautes comme larges", () => {
+    expect(toStageLayout({ width: 332, height: 476 })).toEqual({
+      width: 444,
+      height: 653,
+      left: 56,
+      top: 148,
+    });
+  });
+
+  it("garde de la place sous l'image : la tête entière tourne autour de son bas-centre et ne sort pas par le bas", () => {
+    for (const size of [
+      { width: 577, height: 433 },
+      { width: 332, height: 476 },
+    ]) {
+      const { height, top } = toStageLayout(size);
+      expect(height - top - size.height).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -100,6 +119,8 @@ describe("toHeadView", () => {
       rhythm: 110,
       opening: 1.3,
       closedChance: 0.22,
+      closing: 12,
+      expression: { id: "photo", version: "1" },
     };
     const idle = { angle: 2, lift: 0.005 };
     expect(toHeadView(head, { tilt: 1, opening: 2, scale: 0.5 }, { kind: "closed" }, idle)).toEqual({
@@ -109,8 +130,38 @@ describe("toHeadView", () => {
       tilt: 1,
       opening: 2,
       scale: 0.5,
+      closing: 12,
+      expression: { id: "photo", version: "1" },
       idle,
       mouth: { kind: "closed" },
     });
+  });
+});
+
+describe("toClosedTransform", () => {
+  it("descend la moitié haute de closing px, perpendiculairement à la coupe, à l'inverse de la levée", () => {
+    const flat = toClosedTransform({ left: { x: 10, y: 50 }, right: { x: 110, y: 50 } }, 8);
+    expect(flat.origin).toEqual({ x: 60, y: 50 });
+    expect(flat.shift.x).toBeCloseTo(0, 9);
+    expect(flat.shift.y).toBeCloseTo(8, 9);
+    expect(flat.angle).toBe(0);
+  });
+
+  it("suit l'inclinaison de la coupe : le décalage reste perpendiculaire", () => {
+    const transform = toClosedTransform(cut, 10);
+    const lift = toPoseTransform({ pivot: "center", angle: 0, lift: 1 }, cut, {
+      tilt: 1,
+      opening: 1,
+      scale: 1,
+    });
+    const length = Math.hypot(cut.right.x - cut.left.x, cut.right.y - cut.left.y);
+    expect(transform.shift.x).toBeCloseTo((-lift.shift.x / length) * 10, 9);
+    expect(transform.shift.y).toBeCloseTo((-lift.shift.y / length) * 10, 9);
+  });
+
+  it("ne bouge pas avec une fermeture de 0, ni quand les deux points de la coupe sont confondus", () => {
+    expect(toClosedTransform(cut, 0).shift).toEqual({ x: 0, y: 0 });
+    const point = { x: 5, y: 5 };
+    expect(toClosedTransform({ left: point, right: point }, 9).shift).toEqual({ x: 0, y: 0 });
   });
 });

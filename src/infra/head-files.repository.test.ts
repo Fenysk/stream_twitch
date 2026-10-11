@@ -19,8 +19,10 @@ afterEach(() => {
 
 describe("getHeadFiles", () => {
   it("lit la tête livrée dans tete-south-park/ : une tête et deux images PNG", () => {
-    const { head, images } = getHeadFiles("tete-south-park");
+    const { head, geometry, images } = getHeadFiles("tete-south-park", "v7");
     expect(head.poses.length).toBeGreaterThanOrEqual(2);
+    expect(head.expression).toEqual({ id: "photo", version: "v7" });
+    expect(geometry.image.largeur).toBe(head.width);
     expect(Array.from(images.top.slice(0, 4))).toEqual(PNG_SIGNATURE);
     expect(Array.from(images.bottom.slice(0, 4))).toEqual(PNG_SIGNATURE);
   });
@@ -28,12 +30,12 @@ describe("getHeadFiles", () => {
   it("refuse un tete.json qui n'est pas du JSON", () => {
     const folder = createFolder();
     writeFileSync(join(folder, "tete.json"), "{ pas du json");
-    expect(() => getHeadFiles(folder)).toThrow("n'est pas du JSON valide");
+    expect(() => getHeadFiles(folder, "v7")).toThrow("n'est pas du JSON valide");
   });
 
   it("refuse un tete.json qui ne suit pas le format de l'outil, en nommant le champ fautif", () => {
     const folder = createFolder();
     writeFileSync(join(folder, "tete.json"), JSON.stringify({ format: "tete-south-park/1" }));
-    expect(() => getHeadFiles(folder)).toThrow(/tete\.json invalide : image/);
+    expect(() => getHeadFiles(folder, "v7")).toThrow(/tete\.json invalide : image/);
   });
 });

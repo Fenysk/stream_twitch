@@ -8,6 +8,8 @@ import {
   toIdlePoses,
   toIdleRules,
   toNextIdle,
+  toTalkRules,
+  toVoicedPose,
 } from "./idle.rules";
 import type { Settings } from "./settings.schema";
 
@@ -157,5 +159,54 @@ describe("toIdleRules", () => {
     for (const partial of [withoutMin, withoutMax, withoutAngle, withoutLift]) {
       expect(toIdleRules({ ...base, ...partial })).toBeUndefined();
     }
+  });
+});
+
+describe("toTalkRules : la tête entière bouge aussi quand elle parle", () => {
+  const base: Settings = {
+    obsAddress: "ws://127.0.0.1:4455",
+    micName: "Mic/Aux",
+    threshold: -40,
+    delay: 250,
+  };
+  const talk = { talkMin: 600, talkMax: 1500, talkAngle: 3, idleLift: 0.005 };
+
+  it("prend l'intervalle et l'angle de la parole, et la levée du repos : les mêmes quatre poses", () => {
+    expect(toTalkRules({ ...base, ...talk })).toEqual({ min: 600, max: 1500, angle: 3, lift: 0.005 });
+    expect(toIdlePoses(toTalkRules({ ...base, ...talk }) ?? rules)).toEqual([
+      neutral,
+      { angle: -3, lift: 0 },
+      { angle: 3, lift: 0 },
+      { angle: 0, lift: 0.005 },
+    ]);
+  });
+
+  it("n'a pas de règles à 0° : la tête reste neutre en parlant", () => {
+    expect(toTalkRules({ ...base, ...talk, talkAngle: 0 })).toBeUndefined();
+  });
+
+  it("n'a pas de règles sans réglage de la parole", () => {
+    expect(toTalkRules(base)).toBeUndefined();
+  });
+
+  it("n'a pas de règles quand l'intervalle ou la levée manque", () => {
+    const { talkMin: _min, ...withoutMin } = talk;
+    const { talkMax: _max, ...withoutMax } = talk;
+    const { idleLift: _lift, ...withoutLift } = talk;
+    for (const partial of [withoutMin, withoutMax, withoutLift]) {
+      expect(toTalkRules({ ...base, ...partial })).toBeUndefined();
+    }
+  });
+});
+
+describe("toVoicedPose : la voix pousse la tête comme la bouche", () => {
+  it("multiplie l'angle et la levée par le facteur de voix", () => {
+    expect(toVoicedPose({ angle: 3, lift: 0 }, 2)).toEqual({ angle: 6, lift: 0 });
+    expect(toVoicedPose({ angle: 0, lift: 0.005 }, 1.5)).toEqual({ angle: 0, lift: 0.0075 });
+    expect(toVoicedPose({ angle: -3, lift: 0 }, 0.5)).toEqual({ angle: -1.5, lift: 0 });
+  });
+
+  it("garde la pose neutre neutre, quel que soit le facteur", () => {
+    expect(toVoicedPose(neutral, 2)).toEqual(neutral);
   });
 });

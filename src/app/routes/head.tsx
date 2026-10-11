@@ -7,8 +7,8 @@ import { useHeadView } from "../../ui/use-head-view";
 const HEAD_PAGE_CSS = "html,body{margin:0;overflow:hidden;background:transparent}";
 
 const HeadPage = () => {
-  const view = useHeadView();
-  return view ? <Head view={view} /> : null;
+  const shown = useHeadView();
+  return shown ? <Head view={shown.view} images={shown.images} /> : null;
 };
 
 export const Route = createFileRoute("/head")({

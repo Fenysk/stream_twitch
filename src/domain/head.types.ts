@@ -1,6 +1,16 @@
-import type { Cut, Point, Pose } from "./head-view.schema";
+import type { Cut, ExpressionRef, Point, Pose } from "./head-view.schema";
 
-export type { Cut, HeadPart, HeadView, IdlePose, Mouth, Point, Pose } from "./head-view.schema";
+export type {
+  Cut,
+  ExpressionImagePart,
+  ExpressionRef,
+  HeadPart,
+  HeadView,
+  IdlePose,
+  Mouth,
+  Point,
+  Pose,
+} from "./head-view.schema";
 
 export type Head = {
   width: number;
@@ -10,6 +20,8 @@ export type Head = {
   rhythm: number;
   opening: number;
   closedChance: number;
+  closing: number;
+  expression: ExpressionRef;
 };
 
 // Les facteurs de la moitié haute : `tilt` multiplie l'angle, `opening` la levée, `scale` (selon le level) les deux.

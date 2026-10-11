@@ -97,6 +97,37 @@ describe("toNextLocal", () => {
     });
   });
 
+  it("accepte l'expression active, un identifiant, et la retire avec null", () => {
+    expect(toNextLocal({}, { expression: "abcd0001" })).toEqual({
+      ok: true,
+      value: { expression: "abcd0001" },
+    });
+    expect(toNextLocal({ expression: "abcd0001", tilt: 0.5 }, { expression: null })).toEqual({
+      ok: true,
+      value: { tilt: 0.5 },
+    });
+  });
+
+  it("refuse une expression vide ou qui n'est pas un texte", () => {
+    const result = toNextLocal({}, { expression: "" });
+    expect(result.ok ? [] : result.issues).toContainEqual({
+      path: "expression",
+      message: "ne peut pas être vide",
+    });
+    const wrongType = toNextLocal({}, { expression: 12 });
+    expect(wrongType.ok ? [] : wrongType.issues).toContainEqual({
+      path: "expression",
+      message: "doit être un texte",
+    });
+  });
+
+  it("garde l'expression dans la vue de l'interface quand elle est choisie", () => {
+    const effective = { ...defaults, expression: "abcd0001" };
+    const view = toSettingsView({ defaults, local: { expression: "abcd0001" }, effective });
+    expect(view.effective.expression).toBe("abcd0001");
+    expect(view.defaults).not.toHaveProperty("expression");
+  });
+
   it("accepte l'effet de la voix, de 0 % à 100 %, et un pivot à ×0", () => {
     expect(toNextLocal({}, { voiceEffect: 0 })).toEqual({ ok: true, value: { voiceEffect: 0 } });
     expect(toNextLocal({}, { voiceEffect: 1, tilt: 0 })).toEqual({
@@ -162,5 +193,54 @@ describe("toSettingsView", () => {
     expect(Object.keys(view.defaults).sort()).toEqual(["opening", "threshold", "tilt"]);
     expect(view.defaults).not.toHaveProperty("voiceEffect");
     expect(view.effective).not.toHaveProperty("idleAngle");
+  });
+});
+
+describe("réglages de la tête qui parle (talkMin, talkMax, talkAngle)", () => {
+  const talking: Settings = { ...defaults, talkMin: 600, talkMax: 1500, talkAngle: 3 };
+
+  it("accepte les trois réglages de la parole ensemble, ou aucun", () => {
+    expect(toEffectiveSettings(talking, {})).toEqual({ ok: true, value: talking });
+    const { talkMin: _min, talkMax: _max, talkAngle: _angle, ...none } = talking;
+    expect(toEffectiveSettings(none, {})).toEqual({ ok: true, value: none });
+  });
+
+  it("refuse un talkMax plus petit que talkMin", () => {
+    const result = toEffectiveSettings({ ...talking, talkMin: 2000, talkMax: 1000 }, {});
+    expect(result).toEqual({
+      ok: false,
+      issues: [{ path: "talkMax", message: "talkMax ne peut pas être plus petit que talkMin" }],
+    });
+  });
+
+  it("refuse la parole incomplète : talkAngle sans intervalle", () => {
+    const { talkMin: _min, talkMax: _max, ...partial } = talking;
+    const result = toEffectiveSettings(partial, {});
+    expect(result.ok).toBe(false);
+    expect(result.ok ? [] : result.issues).toEqual([
+      { path: "", message: "talkMin, talkMax et talkAngle vont ensemble : tous les trois ou aucun" },
+    ]);
+  });
+
+  it("laisse l'interface changer talkAngle, et refuse un angle négatif", () => {
+    const next = toNextLocal({}, { talkAngle: 7 });
+    expect(next).toEqual({ ok: true, value: { talkAngle: 7 } });
+    const refused = toNextLocal({}, { talkAngle: -1 });
+    expect(refused.ok ? [] : refused.issues).toContainEqual({
+      path: "talkAngle",
+      message: "ne peut pas être négatif",
+    });
+  });
+
+  it("garde l'intervalle de la parole dans settings.json : l'interface ne le change pas", () => {
+    const result = toNextLocal({}, { talkMin: 100, talkMax: 200 });
+    const issues = result.ok ? [] : result.issues;
+    expect(issues.map(({ path }) => path).sort()).toEqual(["talkMax", "talkMin"]);
+  });
+
+  it("montre talkAngle à l'interface avec ses autres réglages", () => {
+    const view = toSettingsView({ defaults: talking, local: {}, effective: talking });
+    expect(view.effective.talkAngle).toBe(3);
+    expect(view.effective).not.toHaveProperty("talkMin");
   });
 });

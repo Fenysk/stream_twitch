@@ -8,6 +8,12 @@ type ScaleFields = {
   loudLevel?: number | undefined;
 };
 
+type TalkFields = {
+  talkMin?: number | undefined;
+  talkMax?: number | undefined;
+  talkAngle?: number | undefined;
+};
+
 type IdleFields = {
   idleMin?: number | undefined;
   idleMax?: number | undefined;
@@ -24,6 +30,14 @@ const hasAllOrNoneOfIdle = ({ idleMin, idleMax, idleAngle, idleLift }: IdleField
   const given = [idleMin, idleMax, idleAngle, idleLift].filter((value) => value !== undefined).length;
   return given === 0 || given === 4;
 };
+
+const hasAllOrNoneOfTalk = ({ talkMin, talkMax, talkAngle }: TalkFields): boolean => {
+  const given = [talkMin, talkMax, talkAngle].filter((value) => value !== undefined).length;
+  return given === 0 || given === 3;
+};
+
+const isTalkMaxAboveMin = ({ talkMin, talkMax }: TalkFields): boolean =>
+  talkMin === undefined || talkMax === undefined || talkMax >= talkMin;
 
 const isIdleMaxAboveMin = ({ idleMin, idleMax }: IdleFields): boolean =>
   idleMin === undefined || idleMax === undefined || idleMax >= idleMin;
@@ -58,10 +72,21 @@ export const SettingsFieldsSchema = z
     quietScale: positive().optional(),
     loudScale: positive().optional(),
     loudLevel: decibels().optional(),
+    // L'expression active : l'identifiant d'une expression de data/heads/, absent pour la photo intégrée.
+    expression: z
+      .string("doit être un texte")
+      .min(1, "ne peut pas être vide")
+      .max(64, "64 caractères au plus")
+      .optional(),
     idleMin: positive().optional(),
     idleMax: positive().optional(),
     idleAngle: nonNegative().optional(),
     idleLift: positive().optional(),
+    // La tête entière change aussi de pose quand elle parle : mêmes quatre poses que le repos (la levée vient de idleLift),
+    // un intervalle plus court, et un angle que l'interface règle.
+    talkMin: positive().optional(),
+    talkMax: positive().optional(),
+    talkAngle: nonNegative().optional(),
   })
   .strict();
 
@@ -80,11 +105,18 @@ export const SettingsSchema = SettingsFieldsSchema.refine(hasAllOrNoneOfScale, {
   .refine(isIdleMaxAboveMin, {
     message: "idleMax ne peut pas être plus petit que idleMin",
     path: ["idleMax"],
+  })
+  .refine(hasAllOrNoneOfTalk, {
+    message: "talkMin, talkMax et talkAngle vont ensemble : tous les trois ou aucun",
+  })
+  .refine(isTalkMaxAboveMin, {
+    message: "talkMax ne peut pas être plus petit que talkMin",
+    path: ["talkMax"],
   });
 
 export type Settings = z.infer<typeof SettingsSchema>;
 
-// Les cinq réglages que l'interface change. Tous les autres (le micro, le délai, le rythme, les niveaux, les extrêmes
+// Les réglages que l'interface change : six curseurs et l'expression active. Tous les autres (le micro, le délai, le rythme, les niveaux, les extrêmes
 // de l'effet de la voix, l'intervalle et la levée du repos, l'adresse d'OBS) restent dans `settings.json` seulement.
 export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   threshold: true,
@@ -92,6 +124,8 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   opening: true,
   voiceEffect: true,
   idleAngle: true,
+  talkAngle: true,
+  expression: true,
 });
 export type EditableSettings = z.infer<typeof EditableSettingsSchema>;
 

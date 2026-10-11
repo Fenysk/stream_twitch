@@ -39,6 +39,7 @@ add)
   fi
   if [ -f "$root/.env" ]; then cp "$root/.env" "$dir/.env"; fi
   if [ -f "$root/settings.local.json" ]; then cp "$root/settings.local.json" "$dir/settings.local.json"; fi
+  if [ -d "$root/data" ]; then cp -r "$root/data" "$dir/data"; fi
   (cd "$dir" && pnpm install --frozen-lockfile --prefer-offline > /dev/null)
   echo "$dir"
   ;;

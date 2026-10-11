@@ -75,6 +75,22 @@
   }
 }
 
+/* Un onglet qui arrive plus tard : grisé comme un bouton désactivé, sans survol ni appui, il ne mène nulle part */
+.lp-window-nav .lp-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .lp-window-nav .lp-btn[aria-disabled="true"]:hover {
+    background: transparent;
+  }
+}
+
+.lp-window-nav .lp-btn[aria-disabled="true"]:active {
+  transform: none;
+}
+
 /* Le fond de l'onglet choisi est son `::before` (selection-glide.css) : le survol ne le recouvre pas */
 .lp-window-nav .lp-btn.is-selected {
   background: transparent;

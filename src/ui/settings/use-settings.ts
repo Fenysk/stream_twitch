@@ -1,6 +1,6 @@
-// Les réglages de la tête côté page : ils se lisent au serveur, et chaque frappe valide s'applique en direct (après 250 ms
-// sans frappe). Un refus du serveur ne perd rien : les brouillons restent, le refus s'écrit sous le champ, et le
-// changement suivant renvoie le tout.
+// Les réglages de la tête côté page : ils se lisent au serveur, et chaque geste valide s'applique en direct (un envoi au
+// plus toutes les 80 ms : l'aperçu suit le curseur pendant qu'on le glisse). Un refus du serveur ne perd rien : les
+// brouillons restent, le refus s'écrit sous le champ, et le changement suivant renvoie le tout.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SettingsRefusalSchema, type SettingsView, SettingsViewSchema } from "../../domain/settings.schema";
@@ -14,7 +14,7 @@ import {
   toRemainingDrafts,
 } from "./settings-changes";
 
-const DEBOUNCE_MS = 250;
+const SEND_EVERY_MS = 80;
 const NO_ERRORS: FieldErrors = { byKey: {}, general: [] };
 
 type Answer = { view: SettingsView } | { errors: FieldErrors };
@@ -55,6 +55,8 @@ export type UseSettings = {
   drafts: Drafts;
   errors: FieldErrors;
   edit: (key: SliderKey, value: number | null) => void;
+  // L'expression active : son identifiant, ou `null` pour la photo. S'applique aussitôt, sans attendre de frappe.
+  choose: (expression: string | null) => Promise<void>;
   reset: () => Promise<void>;
 };
 
@@ -106,18 +108,30 @@ export const useSettings = (): UseSettings => {
   const edit = useCallback(
     (key: SliderKey, value: number | null) => {
       setDrafts((current) => ({ ...current, [key]: value }));
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => void flush(), DEBOUNCE_MS);
+      // Un envoi déjà prévu emportera aussi ce geste : l'envoi lit les brouillons les plus récents.
+      if (timer.current !== undefined) return;
+      timer.current = setTimeout(() => {
+        timer.current = undefined;
+        void flush();
+      }, SEND_EVERY_MS);
     },
     [flush],
   );
 
+  const choose = useCallback(
+    async (expression: string | null) => {
+      take(await ask("PUT", { expression }));
+    },
+    [take],
+  );
+
   const reset = useCallback(async () => {
     clearTimeout(timer.current);
+    timer.current = undefined;
     const answer = await ask("DELETE");
     take(answer);
     if ("view" in answer) setDrafts({});
   }, [take]);
 
-  return { view, drafts, errors, edit, reset };
+  return { view, drafts, errors, edit, choose, reset };
 };

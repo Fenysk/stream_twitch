@@ -2,6 +2,9 @@
 
 @import "./mic-meter.css";
 @import "./head-settings-tab.css";
+@import "./cut-tab.css";
+@import "./expression-thumbs.css";
+@import "./head-preview.css";
 
 /* Le texte sur le fond des pills : le `body` reste sur --void, la page le couvre. */
 .settings-page {
@@ -51,6 +54,18 @@
 .settings-appearance {
   padding: var(--space-3) 2px 4px;
   border-top: 1px solid var(--chip-hover);
+}
+
+/* Le damier : une image transparente laisse voir ce qu'elle laisse passer (le plateau, les aperçus) */
+.settings-checker {
+  background-color: var(--chip);
+  background-image: conic-gradient(
+    var(--chip-hover) 25%,
+    transparent 0 50%,
+    var(--chip-hover) 0 75%,
+    transparent 0
+  );
+  background-size: 16px 16px;
 }
 
 .settings-main {

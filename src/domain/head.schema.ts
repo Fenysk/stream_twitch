@@ -1,7 +1,8 @@
 import { z } from "zod";
-import type { Head, Pose } from "./head.types";
+import type { ExpressionRef, Head, Pose } from "./head.types";
 
-// Format de `tete-south-park/tete.json`, produit par l'outil « Découpe de tête » : on garde ses noms ici.
+// Format de `tete-south-park/tete.json` (1), et de la géométrie d'une expression (2 : `nom` et `fermeture` en plus) :
+// produits par l'outil « Découpe de tête », on garde ses noms ici.
 const FilePointSchema = z.object({ x: z.number(), y: z.number() });
 
 const FilePoseSchema = z.discriminatedUnion("pivot", [
@@ -10,9 +11,13 @@ const FilePoseSchema = z.discriminatedUnion("pivot", [
 ]);
 
 export const HeadFileSchema = z.object({
-  format: z.literal("tete-south-park/1"),
+  format: z.enum(["tete-south-park/1", "tete-south-park/2"]),
+  nom: z.string().optional(),
+  source: z.string().optional(),
   image: z.object({ largeur: z.number().positive(), hauteur: z.number().positive() }),
   coupe: z.object({ gauche: FilePointSchema, droite: FilePointSchema }),
+  levres: z.object({ trait: z.boolean(), epaisseur: z.number().positive() }).optional(),
+  fermeture: z.number().min(0).optional(),
   animation: z.object({
     rythmeMs: z.number().positive(),
     amplitude: z.number().positive(),
@@ -31,7 +36,7 @@ function toPose(file: HeadFile["animation"]["poses"][number]): Pose {
 }
 
 // Seul endroit où les noms de l'outil deviennent ceux du domaine.
-export function toHead(file: HeadFile): Head {
+export function toHead(file: HeadFile, expression: ExpressionRef): Head {
   return {
     width: file.image.largeur,
     height: file.image.hauteur,
@@ -40,5 +45,7 @@ export function toHead(file: HeadFile): Head {
     rhythm: file.animation.rythmeMs,
     opening: file.animation.amplitude,
     closedChance: file.animation.probabiliteFermee,
+    closing: file.fermeture ?? 0,
+    expression,
   };
 }

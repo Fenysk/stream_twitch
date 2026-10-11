@@ -11,6 +11,8 @@ const closed: HeadView = {
   tilt: 1,
   opening: 1,
   scale: 1,
+  closing: 0,
+  expression: { id: "photo", version: "1" },
   idle: { angle: 0, lift: 0 },
   mouth: { kind: "closed" },
 };
@@ -57,6 +59,8 @@ describe("createHeadLoop", () => {
     rhythm: 110,
     opening: 1.3,
     closedChance: 0.22,
+    closing: 0,
+    expression: { id: "photo", version: "1" },
   };
   const settings: Settings = {
     obsAddress: "ws://127.0.0.1:4455",
@@ -111,6 +115,8 @@ describe("createHeadLoop", () => {
       tilt: 1.3,
       opening: 1.3,
       scale: 1,
+      closing: 0,
+      expression: { id: "photo", version: "1" },
       idle: { angle: 0, lift: 0 },
       mouth: { kind: "closed" },
     });
@@ -304,6 +310,118 @@ describe("createHeadLoop", () => {
     });
   });
 
+  describe("pose de la tête qui parle (talk)", () => {
+    // random vaut 0.5 : premier intervalle de parole 1050 ms ; depuis neutre la pose tirée est la penchée à droite (+3°).
+    const idle = { idleMin: 2000, idleMax: 5000, idleAngle: 2, idleLift: 0.005 };
+    const talk = { ...idle, talkMin: 600, talkMax: 1500, talkAngle: 3 };
+
+    // Elle parle sans s'arrêter : un level fort toutes les 100 ms pendant `duration`.
+    const speak = (mic: { emit: (level: number) => void }, duration: number, level = -30) => {
+      for (let elapsed = 0; elapsed < duration; elapsed += 100) {
+        mic.emit(level);
+        vi.advanceTimersByTime(100);
+      }
+    };
+
+    it("garde la tête neutre tant que l'intervalle de parole n'est pas passé", () => {
+      const { mic, views } = setup(talk);
+      speak(mic, 1000);
+      expect(views.length).toBeGreaterThan(0);
+      expect(views.every((view) => view.idle.angle === 0 && view.idle.lift === 0)).toBe(true);
+    });
+
+    it("change la pose de la tête entière une fois l'intervalle passé, la bouche toujours animée", () => {
+      const { mic, views } = setup(talk);
+      speak(mic, 1400);
+      expect(views.at(-1)?.idle).toEqual({ angle: 3, lift: 0 });
+      expect(views.at(-1)?.mouth.kind).toBe("open");
+    });
+
+    it("multiplie l'angle par le facteur de voix, comme la bouche", () => {
+      const { mic, views } = setup({ ...talk, quietScale: 0.5, loudScale: 2, loudLevel: -10 });
+      speak(mic, 1400, -10);
+      expect(views.at(-1)?.scale).toBeCloseTo(2, 9);
+      expect(views.at(-1)?.idle.angle).toBeCloseTo(6, 9);
+    });
+
+    it("suit la voix pendant que la pose tient : la même pose, un autre facteur", () => {
+      const { mic, views } = setup({ ...talk, quietScale: 0.5, loudScale: 2, loudLevel: -10 });
+      speak(mic, 1400, -10);
+      speak(mic, 300, -30);
+      const last = views.at(-1);
+      expect(last?.scale).toBeLessThan(2);
+      expect(last?.idle.angle).toBeCloseTo(3 * (last?.scale ?? 0), 9);
+    });
+
+    it("ne répète jamais la même pose, change toutes les 0,6 à 1,5 s, et les utilise toutes", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(0);
+      // Un hasard qui varie (le setup fixe 0.5) : pour que toutes les poses sortent.
+      let seed = 12345;
+      const random = () => {
+        seed = (seed * 1664525 + 1013904223) % 4294967296;
+        return seed / 4294967296;
+      };
+      const mic = createFakeMic();
+      const loop = createHeadLoop({
+        mic,
+        head,
+        settings: { ...settings, ...talk },
+        clock: () => Date.now(),
+        random,
+      });
+      const poses: { at: number; angle: number; lift: number }[] = [];
+      loop.feed.subscribe(({ idle: pose }) => {
+        const last = poses.at(-1);
+        if (!last || last.angle !== pose.angle || last.lift !== pose.lift) {
+          poses.push({ at: Date.now(), angle: pose.angle, lift: pose.lift });
+        }
+      });
+      loop.start();
+      speak(mic, 60_000);
+      loop.stop();
+      expect(poses.length).toBeGreaterThan(30);
+      for (const [index, pose] of poses.entries()) {
+        const before = poses[index - 1];
+        if (!before) continue;
+        // Un pas de rythme (110 ms) de plus au plus : le changement attend le pas suivant l'instant prévu.
+        expect(pose.at - before.at).toBeGreaterThanOrEqual(600);
+        expect(pose.at - before.at).toBeLessThanOrEqual(1500 + 110);
+      }
+      expect(new Set(poses.map(({ angle, lift }) => `${angle}/${lift}`))).toEqual(
+        new Set(["0/0", "3/0", "-3/0", "0/0.005"]),
+      );
+    });
+
+    it("reste neutre en parlant sans talkAngle, ou à 0°", () => {
+      for (const override of [idle, { ...talk, talkAngle: 0 }]) {
+        const { mic, views } = setup(override);
+        speak(mic, 4000);
+        expect(views.every((view) => view.idle.angle === 0 && view.idle.lift === 0)).toBe(true);
+      }
+    });
+
+    it("revient à la pose de repos après la parole : neutre d'abord, puis un intervalle de repos complet", () => {
+      const { mic, views } = setup(talk);
+      speak(mic, 1400);
+      expect(views.at(-1)?.idle.angle).toBe(3);
+      vi.advanceTimersByTime(440);
+      expect(views.at(-1)?.idle).toEqual({ angle: 0, lift: 0 });
+      const count = views.length;
+      vi.advanceTimersByTime(3300);
+      expect(views).toHaveLength(count);
+      vi.advanceTimersByTime(330);
+      expect(views.at(-1)?.idle).toEqual({ angle: 2, lift: 0 });
+    });
+
+    it("applique talkAngle en direct : un nouveau réglage change la pose suivante", () => {
+      const { mic, loop, views } = setup(talk);
+      loop.update({ ...settings, ...talk, talkAngle: 10 });
+      speak(mic, 1400);
+      expect(views.at(-1)?.idle.angle).toBe(10);
+    });
+  });
+
   describe("réglages changés en direct (update)", () => {
     const idle = { idleMin: 2000, idleMax: 5000, idleAngle: 2, idleLift: 0.005 };
 
@@ -377,6 +495,67 @@ describe("createHeadLoop", () => {
       const { mic, loop, views } = setup();
       loop.stop();
       loop.update({ ...settings, rhythm: 50 });
+      mic.emit(-30);
+      vi.advanceTimersByTime(1000);
+      expect(views.filter((view) => view.mouth.kind === "open")).toEqual([]);
+    });
+  });
+
+  describe("expression changée en direct (updateHead)", () => {
+    const other: Head = {
+      ...head,
+      width: 332,
+      height: 476,
+      rhythm: 50,
+      closing: 14,
+      poses: [poseC, poseB],
+      expression: { id: "abcd0001", version: "7" },
+    };
+
+    it("publie aussitôt la nouvelle tête : sa géométrie, sa fermeture, son expression, la bouche fermée", () => {
+      const { loop, views } = setup();
+      loop.updateHead(other);
+      expect(views).toHaveLength(1);
+      expect(loop.feed.getView()).toMatchObject({
+        width: 332,
+        height: 476,
+        closing: 14,
+        expression: { id: "abcd0001", version: "7" },
+        mouth: { kind: "closed" },
+      });
+    });
+
+    it("referme la bouche : la pose d'une autre tête n'a pas de sens pour la nouvelle", () => {
+      const { mic, loop, views } = setup();
+      mic.emit(-30);
+      vi.advanceTimersByTime(110);
+      expect(views.at(-1)?.mouth.kind).toBe("open");
+      loop.updateHead(other);
+      expect(views.at(-1)?.mouth).toEqual({ kind: "closed" });
+    });
+
+    it("prend le rythme de la nouvelle tête aussitôt, et ses poses", () => {
+      const { mic, loop, views } = setup();
+      mic.emit(-30);
+      vi.advanceTimersByTime(10);
+      loop.updateHead(other);
+      const count = views.length;
+      vi.advanceTimersByTime(50);
+      expect(views).toHaveLength(count + 1);
+      const shown = views.at(-1)?.mouth;
+      expect(shown?.kind === "open" && [poseC, poseB].includes(shown.pose)).toBe(true);
+    });
+
+    it("garde les réglages d'Alexis : le tilt et l'opening des settings valent pour la nouvelle tête", () => {
+      const { loop } = setup({ tilt: 0.5, opening: 2 });
+      loop.updateHead(other);
+      expect(loop.feed.getView()).toMatchObject({ tilt: 0.5, opening: 2 });
+    });
+
+    it("reste arrêtée après stop() : la nouvelle tête ne relance rien", () => {
+      const { mic, loop, views } = setup();
+      loop.stop();
+      loop.updateHead(other);
       mic.emit(-30);
       vi.advanceTimersByTime(1000);
       expect(views.filter((view) => view.mouth.kind === "open")).toEqual([]);

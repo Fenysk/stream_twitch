@@ -8,6 +8,8 @@ const view = {
   tilt: 1,
   opening: 1.8,
   scale: 1.5,
+  closing: 12,
+  expression: { id: "photo", version: "1" },
   idle: { angle: -2, lift: 0 },
   mouth: { kind: "open", pose: { pivot: "center", angle: 3, lift: 0.11 } },
 };
@@ -32,6 +34,15 @@ describe("HeadViewSchema", () => {
     const { idle: _idle, ...withoutIdle } = view;
     expect(HeadViewSchema.safeParse(withoutIdle).success).toBe(false);
     expect(HeadViewSchema.safeParse({ ...view, idle: { angle: 2 } }).success).toBe(false);
+  });
+
+  it("refuse un état sans expression ou sans closing, ou avec une fermeture négative", () => {
+    const { expression: _expression, ...withoutExpression } = view;
+    const { closing: _closing, ...withoutClosing } = view;
+    expect(HeadViewSchema.safeParse(withoutExpression).success).toBe(false);
+    expect(HeadViewSchema.safeParse(withoutClosing).success).toBe(false);
+    expect(HeadViewSchema.safeParse({ ...view, closing: -1 }).success).toBe(false);
+    expect(HeadViewSchema.safeParse({ ...view, expression: { id: "", version: "1" } }).success).toBe(false);
   });
 
   it("accepte un tilt ou un opening à 0 (le curseur va jusqu'à ×0), et refuse le négatif", () => {

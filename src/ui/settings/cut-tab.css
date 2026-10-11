@@ -1,0 +1,201 @@
+/* L'onglet « Découpe » : l'import, les vignettes, le plateau et ses réglages, l'aperçu, le nom et les boutons */
+
+.cut-tab {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.cut-tab p {
+  margin: 0;
+}
+
+.cut-import {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Le plateau à gauche, ses réglages à droite ; l'un sous l'autre sur écran étroit */
+.cut-work {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 244px;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.cut-board-column {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  min-width: 0;
+}
+
+.cut-side {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.cut-board {
+  position: relative;
+  box-sizing: border-box;
+  aspect-ratio: var(--cut-ratio);
+  /* Jamais plus haut que 70 % de l'écran */
+  width: min(100%, calc(70vh * var(--cut-ratio)));
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.cut-board-image,
+.cut-board-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.cut-board-image {
+  display: block;
+  pointer-events: none;
+}
+
+.cut-board-overlay {
+  pointer-events: none;
+}
+
+/* La zone sous la coupe : la moitié basse, teintée */
+.cut-zone {
+  fill: var(--accent);
+  fill-opacity: 0.18;
+}
+
+.cut-line {
+  stroke: var(--danger);
+  stroke-width: 2px;
+}
+
+/* De quoi attraper la ligne : une bande de 20 px de haut posée sur elle, invisible */
+.cut-line-grip {
+  position: absolute;
+  left: -2%;
+  width: 104%;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.cut-line-grip:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.cut-handle {
+  position: absolute;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  padding: 0;
+  border: 2px solid var(--danger);
+  border-radius: var(--radius-pill);
+  background: var(--pill-surface);
+  cursor: grab;
+  touch-action: none;
+}
+
+.cut-handle.is-selected {
+  background: var(--danger);
+  border-color: var(--pill-surface);
+}
+
+.cut-handle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* La loupe ×6 : 120 × 120 px, de gros pixels, un réticule au centre */
+.cut-loupe-block {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.cut-loupe {
+  position: relative;
+  background-color: var(--chip);
+  width: 120px;
+  height: 120px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  image-rendering: pixelated;
+  background-image:
+    var(--loupe-image),
+    conic-gradient(var(--chip-hover) 25%, transparent 0 50%, var(--chip-hover) 0 75%, transparent 0);
+  background-size:
+    var(--loupe-size),
+    12px 12px;
+  background-position:
+    var(--loupe-position),
+    0 0;
+  background-repeat: no-repeat, repeat;
+}
+
+.cut-loupe-cross::before,
+.cut-loupe-cross::after {
+  content: "";
+  position: absolute;
+  background: var(--danger);
+}
+
+.cut-loupe-cross::before {
+  left: 59px;
+  top: 0;
+  width: 2px;
+  height: 100%;
+}
+
+.cut-loupe-cross::after {
+  top: 59px;
+  left: 0;
+  height: 2px;
+  width: 100%;
+}
+
+/* L'aperçu : le sélecteur de mode, puis la tête dans son cadre */
+.cut-preview {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.cut-preview-stage {
+  box-sizing: border-box;
+  width: min(100%, 300px);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+}
+
+.cut-save {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 420px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--chip-hover);
+}
+
+.cut-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .cut-work {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

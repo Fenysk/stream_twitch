@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as HeadRouteImport } from './routes/head'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
+import { Route as SettingsCutRouteImport } from './routes/settings.cut'
 import { Route as SettingsHeadRouteImport } from './routes/settings.head'
 
 const IndexRoute = IndexRouteImport.update({
@@ -35,6 +36,11 @@ const SettingsIndexRoute = SettingsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsCutRoute = SettingsCutRouteImport.update({
+  id: '/cut',
+  path: '/cut',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsHeadRoute = SettingsHeadRouteImport.update({
   id: '/head',
   path: '/head',
@@ -45,12 +51,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/settings/cut': typeof SettingsCutRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/head': typeof HeadRoute
+  '/settings/cut': typeof SettingsCutRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings': typeof SettingsIndexRoute
 }
@@ -59,15 +67,29 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/settings/cut': typeof SettingsCutRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/head' | '/settings' | '/settings/head' | '/settings/'
+  fullPaths:
+    | '/'
+    | '/head'
+    | '/settings'
+    | '/settings/cut'
+    | '/settings/head'
+    | '/settings/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/head' | '/settings/head' | '/settings'
-  id: '__root__' | '/' | '/head' | '/settings' | '/settings/head' | '/settings/'
+  to: '/' | '/head' | '/settings/cut' | '/settings/head' | '/settings'
+  id:
+    | '__root__'
+    | '/'
+    | '/head'
+    | '/settings'
+    | '/settings/cut'
+    | '/settings/head'
+    | '/settings/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -106,6 +128,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/cut': {
+      id: '/settings/cut'
+      path: '/cut'
+      fullPath: '/settings/cut'
+      preLoaderRoute: typeof SettingsCutRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/head': {
       id: '/settings/head'
       path: '/head'
@@ -117,11 +146,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface SettingsRouteChildren {
+  SettingsCutRoute: typeof SettingsCutRoute
   SettingsHeadRoute: typeof SettingsHeadRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsCutRoute: SettingsCutRoute,
   SettingsHeadRoute: SettingsHeadRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }

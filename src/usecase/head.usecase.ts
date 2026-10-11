@@ -7,6 +7,8 @@ import {
   isSameIdlePose,
   toIdleRules,
   toNextIdle,
+  toTalkRules,
+  toVoicedPose,
 } from "../domain/idle.rules";
 import { isLoud, isTalking, type MouthRules, toNextMouth } from "../domain/mouth.rules";
 import { type ScaleCurve, toScale, toScaleCurve } from "../domain/scale.rules";
@@ -50,7 +52,14 @@ export type HeadLoopDeps = {
 };
 
 // `update` : de nouveaux réglages, appliqués aussitôt (l'interface les change en direct, sans relancer le serveur).
-export type HeadLoop = { feed: HeadFeed; start(): void; stop(): void; update(settings: Settings): void };
+export type HeadLoop = {
+  feed: HeadFeed;
+  start(): void;
+  stop(): void;
+  update(settings: Settings): void;
+  // Une autre expression : sa géométrie, ses poses et son rythme prennent la place de ceux d'avant.
+  updateHead(head: Head): void;
+};
 
 // Ce que les réglages décident, calculé une fois par jeu de réglages plutôt qu'à chaque pas.
 type LoopPlan = {
@@ -61,6 +70,7 @@ type LoopPlan = {
   rules: MouthRules;
   curve: ScaleCurve | undefined;
   idleRules: IdleRules | undefined;
+  talkRules: IdleRules | undefined;
 };
 
 const toLoopPlan = (head: Head, settings: Settings): LoopPlan => {
@@ -73,10 +83,12 @@ const toLoopPlan = (head: Head, settings: Settings): LoopPlan => {
     rules: { poses: head.poses, closedChance: head.closedChance, delay: settings.delay },
     curve: toScaleCurve(settings),
     idleRules: toIdleRules(settings),
+    talkRules: toTalkRules(settings),
   };
 };
 
-export function createHeadLoop({ mic, head, settings, clock, random }: HeadLoopDeps): HeadLoop {
+export function createHeadLoop({ mic, head: initialHead, settings, clock, random }: HeadLoopDeps): HeadLoop {
+  let head = initialHead;
   let plan = toLoopPlan(head, settings);
   const feed = createHeadFeed(
     toHeadView(
@@ -88,6 +100,8 @@ export function createHeadLoop({ mic, head, settings, clock, random }: HeadLoopD
   );
   let mouth: Mouth = { kind: "closed" };
   let idle: IdleState = IDLE_START;
+  // Elle parle (le delay n'est pas passé) : la pose de la tête entière vient des règles de la parole, poussée par la voix.
+  let isTalkingNow = false;
   let scale = 1;
   let lastLoudAt: number | null = null;
   // Le level le plus fort depuis le pas précédent : un pic de voix entre deux pas ne doit pas se perdre.
@@ -96,25 +110,30 @@ export function createHeadLoop({ mic, head, settings, clock, random }: HeadLoopD
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const publish = (next: Mouth) =>
-    feed.publish(toHeadView(head, { tilt: plan.tilt, opening: plan.opening, scale }, next, idle.pose));
+    feed.publish(
+      toHeadView(
+        head,
+        { tilt: plan.tilt, opening: plan.opening, scale },
+        next,
+        isTalkingNow ? toVoicedPose(idle.pose, scale) : idle.pose,
+      ),
+    );
 
   const step = () => {
     scale = plan.curve ? toScale(peak, plan.curve) : 1;
     peak = Number.NEGATIVE_INFINITY;
     const now = clock();
     const next = toNextMouth({ previous: mouth, lastLoudAt, now, rules: plan.rules, random });
-    // Au repos (elle ne parle pas), la tête entière change de pose de repos ; dès qu'elle parle, elle redevient neutre.
-    const nextIdle = plan.idleRules
-      ? toNextIdle({
-          previous: idle,
-          isIdle: !isTalking(lastLoudAt, now, plan.settings.delay),
-          now,
-          rules: plan.idleRules,
-          random,
-        })
-      : idle;
+    // Au repos, la tête entière change de pose de repos ; en parlant, de pose de parole (autre intervalle, autre angle).
+    // Passer de l'un à l'autre repart de neutre, avec un intervalle complet. Sans règles, elle reste neutre.
+    const isTalkingStep = isTalking(lastLoudAt, now, plan.settings.delay);
+    if (isTalkingStep !== isTalkingNow) idle = IDLE_START;
+    isTalkingNow = isTalkingStep;
+    const rules = isTalkingStep ? plan.talkRules : plan.idleRules;
+    const nextIdle = rules ? toNextIdle({ previous: idle, isIdle: true, now, rules, random }) : IDLE_START;
     const isIdleChanged = !isSameIdlePose(nextIdle.pose, idle.pose);
     idle = nextIdle;
+    // La voix pousse la tête pendant que la pose tient : tant qu'elle parle, chaque pas montre la pose avec son facteur.
     if (next.kind === "closed" && mouth.kind === "closed" && !isIdleChanged) return;
     mouth = next;
     publish(next);
@@ -151,6 +170,17 @@ export function createHeadLoop({ mic, head, settings, clock, random }: HeadLoopD
     update(next) {
       plan = toLoopPlan(head, next);
       // La pose de repos repart de neutre, avec un intervalle complet : ses réglages viennent peut-être de changer.
+      idle = IDLE_START;
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        schedule();
+      }
+      publish(mouth);
+    },
+    updateHead(next) {
+      head = next;
+      plan = toLoopPlan(head, plan.settings);
+      mouth = { kind: "closed" };
       idle = IDLE_START;
       if (timer !== undefined) {
         clearTimeout(timer);

@@ -11,6 +11,48 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-11 — Les expressions se listent par nom, pas par date de création
+
+**Contexte.** Copier `data/heads/` (vers le dossier principal, ou par `tools/worktree.sh add`) ne garde pas les dates de création : les vignettes changeaient d'ordre.
+**Décision.** `expression.repository.ts` liste par nom (ordre français), puis par identifiant. « Photo » reste première.
+**Renoncement.** Écrire la date de création dans `geometry.json` : un champ de plus pour un ordre qu'Alexis ne règle pas.
+
+## 2026-10-11 — La Découpe propose un closing de la bande + 2 px
+
+**Contexte.** Avec le closing égal à la hauteur de la bande, la moitié haute frôlait la mâchoire : écart médian de 1 à 2 px sur les 6 avatars, 7 px au plus.
+**Décision.** `toCutSuggestion` propose la hauteur de la bande plus 2 px : la moitié haute mord un peu sur la mâchoire. Écart médian de -1 à 0 px, 5 px au plus. Les 6 avatars déjà importés sont passés de +2 px par l'API.
+**Renoncement.** Garder la hauteur de la bande : l'écart restait visible sur une tête fermée.
+
+## 2026-10-11 — Marges de la scène fixes sur quatre côtés, `talkAngle` plafonné à 8°
+
+**Contexte.** À 800 × 700, la tête entière qui tourne autour de son bas-centre sortait de la source (les avatars, dès 3 à 6°), et plus encore au pire cas des curseurs.
+**Décision.** `toStageLayout` : 17 % de la largeur de chaque côté, 31 % de la hauteur en haut, 6 % en bas, pour toutes les expressions : les plus petites qui gardent les 7 expressions dans la source au pire cas (pivot ×2, ouverture ×3, voix ×2, bouche ouverte, parole 8° × 2, repos 15°). La tête rétrécit de 13,5 % au plus. « Penché en parlant » va de 0 à 8°, « Penché au repos » reste à 15°.
+**Renoncement.** Baisser les maximums des curseurs : la perte de taille reste sous les 25 % fixés.
+
+## 2026-10-11 — La tête entière bouge aussi quand elle parle : `talkMin`, `talkMax`, `talkAngle`
+
+**Contexte.** Quand Alexis parle, seule la moitié haute bouge ; la tête entière reste figée, alors qu'elle bouge au repos.
+**Décision.** `settings.schema.ts` : trois réglages qui vont ensemble (`talkMin`, `talkMax`, `talkAngle`). En parlant, la tête reprend les quatre poses du repos (levée de `idleLift`) toutes les 600 à 1500 ms, jamais deux fois la même, avec l'angle `talkAngle` multiplié par le facteur de voix. `talkAngle` est le sixième curseur ; à 0° la tête reste neutre.
+**Renoncement.** Des poses de parole à part : les quatre poses du repos suffisent, seuls l'angle et l'intervalle changent.
+
+## 2026-10-11 — L'onglet « Découpe » devine la coupe d'une image déjà découpée
+
+**Contexte.** Les avatars d'Alexis arrivent coupés en deux, avec une bande transparente d'environ 11 px à la bouche.
+**Décision.** `cut.rules.ts` cherche une bande de lignes transparentes entre 30 % et 85 % de la hauteur du personnage : coupe au milieu, charnières aux bords les plus larges autour de la bande, closing égal à sa hauteur, lèvres décochées. Sans bande : coupe à 70 % de la hauteur, lèvres de 10 px.
+**Renoncement.** « Dans la moitié basse de l'image » : les six avatars ont leur bande à 49-52 % de la hauteur.
+
+## 2026-10-11 — L'API des expressions remplace `/api/head/image/:part`
+
+**Contexte.** Le serveur servait deux images fixes ; les expressions en ajoutent, retouchables en direct.
+**Décision.** `/api/expressions` (liste, création), `/api/expressions/:id` (détail, mise à jour, suppression) et `/api/expressions/:id/image/:part` (`?v=` = version, cache longue durée). L'expression active est le réglage `expression` de `settings.local.json`. `/head` ne montre une expression qu'une fois ses deux images chargées.
+**Renoncement.** Garder `/api/head/image/:part` : une seule URL par moitié casse le cache d'OBS à chaque retouche.
+
+## 2026-10-11 — `expression` et `closing` entrent au lexique : la tête a plusieurs visages
+
+**Contexte.** Alexis veut changer l'expression de la tête en direct, et en créer d'autres dans l'onglet « Découpe » (ses avatars sont déjà coupés).
+**Décision.** `lexique.json` : nouveaux noms `expression` (une image d'origine, ses deux moitiés et sa géométrie ; synonymes bannis : avatar, mood, humeur, emotion) et `closing` (de combien la moitié haute descend, bouche fermée, pour toucher la mâchoire ; banni : fermeture). Les expressions vivent dans `data/heads/<id>/`, hors de git.
+**Renoncement.** Ranger les expressions dans `tete-south-park/` (suivi par git) : des fichiers modifiés depuis l'interface bloqueraient les fusions, comme `settings.local.json`.
+
 ## 2026-10-11 — Le design system de LivePlace entre dans `src/ui/design/`
 
 **Contexte.** La première interface de stream_twitch (réglages de la tête) doit avoir le style d'Alexis, celui de LivePlace.

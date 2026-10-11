@@ -3,15 +3,18 @@
   "micName": "Mic/Aux",
   "threshold": -40,
   "delay": 250,
-  "tilt": 1.0,
-  "opening": 1.8,
+  "tilt": 0.5,
+  "opening": 2,
   "quietLevel": -25,
   "loudLevel": -10,
   "quietScale": 0.3,
   "loudScale": 2,
-  "voiceEffect": 0.5,
+  "voiceEffect": 1,
   "idleMin": 2000,
   "idleMax": 5000,
-  "idleAngle": 6,
-  "idleLift": 0.005
+  "idleAngle": 5,
+  "idleLift": 0.005,
+  "talkMin": 600,
+  "talkMax": 1500,
+  "talkAngle": 3
 }

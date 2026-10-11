@@ -1,9 +1,9 @@
-// Les cinq curseurs de l'onglet « Tête South Park » : une table, un rendu. Tout le reste des réglages reste dans settings.json.
+// Les six curseurs de l'onglet « Tête South Park » : une table, un rendu. Tout le reste des réglages reste dans settings.json.
 
 import type { EditableSettings } from "../../domain/settings.schema";
 import type { SliderStep } from "../design/slider";
 
-export type SliderKey = keyof EditableSettings;
+export type SliderKey = Exclude<keyof EditableSettings, "expression">;
 
 export type SliderSpec = {
   key: SliderKey;
@@ -61,6 +61,13 @@ export const SLIDERS: readonly SliderSpec[] = [
     label: "Penché au repos",
     help: "Quand tu te tais.",
     steps: toSteps(0, 15, 1, (value) => `${value}°`),
+    fallback: 0,
+  },
+  {
+    key: "talkAngle",
+    label: "Penché en parlant",
+    help: "Quand tu parles.",
+    steps: toSteps(0, 8, 1, (value) => `${value}°`),
     fallback: 0,
   },
 ];

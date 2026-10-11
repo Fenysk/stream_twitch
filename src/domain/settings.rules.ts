@@ -49,15 +49,25 @@ export function toNextLocal(local: LocalSettings, changes: SettingsChanges): Set
   return parsed.success ? { ok: true, value: parsed.data } : { ok: false, issues: toIssues(parsed.error) };
 }
 
-const toEditable = ({ threshold, tilt, opening, voiceEffect, idleAngle }: Settings): EditableSettings => ({
+const toEditable = ({
+  threshold,
+  tilt,
+  opening,
+  voiceEffect,
+  idleAngle,
+  talkAngle,
+  expression,
+}: Settings): EditableSettings => ({
   threshold,
   ...(tilt === undefined ? {} : { tilt }),
   ...(opening === undefined ? {} : { opening }),
   ...(voiceEffect === undefined ? {} : { voiceEffect }),
   ...(idleAngle === undefined ? {} : { idleAngle }),
+  ...(talkAngle === undefined ? {} : { talkAngle }),
+  ...(expression === undefined ? {} : { expression }),
 });
 
-// Ce que l'interface voit : ses cinq réglages seulement.
+// Ce que l'interface voit : ses réglages seulement.
 export function toSettingsView(state: {
   defaults: Settings;
   local: LocalSettings;

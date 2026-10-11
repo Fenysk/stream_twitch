@@ -28,6 +28,21 @@ export function toIdleRules(settings: Settings): IdleRules | undefined {
   return { min: idleMin, max: idleMax, angle: idleAngle, lift: idleLift };
 }
 
+// Quand elle parle, la tête entière change aussi de pose : les quatre poses du repos, un autre intervalle (talkMin à
+// talkMax) et un autre angle (talkAngle) ; la levée est celle du repos. Sans talkAngle, ou à 0°, elle reste neutre.
+export function toTalkRules(settings: Settings): IdleRules | undefined {
+  const { talkMin, talkMax, talkAngle, idleLift } = settings;
+  if (talkMin === undefined || talkMax === undefined || !talkAngle || idleLift === undefined)
+    return undefined;
+  return { min: talkMin, max: talkMax, angle: talkAngle, lift: idleLift };
+}
+
+// La voix pousse la tête comme elle ouvre la bouche : l'angle et la levée de la pose sont multipliés par le facteur de voix.
+export const toVoicedPose = ({ angle, lift }: IdlePose, scale: number): IdlePose => ({
+  angle: angle * scale,
+  lift: lift * scale,
+});
+
 // Neutre, penchée de chaque côté, levée : la rotation se fait autour du bas-centre de l'image, comme un cou.
 export function toIdlePoses({ angle, lift }: IdleRules): IdlePose[] {
   return [IDLE_NEUTRAL, { angle: -angle, lift: 0 }, { angle, lift: 0 }, { angle: 0, lift }];

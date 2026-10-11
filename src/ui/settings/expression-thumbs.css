@@ -1,0 +1,69 @@
+/* Les vignettes des expressions : une rangée, chacune avec son nom */
+
+.expression-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.expression-thumbs li {
+  display: grid;
+}
+
+.expression-thumb {
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--space-1);
+  justify-items: center;
+  align-content: start;
+  width: 112px;
+  margin: 0;
+  padding: var(--space-2);
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--chip);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.expression-thumb:hover {
+  background: var(--chip-hover);
+}
+
+.expression-thumb.is-selected {
+  border-color: var(--accent);
+}
+
+.expression-thumb:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Les deux moitiés se superposent dans la même boîte : la tête, bouche fermée */
+.expression-thumb-image {
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+
+.expression-thumb-image img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.expression-thumb-name {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}

@@ -1,0 +1,41 @@
+/* L'aperçu de la tête : un cadre sur damier à gauche des réglages, qui reste en vue pendant qu'on les change ; au-dessus
+   d'eux sur écran étroit */
+
+.head-tab-body {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.head-controls {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.head-preview {
+  position: sticky;
+  top: 24px;
+}
+
+.head-preview-stage {
+  box-sizing: border-box;
+  min-height: 160px;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+@media (max-width: 640px) {
+  .head-tab-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .head-preview {
+    position: static;
+  }
+
+  .head-preview-stage {
+    width: min(100%, 240px);
+  }
+}

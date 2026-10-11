@@ -28,10 +28,28 @@ export function toPoseTransform(pose: Pose, cut: Cut, factors: PoseFactors): Pos
   };
 }
 
+// Bouche fermée, la moitié haute descend de `closing` px, perpendiculairement à la coupe (à l'inverse de la levée), pour toucher la mâchoire.
+export function toClosedTransform(cut: Cut, closing: number): PoseTransform {
+  const dx = cut.right.x - cut.left.x;
+  const dy = cut.right.y - cut.left.y;
+  const length = Math.hypot(dx, dy) || 1;
+  return {
+    origin: { x: (cut.left.x + cut.right.x) / 2, y: (cut.left.y + cut.right.y) / 2 },
+    shift: { x: 0 - (dy / length) * closing, y: (dx / length) * closing },
+    angle: 0,
+  };
+}
+
+// Les marges de la scène autour de l'image, les mêmes pour toutes les expressions : 17 % de la largeur de chaque côté, 31 % de
+// la hauteur en haut, 6 % en bas. Les plus petites qui gardent, dans une source OBS de 800 × 700, la tête entière dans la
+// scène au pire cas de chaque curseur (pivot ×2, ouverture ×3, voix ×2, bouche ouverte, penché en parlant 8°, penché au repos 15°).
+const STAGE_MARGIN = { side: 0.17, top: 0.31, bottom: 0.06 };
+
 export function toStageLayout(size: { width: number; height: number }): StageLayout {
-  const top = Math.round(size.height * 0.2);
-  const left = Math.round(size.width * 0.08);
-  return { width: size.width + 2 * left, height: size.height + top, left, top };
+  const left = Math.round(size.width * STAGE_MARGIN.side);
+  const top = Math.round(size.height * STAGE_MARGIN.top);
+  const bottom = Math.round(size.height * STAGE_MARGIN.bottom);
+  return { width: size.width + 2 * left, height: size.height + top + bottom, left, top };
 }
 
 export function toHeadView(head: Head, factors: PoseFactors, mouth: Mouth, idle: IdlePose): HeadView {
@@ -42,6 +60,8 @@ export function toHeadView(head: Head, factors: PoseFactors, mouth: Mouth, idle:
     tilt: factors.tilt,
     opening: factors.opening,
     scale: factors.scale,
+    closing: head.closing,
+    expression: head.expression,
     idle,
     mouth,
   };
