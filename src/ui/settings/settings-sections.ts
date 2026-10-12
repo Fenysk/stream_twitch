@@ -15,7 +15,7 @@ import {
 export const SECTIONS = [
   { id: "head", label: "Tête South Park", icon: Smile, path: "/settings/head" },
   { id: "cut", label: "Découpe", icon: Scissors, path: "/settings/cut" },
-  { id: "chat", label: "Tchat", icon: MessageSquare, isSoon: true },
+  { id: "chat", label: "Tchat", icon: MessageSquare, path: "/settings/chat" },
   { id: "fox", label: "Renard", icon: PawPrint, isSoon: true },
   { id: "events", label: "Évènements", icon: CalendarDays, isSoon: true },
   { id: "rewards", label: "Points de chaîne", icon: Coins, isSoon: true },

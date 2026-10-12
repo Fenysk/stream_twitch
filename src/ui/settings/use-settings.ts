@@ -3,7 +3,12 @@
 // brouillons restent, le refus s'écrit sous le champ, et le changement suivant renvoie le tout.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SettingsRefusalSchema, type SettingsView, SettingsViewSchema } from "../../domain/settings.schema";
+import {
+  type SettingsChanges,
+  SettingsRefusalSchema,
+  type SettingsView,
+  SettingsViewSchema,
+} from "../../domain/settings.schema";
 import type { SliderKey } from "./head-fields";
 import {
   type Changes,
@@ -32,10 +37,7 @@ const toAnswer = async (response: Response): Promise<Answer> => {
 };
 
 // Une requête de l'interface : jamais une exception, une réponse ou une erreur à montrer.
-const ask = async (
-  method: "GET" | "PUT" | "DELETE",
-  changes?: Record<string, number | string | null>,
-): Promise<Answer> => {
+const ask = async (method: "GET" | "PUT", changes?: SettingsChanges): Promise<Answer> => {
   try {
     const response = await fetch("/api/settings", {
       method,
@@ -57,7 +59,10 @@ export type UseSettings = {
   edit: (key: SliderKey, value: number | null) => void;
   // L'expression active : son identifiant, ou `null` pour la photo. S'applique aussitôt, sans attendre de frappe.
   choose: (expression: string | null) => Promise<void>;
-  reset: () => Promise<void>;
+  // Un choix qui s'applique aussitôt, hors curseur : un style, une animation, une case cochée. `null` revient à la valeur par défaut.
+  change: (changes: SettingsChanges) => Promise<void>;
+  // Revient aux valeurs par défaut de ces réglages seulement : ceux d'un autre onglet gardent les leurs.
+  reset: (keys: readonly string[]) => Promise<void>;
 };
 
 export const useSettings = (): UseSettings => {
@@ -118,20 +123,25 @@ export const useSettings = (): UseSettings => {
     [flush],
   );
 
-  const choose = useCallback(
-    async (expression: string | null) => {
-      take(await ask("PUT", { expression }));
+  const change = useCallback(
+    async (changes: SettingsChanges) => {
+      take(await ask("PUT", changes));
     },
     [take],
   );
 
-  const reset = useCallback(async () => {
-    clearTimeout(timer.current);
-    timer.current = undefined;
-    const answer = await ask("DELETE");
-    take(answer);
-    if ("view" in answer) setDrafts({});
-  }, [take]);
+  const choose = useCallback((expression: string | null) => change({ expression }), [change]);
 
-  return { view, drafts, errors, edit, choose, reset };
+  const reset = useCallback(
+    async (keys: readonly string[]) => {
+      clearTimeout(timer.current);
+      timer.current = undefined;
+      const answer = await ask("PUT", Object.fromEntries(keys.map((key) => [key, null])));
+      take(answer);
+      if ("view" in answer) setDrafts({});
+    },
+    [take],
+  );
+
+  return { view, drafts, errors, edit, choose, change, reset };
 };

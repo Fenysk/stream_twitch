@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ChatAnimationSchema, ChatStyleSchema } from "./chat.schema";
 
 type ScaleFields = {
   threshold: number;
@@ -87,6 +88,30 @@ export const SettingsFieldsSchema = z
     talkMin: positive().optional(),
     talkMax: positive().optional(),
     talkAngle: nonNegative().optional(),
+    // Le tchat : la chaîne lue et les bots masqués restent dans settings.json ; les sept autres sont ceux de l'onglet « Tchat ».
+    chatChannel: z
+      .string("doit être un texte")
+      .regex(/^[a-z0-9_]{1,25}$/, "doit être le nom d'une chaîne Twitch : minuscules, chiffres et _")
+      .optional(),
+    chatBots: z
+      .array(z.string("doit être un texte").min(1, "ne peut pas être vide"), "doit être une liste de noms")
+      .optional(),
+    chatStyle: ChatStyleSchema.optional(),
+    chatOpacity: z
+      .number(NOT_A_NUMBER)
+      .min(0, "doit être d'au moins 0 (0 %)")
+      .max(100, "doit être d'au plus 100 (100 %)")
+      .optional(),
+    chatTextSize: z
+      .number(NOT_A_NUMBER)
+      .min(8, "doit être d'au moins 8 px")
+      .max(120, "doit être d'au plus 120 px")
+      .optional(),
+    // En secondes ; 0 : les messages restent à l'écran.
+    chatDuration: nonNegative().optional(),
+    chatMaxMessages: positiveWhole().max(50, "doit être d'au plus 50").optional(),
+    chatAnimation: ChatAnimationSchema.optional(),
+    chatShouldShowHidden: z.boolean("doit être true ou false").optional(),
   })
   .strict();
 
@@ -116,8 +141,9 @@ export const SettingsSchema = SettingsFieldsSchema.refine(hasAllOrNoneOfScale, {
 
 export type Settings = z.infer<typeof SettingsSchema>;
 
-// Les réglages que l'interface change : six curseurs et l'expression active. Tous les autres (le micro, le délai, le rythme, les niveaux, les extrêmes
-// de l'effet de la voix, l'intervalle et la levée du repos, l'adresse d'OBS) restent dans `settings.json` seulement.
+// Les réglages que l'interface change : six curseurs de la tête, l'expression active et les sept réglages du tchat. Tous les
+// autres (le micro, le délai, le rythme, les niveaux, les extrêmes de l'effet de la voix, l'intervalle et la levée du repos,
+// l'adresse d'OBS, la chaîne et les bots du tchat) restent dans `settings.json` seulement.
 export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   threshold: true,
   tilt: true,
@@ -126,6 +152,13 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   idleAngle: true,
   talkAngle: true,
   expression: true,
+  chatStyle: true,
+  chatOpacity: true,
+  chatTextSize: true,
+  chatDuration: true,
+  chatMaxMessages: true,
+  chatAnimation: true,
+  chatShouldShowHidden: true,
 });
 export type EditableSettings = z.infer<typeof EditableSettingsSchema>;
 
@@ -135,7 +168,7 @@ export type LocalSettings = z.infer<typeof LocalSettingsSchema>;
 
 // Ce que l'interface demande : une valeur par réglage, `null` pour revenir à la valeur par défaut de ce réglage.
 export const SettingsChangesSchema = z.object({
-  changes: z.record(z.string(), z.union([z.number(), z.string(), z.null()])),
+  changes: z.record(z.string(), z.union([z.number(), z.string(), z.boolean(), z.null()])),
 });
 export type SettingsChanges = z.infer<typeof SettingsChangesSchema>["changes"];
 

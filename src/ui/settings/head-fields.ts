@@ -3,7 +3,10 @@
 import type { EditableSettings } from "../../domain/settings.schema";
 import type { SliderStep } from "../design/slider";
 
-export type SliderKey = Exclude<keyof EditableSettings, "expression">;
+// Les réglages qu'un curseur change : ceux dont la valeur est un nombre (ceux de la tête, et quatre de l'onglet « Tchat »).
+export type SliderKey = {
+  [Key in keyof EditableSettings]-?: EditableSettings[Key] extends number | undefined ? Key : never;
+}[keyof EditableSettings];
 
 export type SliderSpec = {
   key: SliderKey;
@@ -15,7 +18,12 @@ export type SliderSpec = {
 };
 
 // De `from` à `to` par pas de `step`, à l'entier près : 0.1 × 3 ne donne pas 0.30000000000000004.
-const toSteps = (from: number, to: number, step: number, format: (value: number) => string): SliderStep[] => {
+export const toSteps = (
+  from: number,
+  to: number,
+  step: number,
+  format: (value: number) => string,
+): SliderStep[] => {
   const decimals = (String(step).split(".")[1] ?? "").length;
   const count = Math.round((to - from) / step);
   return Array.from({ length: count + 1 }, (_, index) => {

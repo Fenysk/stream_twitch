@@ -5,6 +5,8 @@
 @import "./cut-tab.css";
 @import "./expression-thumbs.css";
 @import "./head-preview.css";
+@import "../chat/chat.css";
+@import "./chat-settings-tab.css";
 
 /* Le texte sur le fond des pills : le `body` reste sur --void, la page le couvre. */
 .settings-page {

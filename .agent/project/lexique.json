@@ -18,7 +18,15 @@
     { "canonical": "idle",      "meaning": "L'état de la tête quand elle ne parle pas : sa pose de repos change par à-coups, à intervalle aléatoire.", "banned": ["repos", "rest", "resting", "calm", "still"] },
     { "canonical": "scale",     "meaning": "Le facteur, entre quietScale (au quietLevel) et loudScale (au loudLevel), qui multiplie l'angle et la levée d'une pose selon le level.", "banned": ["echelle", "multiplier", "coefficient"] },
     { "canonical": "tilt",      "meaning": "Le facteur qui multiplie l'angle des poses ; vaut opening quand les réglages ne le donnent pas.", "banned": ["inclinaison", "inclination", "slant"] },
-    { "canonical": "settings",  "meaning": "Les réglages du serveur, lus dans settings.json au démarrage.", "banned": ["reglages", "config", "configuration", "options", "preferences"] }
+    { "canonical": "settings",  "meaning": "Les réglages du serveur, lus dans settings.json au démarrage.", "banned": ["reglages", "config", "configuration", "options", "preferences"] },
+    { "canonical": "chat",      "meaning": "Le tchat Twitch de la chaîne d'Alexis, lu sans jeton et affiché dans OBS.", "banned": ["tchat"] },
+    { "canonical": "message",   "meaning": "Ce qu'un viewer écrit dans le chat : un texte, des emotes, un nickname.", "banned": ["msg"] },
+    { "canonical": "viewer",    "meaning": "Une personne qui écrit dans le chat.", "banned": ["spectator", "chatter", "spectateur"] },
+    { "canonical": "nickname",  "meaning": "Le nom qu'un viewer affiche devant ses messages, dans la couleur qu'il a choisie sur Twitch.", "banned": ["pseudo", "username"] },
+    { "canonical": "emote",     "meaning": "Une image Twitch placée dans le texte d'un message.", "banned": ["emoticon", "smiley"] },
+    { "canonical": "fragment",  "meaning": "Un morceau d'un message : un texte, ou une emote.", "banned": ["segment", "piece", "morceau"] },
+    { "canonical": "command",   "meaning": "Un message qui commence par « ! » (!discord, !lurk) : une demande à un bot, pas une phrase. Masqué par défaut.", "banned": ["cmd"] },
+    { "canonical": "bot",       "meaning": "Un viewer automatique connu (Nightbot, StreamElements), listé dans settings.json. Ses messages sont masqués par défaut.", "banned": ["robot"] }
   ],
 
   "verbs": [

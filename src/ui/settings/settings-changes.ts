@@ -1,7 +1,12 @@
 // Ce que l'onglet envoie au serveur, et ce qu'il montre de ses refus : des fonctions pures, sans écran ni réseau.
 
 import type { EditableSettings, LocalSettings, SettingsIssue } from "../../domain/settings.schema";
-import { SLIDER_KEYS, SLIDERS, type SliderKey } from "./head-fields";
+import { CHAT_SLIDERS } from "./chat-fields";
+import { SLIDERS, type SliderKey } from "./head-fields";
+
+// Les curseurs de tous les onglets : ceux de la tête, puis ceux du tchat.
+const ALL_SLIDERS = [...SLIDERS, ...CHAT_SLIDERS];
+const SLIDER_KEYS: readonly SliderKey[] = ALL_SLIDERS.map(({ key }) => key);
 
 // Les valeurs choisies, pas encore (ou pas) appliquées. `null` : le réglage local est retiré.
 export type Drafts = Partial<Record<SliderKey, number | null>>;
@@ -37,7 +42,7 @@ export const toRemainingDrafts = (
 };
 
 // Le serveur parle de `threshold` ; l'interface montre « Seuil du micro » : un refus se lit avec les libellés des curseurs.
-const LABELS = new Map<string, string>(SLIDERS.map(({ key, label }): [string, string] => [key, label]));
+const LABELS = new Map<string, string>(ALL_SLIDERS.map(({ key, label }): [string, string] => [key, label]));
 
 const toReadable = (message: string): string =>
   message.replace(/\b[A-Za-z]+\b/g, (word) => {

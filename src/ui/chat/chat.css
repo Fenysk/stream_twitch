@@ -1,0 +1,202 @@
+/* La colonne du tchat : posée en bas de sa source, messages récents en bas. Le même composant sert la page OBS (/chat) et
+   l'aperçu des réglages ; tout vient des tokens et de la pill du design system, rien d'autre ne fixe une couleur ou une durée. */
+
+:root {
+  /* La taille conseillée de la source navigateur d'OBS (README) : l'aperçu des réglages la reprend. */
+  --chat-source-width: 480px;
+  --chat-source-height: 640px;
+}
+
+.chat-column {
+  /* Réglés par le composant : --pill-opacity (l'opacité du fond) et --chat-size (la taille du texte). */
+  --chat-line: calc(var(--chat-size) * 1.4);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: var(--space-3);
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+.chat-column[data-layout="screen"] {
+  position: fixed;
+  inset: 0;
+}
+
+.chat-column[data-layout="box"] {
+  width: var(--chat-source-width);
+  height: var(--chat-source-height);
+}
+
+/* Le panneau : sans fond hors du style « panneau ». Il suit la hauteur des messages, depuis le bas. */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 0;
+}
+
+.chat-column[data-style="panel"] .chat-panel {
+  max-width: none;
+  width: 100%;
+  padding: var(--space-3);
+}
+
+/* Le panneau paraît avec le premier message et s'efface avec le dernier. */
+.chat-column[data-style="panel"][data-empty] .chat-panel {
+  opacity: 0;
+}
+
+/* Dans OBS la page ne voit pas derrière elle : un flou ne flouterait rien, le fond s'ajuste par son opacité.
+   Elle règle aussi le contour : à 0 %, rien ne reste autour du texte. Pas d'ombre portée, le contour tient dans la marge du message. */
+.chat-column .lp-pill {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pill-border) var(--pill-opacity), transparent);
+}
+
+.chat-rows {
+  list-style: none;
+  margin: 0 calc(0px - var(--space-2));
+  padding: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* Une rangée prend sa place en grandissant, ce qui fait remonter les anciennes en douceur ; elle la rend en se refermant. */
+.chat-row {
+  display: grid;
+  grid-template-rows: 1fr;
+  max-width: 100%;
+  animation: chat-row-in var(--lp-dur) var(--lp-ease) both;
+}
+
+.chat-row[data-leaving] {
+  pointer-events: none;
+  animation: chat-row-out var(--lp-dur-reveal) var(--lp-ease) both;
+}
+
+@keyframes chat-row-in {
+  from {
+    grid-template-rows: 0fr;
+  }
+}
+
+/* Il s'efface d'abord, puis la place qu'il laisse se referme : les anciens redescendent sans à-coup. */
+@keyframes chat-row-out {
+  60% {
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+
+/* Les côtés laissent la place du contour et de l'ombre du texte. L'espace entre deux messages est la marge du message : il grandit et se referme avec la rangée. */
+.chat-row-clip {
+  min-height: 0;
+  overflow: hidden;
+  padding-inline: var(--space-2);
+}
+
+/* `.chat-column` devant : la pill (`lp-pill`) fixe aussi une largeur maximale, la colonne reprend la main. */
+.chat-column .chat-line {
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 100%;
+  margin: var(--space-1) 0;
+  font-size: var(--chat-size);
+  line-height: var(--chat-line);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.chat-column[data-style="pill"] .chat-line {
+  padding: var(--space-2) var(--space-4);
+}
+
+/* Le texte seul n'a pas de fond : une ombre sombre le détache de n'importe quelle scène. */
+.chat-column[data-style="text"] .chat-line {
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.9),
+    0 0 6px rgb(0 0 0 / 0.7);
+}
+
+.chat-nickname {
+  margin-right: 0.35em;
+  font-weight: 800;
+  /* Un viewer sans couleur sur Twitch prend la couleur discrète du design system. */
+  color: var(--muted);
+}
+
+.chat-nickname::after {
+  content: ":";
+  color: var(--ink);
+}
+
+/* Une emote a la hauteur d'une ligne de texte : elle suit la taille du texte. */
+.chat-emote {
+  height: var(--chat-line);
+  width: auto;
+  margin-block: calc((var(--chat-size) - var(--chat-line)) / 2);
+  vertical-align: middle;
+}
+
+/* L'apparition du message : une des quatre, selon le réglage (le fondu discret est `lp-arrives`, arrival.css). */
+.chat-in-rise {
+  animation: chat-rise var(--lp-dur-reveal) var(--lp-ease) both;
+}
+
+.chat-in-pop {
+  animation: chat-pop var(--lp-dur-reveal) var(--lp-ease) both;
+}
+
+.chat-in-side {
+  animation: chat-side var(--lp-dur) var(--lp-ease) both;
+}
+
+/* Il monte depuis le bas de sa place, dépasse un peu, puis se pose. */
+@keyframes chat-rise {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-8%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* Le dépassement est faible (4 %) : il tient dans les côtés de la rangée, qui coupent tout ce qui les dépasse. */
+@keyframes chat-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes chat-side {
+  from {
+    opacity: 0;
+    transform: translateX(-32px);
+  }
+  to {
+    transform: none;
+  }
+}

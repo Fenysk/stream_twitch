@@ -1,6 +1,7 @@
-import type { z } from "zod";
+import { z } from "zod";
 import {
   type EditableSettings,
+  EditableSettingsSchema,
   type LocalSettings,
   LocalSettingsSchema,
   type Settings,
@@ -49,23 +50,10 @@ export function toNextLocal(local: LocalSettings, changes: SettingsChanges): Set
   return parsed.success ? { ok: true, value: parsed.data } : { ok: false, issues: toIssues(parsed.error) };
 }
 
-const toEditable = ({
-  threshold,
-  tilt,
-  opening,
-  voiceEffect,
-  idleAngle,
-  talkAngle,
-  expression,
-}: Settings): EditableSettings => ({
-  threshold,
-  ...(tilt === undefined ? {} : { tilt }),
-  ...(opening === undefined ? {} : { opening }),
-  ...(voiceEffect === undefined ? {} : { voiceEffect }),
-  ...(idleAngle === undefined ? {} : { idleAngle }),
-  ...(talkAngle === undefined ? {} : { talkAngle }),
-  ...(expression === undefined ? {} : { expression }),
-});
+// Non strict, contrairement à EditableSettingsSchema : `parse` laisse de côté les réglages que l'interface ne change pas.
+const EditableFieldsSchema = z.object(EditableSettingsSchema.shape);
+
+const toEditable = (settings: Settings): EditableSettings => EditableFieldsSchema.parse(settings);
 
 // Ce que l'interface voit : ses réglages seulement.
 export function toSettingsView(state: {

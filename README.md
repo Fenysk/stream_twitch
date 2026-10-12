@@ -16,6 +16,15 @@ pnpm gate
 - Six curseurs dans l'interface : seuil du micro (`threshold`), pivot (`tilt`), ouverture (`opening`), effet de la voix (`voiceEffect`), penché au repos (`idleAngle`), penché en parlant (`talkAngle`). Tout le reste (micro, délais, niveaux, extrêmes de l'effet…) se règle dans `settings.json`, relu au démarrage.
 - Expressions : l'onglet « Découpe » coupe une image en deux moitiés et l'enregistre dans `data/heads/` (hors de git) ; une vignette de l'onglet « Tête South Park » la montre aussitôt dans OBS.
 
+## Le tchat dans OBS
+
+- Le même serveur lit le tchat de la chaîne `fenysk` (`chatChannel` dans `settings.json`) avec ComfyJS, **sans jeton** : il rejoint la chaîne comme un visiteur. Il marche sans OBS ; le journal (`server.log`) écrit « Tchat : #fenysk rejoint ».
+- Source navigateur OBS : URL `http://localhost:4747/chat`, taille conseillée 480 × 640. Elle est séparée de la tête : à placer où l'on veut. La page a un fond transparent, les messages récents sont en bas.
+- Réglages en direct : l'onglet « Tchat » (aperçu où défilent des messages de test, un toutes les 2,5 s, seulement dans l'onglet : jamais dans OBS). Sept réglages : style (`chatStyle` : `pill`, `text`, `panel`), opacité du fond en % (`chatOpacity`), taille du texte en px (`chatTextSize`), durée d'affichage en secondes, 0 pour « Toujours » (`chatDuration`), nombre de messages (`chatMaxMessages`), animation (`chatAnimation` : `rise`, `pop`, `side`, `fade`), commandes et bots (`chatShouldShowHidden`). Ils restent dans `settings.local.json`, `settings.json` garde les valeurs par défaut.
+- Masqués par défaut : les commandes (`!lurk`…) et les bots de `chatBots` dans `settings.json` ; la case de l'onglet les affiche. Un message supprimé par un modo, et tous ceux d'un viewer banni ou mis en timeout, disparaissent de l'écran.
+- Ne sont pas affichés : les badges, les évènements (subs, follows, raids).
+- Limite de ComfyJS 1.1.29 : un message réduit à une seule mention (`@pseudo` seul) lève une erreur dans ComfyJS et n'arrive pas ; le journal écrit « ComfyJS signale une erreur ». Une commande affichée perd sa casse (`!Lurk` devient `!lurk`).
+
 ## Les branches et les worktrees
 
 - `main` ne reçoit qu'un squash validé ou un `git revert`.

@@ -11,6 +11,18 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-12 — `comfy.js` en dépendance : le tchat de `fenysk` se lit sans jeton, derrière le port `ChatSource`
+
+**Contexte.** Le jalon 3 affiche le tchat dans OBS. Essai réel de la v1.1.29 : `Init` sans mot de passe rejoint #fenysk en lecture anonyme (tmi.js, IRC) ; messages, commandes, suppressions, bans et timeouts arrivent par `onChat`, `onCommand`, `onMessageDeleted`, `onBan`, `onTimeout`. EventSub ne démarre qu'avec un jeton : `useEventSub` reste à `true`.
+**Décision.** Dépendance `comfy.js`. Le port `ChatSource` est déclaré dans `src/usecase/chat.usecase.ts`, `src/infra/chat.client.ts` l'implémente (seul fichier qui connaît ComfyJS), `src/app/server/runtime.ts` câble. `architecture.json` ne change pas.
+**Renoncement.** `tmi.js` seul : plus léger, mais le même paquet doit servir aux évènements (subs, raids) des jalons suivants.
+
+## 2026-10-12 — Les noms du tchat entrent au lexique
+
+**Contexte.** Le jalon 3 introduit les concepts du tchat ; `src/` n'a aucun de ces noms. `timeout` est déjà banni (synonyme de `delay`), alors que Twitch l'emploie pour un viewer écarté un moment.
+**Décision.** `lexique.json` : nouveaux noms `chat`, `message`, `viewer`, `nickname`, `emote`, `fragment`, `command`, `bot`, avec leurs synonymes bannis (tchat, msg, pseudo, username, spectator, chatter, emoticon, smiley, segment, piece, cmd, robot…). Un ban et un timeout s'écrivent pareil dans le code : `viewer-messages-deleted`, les messages du viewer sortent de l'écran.
+**Renoncement.** Bannir `user` ou `chunk` : `userId` est le mot de Twitch, et `CHUNK` existe déjà dans `base64.ts`.
+
 ## 2026-10-11 — Marge du haut de la scène : 9 % de la hauteur au lieu de 31 %
 
 **Contexte.** Les poses de la bouche, normalisées sur la hauteur du haut, lèvent la moitié haute ~3 fois moins sur les avatars : la marge du haut calée sur leur pire cas était trop grande.

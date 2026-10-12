@@ -3,43 +3,20 @@
 // settings.local.json : rien à enregistrer.
 
 import { PHOTO_ID } from "../../domain/expression.schema";
-import type { EditableSettings } from "../../domain/settings.schema";
 import { Button } from "../design/button";
 import { DESIGN_TEXTS } from "../design/design-texts";
-import { Slider } from "../design/slider";
 import { ExpressionThumbs } from "./expression-thumbs";
-import { SLIDERS, type SliderSpec, toNearestStep } from "./head-fields";
+import { SLIDER_KEYS, SLIDERS } from "./head-fields";
 import { HeadPreview } from "./head-preview";
 import { MicMeter } from "./mic-meter";
+import { SettingSlider } from "./setting-slider";
 import { toChanges } from "./settings-changes";
 import { useExpressions } from "./use-expressions";
 import { useMicLevel } from "./use-mic-level";
-import { type UseSettings, useSettings } from "./use-settings";
+import { useSettings } from "./use-settings";
 
-type SettingSliderProps = { spec: SliderSpec; settings: UseSettings; effective: EditableSettings };
-
-const SettingSlider = ({ spec, settings, effective }: SettingSliderProps) => {
-  const { key } = spec;
-  const chosen = key in settings.drafts ? settings.drafts[key] : effective[key];
-  const error = settings.errors.byKey[key];
-  return (
-    <div className="settings-slider">
-      <Slider
-        label={spec.label}
-        steps={spec.steps}
-        value={toNearestStep(spec, chosen)}
-        onMove={(value) => settings.edit(key, value)}
-        onPick={(value) => settings.edit(key, value)}
-      />
-      <p className="lp-type-caption lp-muted">{spec.help}</p>
-      {error && (
-        <p role="alert" className="lp-type-caption lp-danger">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-};
+// Les réglages de cet onglet : revenir aux valeurs par défaut ne touche pas à ceux du tchat.
+const HEAD_KEYS = [...SLIDER_KEYS, "expression"];
 
 export const HeadSettingsTab = () => {
   const settings = useSettings();
@@ -49,7 +26,7 @@ export const HeadSettingsTab = () => {
   if (!view) return <p className="lp-type-body lp-muted">{DESIGN_TEXTS.loading}</p>;
   const { effective } = view;
   const isDefault =
-    Object.keys(view.local).length === 0 &&
+    HEAD_KEYS.every((key) => !(key in view.local)) &&
     Object.keys(toChanges(settings.drafts, view.local, effective)).length === 0;
   return (
     <div className="settings-tab">
@@ -79,7 +56,7 @@ export const HeadSettingsTab = () => {
             <Button
               label="Revenir aux valeurs par défaut"
               isDisabled={isDefault}
-              onPress={() => void settings.reset()}
+              onPress={() => void settings.reset(HEAD_KEYS)}
             />
           </div>
         </div>

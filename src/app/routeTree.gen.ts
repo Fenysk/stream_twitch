@@ -10,15 +10,22 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ChatRouteImport } from './routes/chat'
 import { Route as HeadRouteImport } from './routes/head'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
+import { Route as SettingsChatRouteImport } from './routes/settings.chat'
 import { Route as SettingsCutRouteImport } from './routes/settings.cut'
 import { Route as SettingsHeadRouteImport } from './routes/settings.head'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatRoute = ChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HeadRoute = HeadRouteImport.update({
@@ -36,6 +43,11 @@ const SettingsIndexRoute = SettingsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsChatRoute = SettingsChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsCutRoute = SettingsCutRouteImport.update({
   id: '/cut',
   path: '/cut',
@@ -49,15 +61,19 @@ const SettingsHeadRoute = SettingsHeadRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/chat': typeof ChatRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/chat': typeof ChatRoute
   '/head': typeof HeadRoute
+  '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings': typeof SettingsIndexRoute
@@ -65,8 +81,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/chat': typeof ChatRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/': typeof SettingsIndexRoute
@@ -75,18 +93,29 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/chat'
     | '/head'
     | '/settings'
+    | '/settings/chat'
     | '/settings/cut'
     | '/settings/head'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/head' | '/settings/cut' | '/settings/head' | '/settings'
+  to:
+    | '/'
+    | '/chat'
+    | '/head'
+    | '/settings/chat'
+    | '/settings/cut'
+    | '/settings/head'
+    | '/settings'
   id:
     | '__root__'
     | '/'
+    | '/chat'
     | '/head'
     | '/settings'
+    | '/settings/chat'
     | '/settings/cut'
     | '/settings/head'
     | '/settings/'
@@ -94,6 +123,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ChatRoute: typeof ChatRoute
   HeadRoute: typeof HeadRoute
   SettingsRoute: typeof SettingsRouteWithChildren
 }
@@ -105,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chat': {
+      id: '/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof ChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/head': {
@@ -128,6 +165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/chat': {
+      id: '/settings/chat'
+      path: '/chat'
+      fullPath: '/settings/chat'
+      preLoaderRoute: typeof SettingsChatRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/cut': {
       id: '/settings/cut'
       path: '/cut'
@@ -146,12 +190,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface SettingsRouteChildren {
+  SettingsChatRoute: typeof SettingsChatRoute
   SettingsCutRoute: typeof SettingsCutRoute
   SettingsHeadRoute: typeof SettingsHeadRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsChatRoute: SettingsChatRoute,
   SettingsCutRoute: SettingsCutRoute,
   SettingsHeadRoute: SettingsHeadRoute,
   SettingsIndexRoute: SettingsIndexRoute,
@@ -163,6 +209,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ChatRoute: ChatRoute,
   HeadRoute: HeadRoute,
   SettingsRoute: SettingsRouteWithChildren,
 }

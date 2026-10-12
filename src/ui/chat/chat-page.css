@@ -1,0 +1,16 @@
+/* L'entrée CSS de la page /chat, la source navigateur d'OBS : la police, les tokens, la pill et l'arrivée en fondu du
+   design system, puis la colonne. Jamais design-system.css : son `html, body` a un fond opaque, et la source doit rester
+   transparente. */
+
+@import "@fontsource-variable/nunito";
+@import "../design/tokens.css";
+@import "../design/pill.css";
+@import "../design/arrival.css";
+@import "./chat.css";
+
+html,
+body {
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}

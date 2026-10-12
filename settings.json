@@ -16,5 +16,23 @@
   "idleLift": 0.005,
   "talkMin": 600,
   "talkMax": 1500,
-  "talkAngle": 3
+  "talkAngle": 3,
+  "chatChannel": "fenysk",
+  "chatBots": [
+    "nightbot",
+    "streamelements",
+    "streamlabs",
+    "moobot",
+    "fossabot",
+    "wizebot",
+    "soundalerts",
+    "sery_bot"
+  ],
+  "chatStyle": "pill",
+  "chatOpacity": 85,
+  "chatTextSize": 20,
+  "chatDuration": 60,
+  "chatMaxMessages": 8,
+  "chatAnimation": "rise",
+  "chatShouldShowHidden": false
 }

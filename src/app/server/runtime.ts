@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
+import { toChatChannel } from "../../domain/chat-settings.rules";
 import type { ExpressionRef } from "../../domain/head.types";
 import type { Settings } from "../../domain/settings.schema";
+import { createChatClient } from "../../infra/chat.client";
 import { createExpressionStore } from "../../infra/expression.repository";
 import { getHeadFiles } from "../../infra/head-files.repository";
 import {
@@ -11,6 +13,7 @@ import {
 } from "../../infra/local-settings.repository";
 import { createObsClient, createObsSocket, type ObsClient } from "../../infra/obs.client";
 import { getSettings } from "../../infra/settings.repository";
+import { type Chat, createChat } from "../../usecase/chat.usecase";
 import { createExpressionLibrary, type ExpressionLibrary } from "../../usecase/expression.usecase";
 import { createHeadLoop, type HeadFeed } from "../../usecase/head.usecase";
 import { createSettingsStore, type SettingsStore } from "../../usecase/settings.usecase";
@@ -21,6 +24,7 @@ export type Runtime = {
   expressions: ExpressionLibrary;
   settings: SettingsStore;
   obs: ObsClient;
+  chat: Chat;
 };
 
 // Le plugin Nitro et les routes serveur partagent ce module : c'est le seul état du serveur.
@@ -34,8 +38,9 @@ const exitServer = (reason: string): void => {
 const isSame = (a: ExpressionRef, b: ExpressionRef): boolean => a.id === b.id && a.version === b.version;
 
 // Câblage : la photo et les réglages sont lus ici, une seule fois ; le mic d'OBS alimente la boucle de la tête, et
-// chaque réglage changé depuis l'interface (curseurs, expression active) s'applique à la boucle et au client OBS sans
-// relancer le serveur. Les expressions enregistrées vivent dans data/heads/ ; une expression retouchée s'applique aussitôt.
+// chaque réglage changé depuis l'interface (curseurs, expression active, allure du tchat) s'applique à la boucle, au
+// client OBS et au tchat sans relancer le serveur. Les expressions enregistrées vivent dans data/heads/ ; une expression
+// retouchée s'applique aussitôt. Le tchat se lit sans OBS : il démarre même quand OBS est fermé.
 export function startRuntime(): Runtime {
   const root = process.cwd();
   const port = process.env.PORT ?? "4747";
@@ -79,6 +84,7 @@ export function startRuntime(): Runtime {
       loop.update(effective);
       applyExpression(effective);
       obs.updateMicName(effective.micName);
+      chat.update(effective);
     },
     log,
   });
@@ -105,13 +111,19 @@ export function startRuntime(): Runtime {
     clock: Date.now,
     random: Math.random,
   });
+  const chat = createChat({
+    source: createChatClient({ channel: toChatChannel(initial), log }),
+    settings: initial,
+    clock: Date.now,
+  });
   shown = start.head.expression;
   loop.start();
   if (!start.found) settings.update({ expression: null });
   obs.start();
-  log(`Serveur démarré : http://localhost:${port}/head (réglages : http://localhost:${port}/)`);
+  chat.start();
+  log(`Serveur démarré : http://localhost:${port}/head et /chat (réglages : http://localhost:${port}/)`);
   log(`Réglages : micro « ${initial.micName} », seuil ${initial.threshold} dB, délai ${initial.delay} ms.`);
-  current = { feed: loop.feed, expressions, settings, obs };
+  current = { feed: loop.feed, expressions, settings, obs, chat };
   return current;
 }
 

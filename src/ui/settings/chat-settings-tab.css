@@ -1,0 +1,20 @@
+/* L'aperçu du tchat : la colonne à la taille de la source OBS (chat.css), réduite pour tenir dans la colonne de gauche. */
+
+.chat-preview-stage {
+  --chat-preview-zoom: 0.625;
+  box-sizing: border-box;
+  width: calc(var(--chat-source-width) * var(--chat-preview-zoom));
+  height: calc(var(--chat-source-height) * var(--chat-preview-zoom));
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+
+.chat-preview-scale {
+  zoom: var(--chat-preview-zoom);
+}
+
+@media (max-width: 640px) {
+  .chat-preview-stage {
+    --chat-preview-zoom: 0.5;
+  }
+}
