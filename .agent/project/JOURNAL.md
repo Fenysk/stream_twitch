@@ -11,6 +11,18 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-11 — Marge du haut de la scène : 9 % de la hauteur au lieu de 31 %
+
+**Contexte.** Les poses de la bouche, normalisées sur la hauteur du haut, lèvent la moitié haute ~3 fois moins sur les avatars : la marge du haut calée sur leur pire cas était trop grande.
+**Décision.** `toStageLayout` : 17 % de la largeur de chaque côté (inchangé, calé sur la photo), 9 % de la hauteur en haut, 6 % en bas (inchangé). Les plus petites marges qui gardent les 7 expressions dans la source 800 × 700 au pire cas de chaque curseur. Les avatars regagnent 19 % de taille ; la photo ne change pas.
+**Renoncement.** Garder 31 % en haut : une tête plus petite pour rien.
+
+## 2026-10-11 — Les poses de la bouche partent de la position fermée et se mesurent sur la hauteur du haut
+
+**Contexte.** Sur les avatars la bouche s'ouvrait environ 3 fois trop : la levée et l'écart suivent la longueur de la coupe (0,86 à 0,90 de la hauteur du haut, contre 0,31 pour la photo), et chaque pose ajoutait la bande dessinée.
+**Décision.** `head.rules.ts` : toutes les poses partent de la position fermée (le closing s'ajoute à la pose). La longueur de référence est celle de la photo (coupe de 104,8 px pour un haut de 333,7 px, rapport 0,314) mise à l'échelle de la hauteur du haut ; levée et angle comme si la coupe avait cette longueur. Géométrie : champ optionnel `hauteurHaut`, mesuré par la Découpe (à défaut, du haut de l'image au milieu de la coupe). La photo ne change pas ; les poses de la tête entière non plus.
+**Renoncement.** Un opening réglé à la main pour chaque avatar : chaque nouvelle expression aurait eu son réglage.
+
 ## 2026-10-11 — Les expressions se listent par nom, pas par date de création
 
 **Contexte.** Copier `data/heads/` (vers le dossier principal, ou par `tools/worktree.sh add`) ne garde pas les dates de création : les vignettes changeaient d'ordre.

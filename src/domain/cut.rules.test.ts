@@ -7,6 +7,7 @@ import {
   toExpressionGeometry,
   toMovedCut,
   toNudge,
+  toOpaqueTop,
   toPartPolygons,
 } from "./cut.rules";
 import type { HeadFile } from "./head.schema";
@@ -221,6 +222,7 @@ describe("toExpressionGeometry", () => {
       cut: { left: { x: 61.04, y: 237.5 }, right: { x: 274.96, y: 237.5 } },
       lips: { isDrawn: false, thickness: 10 },
       closing: 11,
+      topEdge: 5.04,
       animation,
     });
     expect(geometry).toEqual({
@@ -230,8 +232,22 @@ describe("toExpressionGeometry", () => {
       coupe: { gauche: { x: 61, y: 237.5 }, droite: { x: 275, y: 237.5 } },
       levres: { trait: false, epaisseur: 10 },
       fermeture: 11,
+      hauteurHaut: 232.5,
       animation,
     });
+  });
+
+  it("mesure la hauteur du haut du haut des pixels opaques au milieu de la coupe, jamais moins d'1 px", () => {
+    const base = {
+      name: "Neutre",
+      size: { width: 332, height: 476 },
+      lips: { isDrawn: false, thickness: 10 },
+      closing: 13,
+      animation,
+    };
+    const tilted = { left: { x: 60, y: 200 }, right: { x: 270, y: 210 } };
+    expect(toExpressionGeometry({ ...base, cut: tilted, topEdge: 5 }).hauteurHaut).toBe(200);
+    expect(toExpressionGeometry({ ...base, cut: tilted, topEdge: 300 }).hauteurHaut).toBe(1);
   });
 
   it("est relue telle quelle pour retoucher l'expression", () => {
@@ -242,6 +258,7 @@ describe("toExpressionGeometry", () => {
       cut,
       lips: { isDrawn: true, thickness: 8 },
       closing: 4,
+      topEdge: 0,
       animation,
     });
     expect(toEditableCut(geometry)).toEqual({
@@ -265,5 +282,22 @@ describe("toExpressionGeometry", () => {
       lips: { isDrawn: false, thickness: 10 },
       closing: 0,
     });
+  });
+});
+
+describe("toOpaqueTop", () => {
+  it("donne la première ligne qui a un pixel opaque : le haut du personnage", () => {
+    expect(toOpaqueTop(withGap())).toBe(2);
+  });
+
+  it("compte les lignes sous le seuil d'opacité pour transparentes", () => {
+    const faint = toImage(10, 10, []);
+    (faint.alpha as Uint8Array)[3 * 10 + 4] = 10;
+    (faint.alpha as Uint8Array)[6 * 10 + 4] = 255;
+    expect(toOpaqueTop(faint)).toBe(6);
+  });
+
+  it("donne 0 pour une image sans aucun pixel opaque", () => {
+    expect(toOpaqueTop(toImage(10, 10, []))).toBe(0);
   });
 });

@@ -18,10 +18,10 @@ const layer: CSSProperties = {
 const toTopStyle = (view: HeadView): CSSProperties | undefined => {
   const { mouth } = view;
   if (mouth.kind === "closed" && view.closing === 0) return undefined;
-  // Bouche fermée, la moitié haute descend de `closing` px pour toucher la mâchoire ; les poses ouvertes partent de la position dessinée.
+  // La moitié haute descend de `closing` px pour toucher la mâchoire, bouche fermée comme ouverte : les poses partent de la position fermée.
   const { origin, shift, angle } =
     mouth.kind === "open"
-      ? toPoseTransform(mouth.pose, view.cut, view)
+      ? toPoseTransform(mouth.pose, view.cut, view, view)
       : toClosedTransform(view.cut, view.closing);
   return {
     transformOrigin: `${percent(origin.x, view.width)} ${percent(origin.y, view.height)}`,

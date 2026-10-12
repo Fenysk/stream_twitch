@@ -10,6 +10,7 @@ const view = (id: string, version = "1", closing = 0): HeadView => ({
   opening: 1,
   scale: 1,
   closing,
+  topHeight: 3,
   expression: { id, version },
   idle: { angle: 0, lift: 0 },
   mouth: { kind: "closed" },

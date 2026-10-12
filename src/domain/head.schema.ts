@@ -18,6 +18,8 @@ export const HeadFileSchema = z.object({
   coupe: z.object({ gauche: FilePointSchema, droite: FilePointSchema }),
   levres: z.object({ trait: z.boolean(), epaisseur: z.number().positive() }).optional(),
   fermeture: z.number().min(0).optional(),
+  // Du haut des pixels opaques au milieu de la coupe, mesuré par la découpe ; sans lui, du haut de l'image au milieu de la coupe.
+  hauteurHaut: z.number().positive().optional(),
   animation: z.object({
     rythmeMs: z.number().positive(),
     amplitude: z.number().positive(),
@@ -46,6 +48,7 @@ export function toHead(file: HeadFile, expression: ExpressionRef): Head {
     opening: file.animation.amplitude,
     closedChance: file.animation.probabiliteFermee,
     closing: file.fermeture ?? 0,
+    topHeight: file.hauteurHaut ?? (file.coupe.gauche.y + file.coupe.droite.y) / 2,
     expression,
   };
 }

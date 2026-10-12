@@ -9,6 +9,7 @@ const view = {
   opening: 1.8,
   scale: 1.5,
   closing: 12,
+  topHeight: 333.7,
   expression: { id: "photo", version: "1" },
   idle: { angle: -2, lift: 0 },
   mouth: { kind: "open", pose: { pivot: "center", angle: 3, lift: 0.11 } },
@@ -49,5 +50,11 @@ describe("HeadViewSchema", () => {
     expect(HeadViewSchema.safeParse({ ...view, tilt: 0, opening: 0 }).success).toBe(true);
     expect(HeadViewSchema.safeParse({ ...view, tilt: -1 }).success).toBe(false);
     expect(HeadViewSchema.safeParse({ ...view, opening: -1 }).success).toBe(false);
+  });
+
+  it("refuse un état sans hauteur du haut, ou à 0 : la page ne peut pas normaliser les poses", () => {
+    const { topHeight: _topHeight, ...without } = view;
+    expect(HeadViewSchema.safeParse(without).success).toBe(false);
+    expect(HeadViewSchema.safeParse({ ...view, topHeight: 0 }).success).toBe(false);
   });
 });

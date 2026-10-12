@@ -85,6 +85,13 @@ describe("toExpressionIssues", () => {
     ]);
   });
 
+  it("refuse une hauteur du haut plus haute que l'image", () => {
+    expect(toExpressionIssues({ ...geometry, hauteurHaut: 477 }, images)).toEqual([
+      { path: "geometry.hauteurHaut", message: "ne peut pas dépasser la hauteur de l'image" },
+    ]);
+    expect(toExpressionIssues({ ...geometry, hauteurHaut: 236 }, images)).toEqual([]);
+  });
+
   it("cumule les refus de plusieurs images", () => {
     const text = new TextEncoder().encode("x");
     const issues = toExpressionIssues(geometry, { source: text, top: text, bottom: png(1, 1) });

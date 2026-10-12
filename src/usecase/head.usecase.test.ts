@@ -12,6 +12,7 @@ const closed: HeadView = {
   opening: 1,
   scale: 1,
   closing: 0,
+  topHeight: 3,
   expression: { id: "photo", version: "1" },
   idle: { angle: 0, lift: 0 },
   mouth: { kind: "closed" },
@@ -60,6 +61,7 @@ describe("createHeadLoop", () => {
     opening: 1.3,
     closedChance: 0.22,
     closing: 0,
+    topHeight: 3,
     expression: { id: "photo", version: "1" },
   };
   const settings: Settings = {
@@ -116,6 +118,7 @@ describe("createHeadLoop", () => {
       opening: 1.3,
       scale: 1,
       closing: 0,
+      topHeight: 3,
       expression: { id: "photo", version: "1" },
       idle: { angle: 0, lift: 0 },
       mouth: { kind: "closed" },

@@ -37,5 +37,8 @@ export function toExpressionIssues(geometry: HeadFile, images: ExpressionImageBy
   if ((geometry.fermeture ?? 0) > geometry.image.hauteur) {
     issues.push({ path: "geometry.fermeture", message: "ne peut pas dépasser la hauteur de l'image" });
   }
+  if ((geometry.hauteurHaut ?? 0) > geometry.image.hauteur) {
+    issues.push({ path: "geometry.hauteurHaut", message: "ne peut pas dépasser la hauteur de l'image" });
+  }
   return issues;
 }

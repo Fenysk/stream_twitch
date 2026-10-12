@@ -67,6 +67,12 @@ const toBands = (extents: (Extent | undefined)[], firstRow: number, lastRow: num
   return bands;
 };
 
+// La première ligne qui a un pixel opaque : le haut du personnage (0 quand l'image n'en a aucun).
+export function toOpaqueTop(image: AlphaImage): number {
+  for (let y = 0; y < image.height; y += 1) if (toRowExtent(image, y)) return y;
+  return 0;
+}
+
 const toBandHeight = ({ start, end }: Band): number => end - start + 1;
 
 // La bande de la bouche : la plus haute de celles qui tiennent entre 30 % et 85 % du personnage, la plus proche du milieu
@@ -222,6 +228,8 @@ export type ExpressionGeometryInput = {
   cut: Cut;
   lips: Lips;
   closing: number;
+  // La première ligne opaque de l'image : la hauteur du haut se mesure d'elle au milieu de la coupe.
+  topEdge: number;
   animation: HeadFile["animation"];
 };
 
@@ -232,6 +240,7 @@ export function toExpressionGeometry({
   cut,
   lips,
   closing,
+  topEdge,
   animation,
 }: ExpressionGeometryInput): HeadFile {
   return {
@@ -241,6 +250,8 @@ export function toExpressionGeometry({
     coupe: { gauche: toFilePoint(cut.left), droite: toFilePoint(cut.right) },
     levres: { trait: lips.isDrawn, epaisseur: lips.thickness },
     fermeture: closing,
+    // Du haut des pixels opaques au milieu de la coupe, jamais moins d'1 px.
+    hauteurHaut: round1(Math.max(1, (cut.left.y + cut.right.y) / 2 - topEdge)),
     animation,
   };
 }

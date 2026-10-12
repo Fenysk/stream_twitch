@@ -21,11 +21,16 @@ export type Head = {
   opening: number;
   closedChance: number;
   closing: number;
+  topHeight: number;
   expression: ExpressionRef;
 };
 
 // Les facteurs de la moitié haute : `tilt` multiplie l'angle, `opening` la levée, `scale` (selon le level) les deux.
 export type PoseFactors = { tilt: number; opening: number; scale: number };
+
+// Ce dont une pose a besoin en plus de la coupe : le closing (toute pose part de la position fermée) et la hauteur du haut
+// (la longueur de référence en dépend). Une `HeadView` les porte.
+export type PoseBasis = { closing: number; topHeight: number };
 
 // Rotation de la moitié haute : autour de `origin`, après un décalage de `shift` (en pixels de l'image).
 export type PoseTransform = { origin: Point; shift: Point; angle: number };

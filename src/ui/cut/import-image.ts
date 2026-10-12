@@ -1,7 +1,7 @@
 // L'import d'une image dans l'onglet « Découpe » : un fichier devient un PNG d'au plus 1600 px et 4 Mo, avec son opacité
 // (pour deviner la coupe). Un fichier qui n'est pas une image est refusé avec une phrase.
 
-import { type AlphaImage, type ImageSize, toDownscaledSize } from "../../domain/cut.rules";
+import { type AlphaImage, type ImageSize, toDownscaledSize, toOpaqueTop } from "../../domain/cut.rules";
 import { MAX_IMAGE_BYTES } from "../../domain/png.rules";
 import { toCanvas, toPngBlob } from "./canvas";
 
@@ -44,4 +44,11 @@ export const getImportedImage = async (file: File): Promise<ImportAnswer> => {
   }
   bitmap.close();
   return { ok: false, message: "image trop lourde, même réduite" };
+};
+
+// La première ligne opaque d'une image chargée : le haut du personnage, d'où se mesure la hauteur du haut de la tête.
+export const getTopEdge = (image: HTMLImageElement): number => {
+  const canvas = toCanvas({ width: image.naturalWidth, height: image.naturalHeight });
+  canvas.getContext("2d")?.drawImage(image, 0, 0);
+  return toOpaqueTop(toAlpha(canvas));
 };

@@ -45,6 +45,7 @@ const photoHead: Head = {
   opening: 1.3,
   closedChance: 0.22,
   closing: 0,
+  topHeight: 333.5,
   expression: { id: "photo", version: "1" },
 };
 

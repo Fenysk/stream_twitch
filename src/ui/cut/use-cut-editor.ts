@@ -22,7 +22,7 @@ import {
 } from "../expressions-api";
 import { toPartCanvases } from "./build-parts";
 import { toPngBlob } from "./canvas";
-import { getImportedImage } from "./import-image";
+import { getImportedImage, getTopEdge } from "./import-image";
 
 // Une image en cours de découpe. `expressionId` : l'expression retouchée (aucune pour une image qu'on vient d'importer).
 // `sourceBlob` : l'image à envoyer à la création ; une expression rouverte garde celle du serveur.
@@ -45,6 +45,8 @@ export type CutEditor = {
   draft: Draft | null;
   // L'image du brouillon, décodée : la source des deux moitiés.
   image: HTMLImageElement | null;
+  // La première ligne opaque de l'image : la hauteur du haut de la tête se mesure d'elle au milieu de la coupe.
+  topEdge: number;
   refusal: string | null;
   notice: string | null;
   isBusy: boolean;
@@ -67,12 +69,12 @@ const toProposedName = (fileName: string): string =>
 const toBlobBase64 = async (blob: Blob): Promise<string> =>
   toBase64(new Uint8Array(await blob.arrayBuffer()));
 
-const toInput = async (draft: Draft, image: HTMLImageElement): Promise<ExpressionInput> => {
+const toInput = async (draft: Draft, image: HTMLImageElement, topEdge: number): Promise<ExpressionInput> => {
   const parts = toPartCanvases(image, draft.size, draft.cut, draft.lips);
   const [top, bottom] = await Promise.all([toPngBlob(parts.top), toPngBlob(parts.bottom)]);
   return {
     name: draft.name.trim(),
-    geometry: toExpressionGeometry(draft),
+    geometry: toExpressionGeometry({ ...draft, topEdge }),
     top: await toBlobBase64(top),
     bottom: await toBlobBase64(bottom),
     ...(draft.sourceBlob ? { source: await toBlobBase64(draft.sourceBlob) } : {}),
@@ -82,6 +84,7 @@ const toInput = async (draft: Draft, image: HTMLImageElement): Promise<Expressio
 export const useCutEditor = (onListChange: () => void): CutEditor => {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [topEdge, setTopEdge] = useState(0);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -96,7 +99,9 @@ export const useCutEditor = (onListChange: () => void): CutEditor => {
     let isCurrent = true;
     const element = new Image();
     element.onload = () => {
-      if (isCurrent) setImage(element);
+      if (!isCurrent) return;
+      setTopEdge(getTopEdge(element));
+      setImage(element);
     };
     element.onerror = () => {
       if (isCurrent) setRefusal("image illisible");
@@ -164,7 +169,7 @@ export const useCutEditor = (onListChange: () => void): CutEditor => {
     setNotice(null);
     setIsBusy(true);
     try {
-      const input = await toInput(draft, image);
+      const input = await toInput(draft, image, topEdge);
       const answer = draft.expressionId
         ? await updateExpression(draft.expressionId, input)
         : await createExpression(input);
@@ -181,7 +186,7 @@ export const useCutEditor = (onListChange: () => void): CutEditor => {
     } finally {
       setIsBusy(false);
     }
-  }, [draft, image, onListChange]);
+  }, [draft, image, topEdge, onListChange]);
 
   const deleteCurrent = useCallback(async () => {
     const id = draft?.expressionId;
@@ -205,6 +210,7 @@ export const useCutEditor = (onListChange: () => void): CutEditor => {
   return {
     draft,
     image,
+    topEdge,
     refusal,
     notice,
     isBusy,

@@ -19,15 +19,16 @@ import { useExpressions } from "./use-expressions";
 export const CutTab = () => {
   const { expressions, refresh } = useExpressions();
   const editor = useCutEditor(refresh);
-  const { draft, image, refusal, notice, isBusy, openFile } = editor;
+  const { draft, image, topEdge, refusal, notice, isBusy, openFile } = editor;
   const [selected, setSelected] = useState<HingeSide>("left");
   const fileInput = useRef<HTMLInputElement>(null);
   const previews = usePartPreviews(image, draft?.size, draft?.cut, draft?.lips);
   useWindowImport(openFile);
 
   const head = useMemo(
-    () => (draft ? toHead(toExpressionGeometry(draft), { id: "preview", version: "1" }) : null),
-    [draft],
+    () =>
+      draft ? toHead(toExpressionGeometry({ ...draft, topEdge }), { id: "preview", version: "1" }) : null,
+    [draft, topEdge],
   );
   const saved = (expressions ?? []).filter(({ isBuiltIn }) => !isBuiltIn);
 

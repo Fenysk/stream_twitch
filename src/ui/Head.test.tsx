@@ -16,6 +16,7 @@ const view = (
   cut: { left: { x: 240.3, y: 333.2 }, right: { x: 345.1, y: 334.2 } },
   ...factors,
   closing: 0,
+  topHeight: 333.7,
   expression: { id: "photo", version: "1" },
   idle,
   mouth,
@@ -148,9 +149,16 @@ describe("Head", () => {
     expect(topImageStyle(html)).toMatch(/translate\(-0\.0\d+%, 3\.\d+%\)/);
   });
 
-  it("ne fait pas descendre la moitié haute quand la bouche est ouverte : les poses partent de la position dessinée", () => {
+  it("fait descendre aussi la moitié haute quand la bouche est ouverte : les poses partent de la position fermée", () => {
     const open: Mouth = { kind: "open", pose: { pivot: "right", angle: 14 } };
     const html = renderToStaticMarkup(<Head images={IMAGES} view={{ ...view(open), closing: 14 }} />);
+    // Les 14 px de closing, tournés de 18,2° autour de la charnière avec la moitié haute.
+    expect(topImageStyle(html)).toContain("transform:translate(-0.78%, 3.062%) rotate(18.2deg)");
+  });
+
+  it("laisse la photo telle qu'elle était : sans closing, une pose ouverte ne décale rien", () => {
+    const open: Mouth = { kind: "open", pose: { pivot: "right", angle: 14 } };
+    const html = renderToStaticMarkup(<Head images={IMAGES} view={view(open)} />);
     expect(topImageStyle(html)).toContain("transform:translate(0%, 0%) rotate(18.2deg)");
   });
 
@@ -164,7 +172,7 @@ describe("Head", () => {
 
   it("garde le rapport largeur/hauteur de la scène pour la mettre à l'échelle de la fenêtre", () => {
     const html = renderToStaticMarkup(<Head images={IMAGES} view={view({ kind: "closed" })} />);
-    expect(html).toContain("aspect-ratio:773 / 593");
-    expect(html).toContain("width:min(100vw, calc(100vh * 773 / 593))");
+    expect(html).toContain("aspect-ratio:773 / 498");
+    expect(html).toContain("width:min(100vw, calc(100vh * 773 / 498))");
   });
 });

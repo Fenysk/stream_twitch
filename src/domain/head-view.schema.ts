@@ -30,6 +30,8 @@ export const HeadViewSchema = z.object({
   opening: z.number().min(0),
   scale: z.number().positive(),
   closing: z.number().min(0),
+  // Du haut de la tête à la coupe, en px de l'image : la mesure sur laquelle se normalisent les poses de la bouche.
+  topHeight: z.number().positive(),
   expression: ExpressionRefSchema,
   idle: IdlePoseSchema,
   mouth: MouthSchema,

@@ -67,8 +67,20 @@ describe("toHead", () => {
       opening: 1.3,
       closedChance: 0.22,
       closing: 0,
+      topHeight: 333.7,
       expression: { id: "photo", version: "1" },
     });
+  });
+
+  it("prend la hauteur du haut du fichier quand il la donne, sinon la distance du haut de l'image au milieu de la coupe", () => {
+    const measured = HeadFileSchema.parse({ ...file, hauteurHaut: 331.5 });
+    expect(toHead(measured, { id: "photo", version: "1" }).topHeight).toBe(331.5);
+    expect(toHead(HeadFileSchema.parse(file), { id: "photo", version: "1" }).topHeight).toBe(333.7);
+  });
+
+  it("refuse une hauteur du haut qui n'est pas positive", () => {
+    expect(HeadFileSchema.safeParse({ ...file, hauteurHaut: 0 }).success).toBe(false);
+    expect(HeadFileSchema.safeParse({ ...file, hauteurHaut: -3 }).success).toBe(false);
   });
 });
 
