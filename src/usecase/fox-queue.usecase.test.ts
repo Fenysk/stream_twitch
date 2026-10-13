@@ -25,7 +25,7 @@ const settings: Settings = {
 type Spoken = { text: string; isCancelled: () => boolean; settle: (result: SpeakResult) => void };
 
 // Une horloge et un programmateur à la main ; la voix d'Alexis se règle à la main aussi (au départ il se tait depuis toujours).
-const setup = () => {
+const setup = (custom: Partial<Settings> = {}) => {
   const voice: VoiceView = { isTalking: false, talkingFor: 0, silentFor: Number.POSITIVE_INFINITY };
   const calls = { wakes: 0, spokes: 0, intros: [] as { show: Show | null; isCancelled: boolean }[] };
   const state = { now: 0, tick: (): void => undefined, subscribers: 0 };
@@ -73,7 +73,8 @@ const setup = () => {
   const queue = createFoxQueue({
     fox,
     mode,
-    settings,
+    settings: { ...settings, ...custom },
+    clock: () => state.now,
     schedule: (callback, ms) => {
       const timer = { at: state.now + ms, callback, isCancelled: false };
       timers.push(timer);
@@ -338,5 +339,109 @@ describe("createFoxQueue : retirer, compter, arrêter", () => {
     voice.silentFor = 3000;
     await tick();
     expect(spoken).toHaveLength(1);
+  });
+});
+
+describe("createFoxQueue : un message qui attend trop longtemps n'est plus lu", () => {
+  const MAX_WAIT = { foxReadMaxWait: 120_000 };
+  const silent = { isTalking: false, talkingFor: 0, silentFor: Number.POSITIVE_INFINITY };
+
+  it("garde un message à 2 min pile, puis le retire à 2 min 1 s avec une ligne dans le journal", async () => {
+    const { queue, voice, spoken, logs, tick, advance } = setup(MAX_WAIT);
+    talking(voice, 5000);
+    queue.push(item("un", { label: "message de Alice" }));
+    await advance(120_000);
+    await tick();
+    expect(logs).toEqual([]);
+    expect(queue.count(() => true)).toBe(1);
+    await advance(1000);
+    await tick();
+    expect(logs).toEqual(["Renard : message de Alice expiré (attente de plus de 2 min)"]);
+    expect(queue.count(() => true)).toBe(0);
+    Object.assign(voice, silent);
+    await tick();
+    expect(spoken).toEqual([]);
+  });
+
+  it("ne retire que le vieux message : le récent est dit quand Alexis se tait", async () => {
+    const { queue, voice, spoken, logs, tick, advance } = setup(MAX_WAIT);
+    talking(voice, 5000);
+    queue.push(item("vieux"));
+    await advance(100_000);
+    queue.push(item("récent"));
+    await advance(30_000);
+    await tick();
+    expect(logs).toEqual(["Renard : message de vieux expiré (attente de plus de 2 min)"]);
+    Object.assign(voice, silent);
+    await tick();
+    expect(spoken.map(({ text }) => text)).toEqual(["récent"]);
+  });
+
+  it("n'écrit qu'une ligne par message, même après d'autres pas", async () => {
+    const { queue, voice, logs, tick, advance } = setup(MAX_WAIT);
+    talking(voice, 5000);
+    queue.push(item("un"));
+    await advance(121_000);
+    await tick();
+    await tick();
+    await advance(1000);
+    await tick();
+    expect(logs).toHaveLength(1);
+  });
+
+  it("ne garde plus le renard éveillé une fois le message expiré", async () => {
+    const { queue, voice, calls, tick, advance } = setup(MAX_WAIT);
+    talking(voice, 5000);
+    queue.push(item("un"));
+    await advance(121_000);
+    await tick();
+    const wakes = calls.wakes;
+    await tick();
+    expect(calls.wakes).toBe(wakes);
+  });
+
+  it("n'expire jamais un remerciement, ni le message qui lui est joint, ni une pique : ils sont dits au silence d'Alexis", async () => {
+    const { queue, voice, spoken, logs, tick, advance } = setup(MAX_WAIT);
+    talking(voice, 5000);
+    queue.push(thanks("merci"));
+    queue.push(item("joint", { isUrgent: true }));
+    queue.push(item("pique", { kind: "jab", label: "pique" }));
+    await advance(300_000);
+    await tick();
+    expect(logs).toEqual([]);
+    expect(queue.count(() => true)).toBe(3);
+    Object.assign(voice, silent);
+    await tick();
+    expect(spoken.map(({ text }) => text)).toEqual(["merci"]);
+  });
+
+  it("n'expire pas le message qu'on lit", async () => {
+    const { queue, spoken, logs, tick, advance } = setup(MAX_WAIT);
+    queue.push(item("un"));
+    expect(spoken).toHaveLength(1);
+    await advance(300_000);
+    await tick();
+    expect(logs).toEqual([]);
+    expect(queue.count(() => true)).toBe(1);
+  });
+
+  it("n'expire rien sans réglage foxReadMaxWait", async () => {
+    const { queue, voice, logs, tick, advance } = setup();
+    talking(voice, 5000);
+    queue.push(item("un"));
+    await advance(3_600_000);
+    await tick();
+    expect(logs).toEqual([]);
+    expect(queue.count(() => true)).toBe(1);
+  });
+
+  it("applique le délai réglé, sans redémarrer", async () => {
+    const { queue, voice, logs, tick, advance } = setup(MAX_WAIT);
+    talking(voice, 5000);
+    queue.update({ ...settings, foxReadMaxWait: 30_000 });
+    queue.push(item("un"));
+    await advance(31_000);
+    await tick();
+    expect(logs).toEqual(["Renard : message de un expiré (attente de plus de 30 s)"]);
   });
 });

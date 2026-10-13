@@ -46,6 +46,8 @@ const fox = {
   foxReadMaxLength: 150,
   foxReadGap: 10_000,
   foxReadQueueSize: 3,
+  foxCapitalsMaxLength: 15,
+  foxReadMaxWait: 120_000,
   foxEmoteNames: ["KEKW", "OMEGALUL"],
 };
 
@@ -135,6 +137,21 @@ describe("les réglages fox*", () => {
     );
     expect(issuesOf(toEffectiveSettings(defaults, { foxReadGap: 0 }))[0]?.path).toBe("foxReadGap");
     expect(toEffectiveSettings(defaults, { foxReadMaxLength: 500, foxReadQueueSize: 20 }).ok).toBe(true);
+  });
+
+  it("bornent les majuscules permises : au moins 1 caractère, 500 au plus", () => {
+    expect(issuesOf(toEffectiveSettings(defaults, { foxCapitalsMaxLength: 0 }))[0]?.path).toBe(
+      "foxCapitalsMaxLength",
+    );
+    expect(issuesOf(toEffectiveSettings(defaults, { foxCapitalsMaxLength: 501 }))[0]?.path).toBe(
+      "foxCapitalsMaxLength",
+    );
+    expect(toEffectiveSettings(defaults, { foxCapitalsMaxLength: 500 }).ok).toBe(true);
+  });
+
+  it("veulent une attente maximale d'un message strictement positive", () => {
+    expect(issuesOf(toEffectiveSettings(defaults, { foxReadMaxWait: 0 }))[0]?.path).toBe("foxReadMaxWait");
+    expect(toEffectiveSettings(defaults, { foxReadMaxWait: 30_000 }).ok).toBe(true);
   });
 
   it("changent les deux interrupteurs de la lecture dans settings.local.json, sans toucher à la liste des emotes", () => {

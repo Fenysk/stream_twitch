@@ -184,7 +184,7 @@ export function startRuntime(): Runtime {
     log,
   });
   // La file de parole : les messages du tchat (et plus tard les remerciements et les piques) y attendent leur tour.
-  const queue = createFoxQueue({ fox, mode, settings: initial, schedule, log });
+  const queue = createFoxQueue({ fox, mode, settings: initial, clock: Date.now, schedule, log });
   const foxChat = createFoxChat({ chat, queue, emotes, settings: initial, insults, clock: Date.now, log });
   // La relance : caché, après un long silence de Fenysk et du tchat, il revient lui dire une pique.
   const jab = createFoxJab({

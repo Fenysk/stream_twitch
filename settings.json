@@ -34,6 +34,8 @@
   "foxReadMaxLength": 150,
   "foxReadGap": 10000,
   "foxReadQueueSize": 3,
+  "foxCapitalsMaxLength": 15,
+  "foxReadMaxWait": 120000,
   "foxListenMin": 2000,
   "foxListenMax": 4000,
   "foxReadSilence": 1000,

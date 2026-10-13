@@ -46,6 +46,7 @@ const settings: Settings = {
   foxReadMaxLength: 150,
   foxReadGap: 10_000,
   foxReadQueueSize: 3,
+  foxCapitalsMaxLength: 15,
   foxEmoteNames: ["KEKW"],
 };
 
@@ -165,6 +166,7 @@ const setup = (custom: Settings = settings) => {
     fox,
     mode: stub.mode,
     settings: custom,
+    clock: () => state.now,
     schedule: (callback, ms) => {
       const timer = { at: state.now + ms, callback, isCancelled: false };
       timers.push(timer);
@@ -304,6 +306,99 @@ describe("createFoxChat : un message ordinaire", () => {
     await finishSynthesis(1, 1000);
     await advance(1400);
     expect(spoken.map(({ text }) => text)).toEqual(["Message 1", "Message 2", "Message 3"]);
+  });
+});
+
+describe("createFoxChat : les mentions", () => {
+  it("lit « @Benitoad t'as vu ça ? » en « Benitoad, t'as vu ça ? » et « merci @Benitoad » en « merci Benitoad »", async () => {
+    const { receive, spoken, finishSynthesis, advance } = setup();
+    await receive(message("1", "@Benitoad t'as vu ça ?"));
+    await finishSynthesis(0, 500);
+    await advance(900);
+    await receive(message("2", "merci @Benitoad", { viewerId: "bob" }));
+    expect(spoken.map(({ text }) => text)).toEqual(["Benitoad, t'as vu ça ?", "merci Benitoad"]);
+  });
+
+  it("retire un nickname insultant de la phrase lue, ou ignore le message quand il n'en reste rien", async () => {
+    const { receive, spoken, messages } = setup();
+    await receive(message("1", "@connard salut", { viewerId: "alice" }));
+    expect(spoken.map(({ text }) => text)).toEqual(["salut"]);
+    await receive(message("2", "@connard", { viewerId: "bob" }));
+    expect(spoken).toHaveLength(1);
+    expect(messages.at(-1)).toContain("insulte : « connard »");
+  });
+});
+
+describe("createFoxChat : les majuscules", () => {
+  it("lit un message court en majuscules (« GG », « JEANRENARD ») et ignore un long, en le disant", async () => {
+    const { receive, spoken, messages, finishSynthesis, advance } = setup();
+    await receive(message("1", "JEANRENARD"));
+    await finishSynthesis(0, 500);
+    await advance(900);
+    await receive(message("2", "GG", { viewerId: "bob" }));
+    expect(spoken.map(({ text }) => text)).toEqual(["JEANRENARD", "GG"]);
+    await receive(message("3", "SALUT TOUT LE MONDE", { viewerId: "carol" }));
+    expect(spoken).toHaveLength(2);
+    expect(messages.at(-1)).toContain("spam : majuscules");
+  });
+
+  it("suit le maximum réglé dans l'onglet Renard, sans redémarrer", async () => {
+    const { foxChat, receive, spoken } = setup();
+    foxChat.update({ ...settings, foxCapitalsMaxLength: 5 });
+    await receive(message("1", "JEANRENARD"));
+    expect(spoken).toEqual([]);
+    foxChat.update({ ...settings, foxCapitalsMaxLength: 10 });
+    await receive(message("2", "JEANRENARD", { viewerId: "bob" }));
+    expect(spoken.map(({ text }) => text)).toEqual(["JEANRENARD"]);
+  });
+});
+
+describe("createFoxChat : un message qui attend plus de 2 min n'est plus lu", () => {
+  const withMaxWait: Settings = { ...settings, foxReadMaxWait: 120_000 };
+  const speaking = { isTalking: true, talkingFor: 5000, silentFor: 0 };
+  const quiet = { isTalking: false, talkingFor: 0, silentFor: 5000 };
+
+  it("retire le message qui attendait depuis 2 min 1 s, avec sa ligne dans le journal, et ne le lit pas", async () => {
+    const { receive, spoken, messages, stub, advance, flush } = setup(withMaxWait);
+    Object.assign(stub.voice, speaking);
+    await receive(message("1", "Bonjour", { nickname: "Alice" }));
+    await advance(120_000);
+    stub.tick();
+    await flush();
+    expect(messages).toEqual([]);
+    await advance(1000);
+    stub.tick();
+    await flush();
+    expect(messages).toEqual(["Renard : message de Alice expiré (attente de plus de 2 min)"]);
+    Object.assign(stub.voice, quiet);
+    stub.tick();
+    await flush();
+    expect(spoken).toEqual([]);
+  });
+
+  it("lit un message qui a attendu moins de 2 min quand Alexis se tait", async () => {
+    const { receive, spoken, stub, advance, flush } = setup(withMaxWait);
+    Object.assign(stub.voice, speaking);
+    await receive(message("1", "Bonjour"));
+    await advance(119_000);
+    Object.assign(stub.voice, quiet);
+    stub.tick();
+    await flush();
+    expect(spoken.map(({ text }) => text)).toEqual(["Bonjour"]);
+  });
+
+  it("dit quand même le message joint à un sub ou à des bits, après 5 min d'attente", async () => {
+    const { foxChat, spoken, messages, stub, advance, flush } = setup(withMaxWait);
+    Object.assign(stub.voice, speaking);
+    foxChat.speakAttached(message("1", "Bravo pour le stream"));
+    await advance(300_000);
+    stub.tick();
+    await flush();
+    expect(messages).toEqual([]);
+    Object.assign(stub.voice, quiet);
+    stub.tick();
+    await flush();
+    expect(spoken.map(({ text }) => text)).toEqual(["Bravo pour le stream"]);
   });
 });
 
@@ -970,6 +1065,7 @@ describe("de bout en bout : du message du tchat à la voix du renard", () => {
       fox,
       mode: createStubMode().mode,
       settings,
+      clock: () => state.now,
       schedule: (callback, ms) => {
         const timer = { at: state.now + ms, callback, isCancelled: false };
         timers.push(timer);

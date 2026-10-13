@@ -62,6 +62,7 @@ const settings: Settings = {
   foxReadMaxLength: 150,
   foxReadGap: 10_000,
   foxReadQueueSize: 3,
+  foxCapitalsMaxLength: 15,
   foxEmoteNames: ["KEKW"],
 };
 
@@ -231,6 +232,7 @@ const build = (
     fox,
     mode,
     settings: serverSettings,
+    clock: () => sim.now,
     schedule,
     log: (line) => logs.push(line),
   });

@@ -3,17 +3,20 @@ import type { RawMessage } from "./chat.types";
 import {
   type ChatFilterRules,
   type FilterReason,
+  hasWaitedTooLong,
   isOwnMessage,
   isTooSoon,
   toChatSpeech,
   toReadRules,
   toReasonText,
+  toWaitText,
 } from "./chat-filter.rules";
 import { toInsultList } from "./chat-insults.rules";
 import type { Settings } from "./settings.schema";
 
 const rules: ChatFilterRules = {
   maxLength: 150,
+  capitalsMaxLength: 15,
   emoteNames: ["KEKW", "OMEGALUL"],
   bots: ["nightbot", "streamelements"],
   insults: toInsultList("connard\nsalope\n=con\n=pd"),
@@ -47,6 +50,32 @@ describe("toChatSpeech : un message ordinaire", () => {
   it("retire les emotes de Twitch et celles de la liste, et réduit les blancs", () => {
     const message = raw("Salut Kappa le monde KEKW", { emotes: [{ id: "25", start: 6, end: 10 }] });
     expect(toChatSpeech(message, rules)).toEqual({ ok: true, text: "Salut le monde" });
+  });
+});
+
+describe("toChatSpeech : les mentions", () => {
+  it("lit une mention d'ouverture sans arobase, suivie d'une virgule", () => {
+    expect(toChatSpeech(raw("@Benitoad t'as vu ça ?"), rules)).toEqual({
+      ok: true,
+      text: "Benitoad, t'as vu ça ?",
+    });
+  });
+
+  it("lit une mention au milieu sans arobase seulement", () => {
+    expect(toChatSpeech(raw("merci @Benitoad"), rules)).toEqual({ ok: true, text: "merci Benitoad" });
+  });
+
+  it("retire du texte lu un nickname cité que la liste d'insultes refuse", () => {
+    expect(toChatSpeech(raw("@connard salut"), rules)).toEqual({ ok: true, text: "salut" });
+    expect(toChatSpeech(raw("merci @xX_connard_Xx"), rules)).toEqual({ ok: true, text: "merci" });
+  });
+
+  it("ignore un message qui n'est qu'un nickname refusé, en disant l'insulte", () => {
+    expect(reasonOf(raw("@connard"))).toEqual({ family: "insult", entry: "connard" });
+  });
+
+  it("juge toujours le reste du message : une insulte à côté d'une mention est ignorée", () => {
+    expect(reasonOf(raw("@Benitoad t'es con"))).toEqual({ family: "insult", entry: "con" });
   });
 });
 
@@ -123,6 +152,27 @@ describe("toChatSpeech : famille 4, le spam", () => {
     ["⣿⣿⣿⣿⣿⣿⣿⣿", "drawing"],
   ])("ignore : %s", (text, kind) => {
     expect(reasonOf(raw(text))).toEqual({ family: "spam", kind });
+  });
+});
+
+describe("toChatSpeech : les majuscules d'un message court", () => {
+  it.each(["GG", "MDR", "JEANRENARD"])("lit : %s", (text) => {
+    expect(toChatSpeech(raw(text), rules)).toEqual({ ok: true, text });
+  });
+
+  it("ignore toujours un long message en majuscules", () => {
+    expect(reasonOf(raw("SALUT TOUT LE MONDE"))).toEqual({ family: "spam", kind: "capitals" });
+  });
+
+  it("suit le maximum réglé", () => {
+    expect(reasonOf(raw("JEANRENARD"), { ...rules, capitalsMaxLength: 5 })).toEqual({
+      family: "spam",
+      kind: "capitals",
+    });
+  });
+
+  it("applique les autres règles du spam à un message court", () => {
+    expect(reasonOf(raw("GG GG GG GG"))).toEqual({ family: "spam", kind: "repetition" });
   });
 });
 
@@ -220,6 +270,31 @@ describe("isTooSoon : un message par viewer toutes les 10 s", () => {
   });
 });
 
+describe("hasWaitedTooLong : un message qui attend plus de 2 min n'est plus lu", () => {
+  it("garde un message qui attend depuis moins de 2 min, ou 2 min pile", () => {
+    expect(hasWaitedTooLong(0, 119_999, 120_000)).toBe(false);
+    expect(hasWaitedTooLong(0, 120_000, 120_000)).toBe(false);
+  });
+
+  it("retire un message qui attend depuis 2 min 1 s", () => {
+    expect(hasWaitedTooLong(0, 121_000, 120_000)).toBe(true);
+    expect(hasWaitedTooLong(50_000, 171_001, 120_000)).toBe(true);
+  });
+});
+
+describe("toWaitText : une durée pour le journal du serveur", () => {
+  it.each<[number, string]>([
+    [120_000, "2 min"],
+    [60_000, "1 min"],
+    [300_000, "5 min"],
+    [90_000, "90 s"],
+    [30_000, "30 s"],
+    [1500, "1,5 s"],
+  ])("%d ms s'écrit %s", (ms, text) => {
+    expect(toWaitText(ms)).toBe(text);
+  });
+});
+
 describe("toReasonText : le journal du serveur, en français", () => {
   it.each<[FilterReason, string]>([
     [{ family: "command" }, "commande"],
@@ -278,6 +353,7 @@ describe("toReadRules", () => {
     foxShouldReadChat: true,
     foxShouldReadOwn: false,
     foxReadMaxLength: 150,
+    foxCapitalsMaxLength: 15,
     foxReadGap: 10_000,
     foxReadQueueSize: 3,
     foxEmoteNames: ["KEKW"],
@@ -288,6 +364,7 @@ describe("toReadRules", () => {
       shouldReadChat: true,
       shouldReadOwn: false,
       maxLength: 150,
+      capitalsMaxLength: 15,
       gap: 10_000,
       queueSize: 3,
       emoteNames: ["KEKW"],

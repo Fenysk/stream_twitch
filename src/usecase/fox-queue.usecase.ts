@@ -1,3 +1,4 @@
+import { hasWaitedTooLong, toWaitText } from "../domain/chat-filter.rules";
 import { type Show, toFoxModeRules } from "../domain/fox-mode.rules";
 import type { Settings } from "../domain/settings.schema";
 import type { Fox } from "./fox.usecase";
@@ -24,6 +25,8 @@ export type FoxQueueDeps = {
   // D, E, G, H : l'écoute d'Alexis, le retour, la réaction ou le coucou avant de lire.
   mode: Pick<FoxModeController, "getVoice" | "wake" | "noteSpoke" | "introduce" | "subscribe">;
   settings: Settings;
+  // L'heure en ms : l'âge d'une entrée qui attend.
+  clock: () => number;
   // Programme `callback` dans `ms` ; rend de quoi l'annuler.
   schedule: (callback: () => void, ms: number) => () => void;
   log: (message: string) => void;
@@ -44,6 +47,9 @@ export type FoxQueue = {
 // Le silence entre deux entrées lues : la page met un instant à charger le WAV, et le renard reprend son souffle.
 const SILENCE_BETWEEN_MS = 400;
 
+// Une entrée qui attend, avec l'heure de son arrivée dans la file.
+type Queued = QueueItem & { queuedAt: number };
+
 // L'entrée qu'on lit, de son entrée en scène à la fin de sa phrase. `isPlaying` : sa phrase est partie aux pages ; avant,
 // elle n'est qu'en synthèse ou en attente de la réaction, et peut s'annuler.
 type Reading = {
@@ -54,9 +60,17 @@ type Reading = {
   cancelEnd: (() => void) | undefined;
 };
 
-export function createFoxQueue({ fox, mode, settings: initial, schedule, log }: FoxQueueDeps): FoxQueue {
+export function createFoxQueue({
+  fox,
+  mode,
+  settings: initial,
+  clock,
+  schedule,
+  log,
+}: FoxQueueDeps): FoxQueue {
   let modeRules = toFoxModeRules(initial);
-  const waiting: QueueItem[] = [];
+  let maxWait = initial.foxReadMaxWait;
+  const waiting: Queued[] = [];
   let current: Reading | undefined;
   let unsubscribeTick: (() => void) | undefined;
 
@@ -65,7 +79,25 @@ export function createFoxQueue({ fox, mode, settings: initial, schedule, log }: 
   // D : on lit, et Alexis parle depuis plus de `stopAfter` sans s'arrêter.
   const isAlexisInterrupting = (): boolean => !!modeRules && mode.getVoice().talkingFor > modeRules.stopAfter;
 
+  // Seul un message ordinaire du tchat expire : un remerciement, le message qui lui est joint (urgent) et une pique, jamais.
+  const canExpire = ({ kind, isUrgent }: QueueItem): boolean => kind === "message" && !isUrgent;
+
+  // Un message qui attend depuis plus de `maxWait` sort de la file, et le journal le dit.
+  const deleteExpired = () => {
+    const limit = maxWait;
+    if (limit === undefined) return;
+    const now = clock();
+    const hasExpired = (item: Queued): boolean =>
+      canExpire(item) && hasWaitedTooLong(item.queuedAt, now, limit);
+    for (const item of waiting.filter(hasExpired)) {
+      log(`Renard : ${item.label} expiré (attente de plus de ${toWaitText(limit)})`);
+    }
+    const kept = waiting.filter((item) => !hasExpired(item));
+    waiting.splice(0, waiting.length, ...kept);
+  };
+
   const startNext = () => {
+    deleteExpired();
     if (current || !isAlexisSilent()) return;
     const item = waiting.shift();
     if (!item) return;
@@ -112,20 +144,21 @@ export function createFoxQueue({ fox, mode, settings: initial, schedule, log }: 
   };
 
   // Un pas de 100 ms : Alexis qui parle trop longtemps coupe la lecture (sauf d'un remerciement), qui n'est jamais reprise ;
-  // une entrée qui attend garde le renard là (sans cela, il bâillerait et partirait avec une entrée dans la file), et part
-  // dès qu'Alexis se tait.
+  // un message trop vieux expire ; une entrée qui attend garde le renard là (sans cela, il bâillerait et partirait avec une
+  // entrée dans la file), et part dès qu'Alexis se tait.
   const onTick = () => {
     if (current?.item.isCuttable && isAlexisInterrupting()) {
       log(`Renard : lecture abandonnée, Alexis parle (${current.item.label}).`);
       stopCurrent();
       return;
     }
+    deleteExpired();
     if (waiting.length === 0) return;
     mode.wake();
     startNext();
   };
 
-  const insert = (item: QueueItem) => {
+  const insert = (item: Queued) => {
     if (!item.isUrgent) {
       waiting.push(item);
       return;
@@ -146,9 +179,10 @@ export function createFoxQueue({ fox, mode, settings: initial, schedule, log }: 
     },
     update(next) {
       modeRules = toFoxModeRules(next);
+      maxWait = next.foxReadMaxWait;
     },
     push(item) {
-      insert(item);
+      insert({ ...item, queuedAt: clock() });
       mode.wake();
       startNext();
     },

@@ -312,7 +312,7 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
   },
 ];
 
-// La lecture du tchat : trois curseurs ; les deux interrupteurs (« Lire le tchat », « Lire mes messages ») sont des cases
+// La lecture du tchat : cinq curseurs ; les deux interrupteurs (« Lire le tchat », « Lire mes messages ») sont des cases
 // (fox-settings-tab.tsx). Un message du tchat tient dans 500 caractères ; la valeur de repli est celle de settings.json.
 export const FOX_READ_SLIDERS: readonly SliderSpec[] = [
   {
@@ -321,6 +321,13 @@ export const FOX_READ_SLIDERS: readonly SliderSpec[] = [
     help: "Plus long, il n'est pas lu.",
     steps: toSteps(20, 300, 10, (value) => `${value} caractères`),
     fallback: 150,
+  },
+  {
+    key: "foxCapitalsMaxLength",
+    label: "Majuscules permises jusqu'à",
+    help: "Un message court en majuscules est lu.",
+    steps: toSteps(5, 60, 5, (value) => `${value} caractères`),
+    fallback: 15,
   },
   {
     key: "foxReadGap",
@@ -335,6 +342,13 @@ export const FOX_READ_SLIDERS: readonly SliderSpec[] = [
     help: "Au-delà, le suivant n'est pas lu.",
     steps: toSteps(1, 10, 1, (value) => String(value)),
     fallback: 3,
+  },
+  {
+    key: "foxReadMaxWait",
+    label: "Attente d'un message au plus",
+    help: "Plus ancien, il n'est plus lu.",
+    steps: toSteps(30_000, 600_000, 30_000, toDelay),
+    fallback: 120_000,
   },
 ];
 

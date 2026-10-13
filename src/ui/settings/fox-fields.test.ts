@@ -15,7 +15,7 @@ import { SLIDER_KEYS } from "./head-fields";
 import { isDefaultTab, toChanges, toFieldErrors } from "./settings-changes";
 
 // Les réglages de chaque onglet, comme les onglets les désignent à « Revenir aux valeurs par défaut » : la tête (ses six
-// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses vingt-neuf curseurs, ses huit listes, la voix et trois cases).
+// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses trente et un curseurs, ses huit listes, la voix et trois cases).
 const HEAD_KEYS = [...SLIDER_KEYS, "expression"];
 const CHAT_KEYS = [
   ...CHAT_SLIDERS.map(({ key }) => key),
@@ -35,7 +35,7 @@ const labelsOf = (key: string): string[] => spec(key).steps.map(({ label }) => l
 const valuesOf = (key: string): number[] => spec(key).steps.map(({ value }) => value);
 
 describe("les curseurs de l'onglet Renard", () => {
-  it("sont vingt-neuf : vingt-six pour l'animation en neuf groupes, trois pour la lecture du tchat", () => {
+  it("sont trente et un : vingt-six pour l'animation en neuf groupes, cinq pour la lecture du tchat", () => {
     expect(FOX_GROUPS.map(({ title }) => title)).toEqual([
       "Quand il parle",
       "Au repos",
@@ -75,13 +75,17 @@ describe("les curseurs de l'onglet Renard", () => {
       "foxThankGap",
       "foxJoyDuration",
       "foxReadMaxLength",
+      "foxCapitalsMaxLength",
       "foxReadGap",
       "foxReadQueueSize",
+      "foxReadMaxWait",
     ]);
     expect(FOX_READ_SLIDERS.map(({ key }) => key)).toEqual([
       "foxReadMaxLength",
+      "foxCapitalsMaxLength",
       "foxReadGap",
       "foxReadQueueSize",
+      "foxReadMaxWait",
     ]);
   });
 
@@ -92,6 +96,18 @@ describe("les curseurs de l'onglet Renard", () => {
     expect(labelsOf("foxReadGap").at(-1)).toBe("60 s");
     expect(valuesOf("foxReadGap")).toContain(10_000);
     expect(valuesOf("foxReadQueueSize")).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  it("règlent les majuscules permises de 5 à 60 caractères, par pas de 5", () => {
+    expect(labelsOf("foxCapitalsMaxLength").slice(0, 2)).toEqual(["5 caractères", "10 caractères"]);
+    expect(labelsOf("foxCapitalsMaxLength").at(-1)).toBe("60 caractères");
+    expect(valuesOf("foxCapitalsMaxLength")).toContain(15);
+  });
+
+  it("règlent l'attente d'un message de 30 s à 10 min, avec 2 min au milieu", () => {
+    expect(labelsOf("foxReadMaxWait").slice(0, 3)).toEqual(["30 s", "1 min", "1,5 min"]);
+    expect(labelsOf("foxReadMaxWait").at(-1)).toBe("10 min");
+    expect(valuesOf("foxReadMaxWait")).toContain(120_000);
   });
 
   it("règlent chaque durée et chaque seuil de A, B et C : les 2 seuils, la grande bouche, le rebond, la respiration, le regard, le clignement", () => {
@@ -123,8 +139,10 @@ describe("les curseurs de l'onglet Renard", () => {
       "Un follow nommé toutes les",
       "Durée du saut de joie",
       "Longueur d'un message lu",
+      "Majuscules permises jusqu'à",
       "Un message par viewer toutes les",
       "Messages en attente",
+      "Attente d'un message au plus",
     ]);
   });
 
@@ -244,8 +262,8 @@ describe("les listes de phrases de l'onglet Renard", () => {
 });
 
 describe("les clés de chaque onglet", () => {
-  it("sont quarante et une pour le renard : ses vingt-neuf curseurs, ses huit listes, la case des remerciements, la voix et les deux cases de la lecture du tchat", () => {
-    expect(FOX_KEYS).toHaveLength(41);
+  it("sont quarante-trois pour le renard : ses trente et un curseurs, ses huit listes, la case des remerciements, la voix et les deux cases de la lecture du tchat", () => {
+    expect(FOX_KEYS).toHaveLength(43);
     expect(FOX_TOGGLES.map(({ key }) => key)).toEqual(["foxShouldThank"]);
     expect(FOX_KEYS).toContain("foxShouldThank");
     expect(FOX_KEYS).toContain("foxThanksCheer");

@@ -26,7 +26,8 @@ const isRepetition = (text: string): boolean => {
   return most >= MIN_REPEATS && most / words.length >= MIN_REPEATED_SHARE;
 };
 
-const isCapitals = (text: string): boolean => {
+const isCapitals = (text: string, capitalsMaxLength: number): boolean => {
+  if (Array.from(text).length <= capitalsMaxLength) return false;
   const letters = Array.from(text).filter((character) => /\p{L}/u.test(character));
   const capitals = letters.filter((letter) => letter !== letter.toLowerCase());
   return letters.length >= MIN_LETTERS_FOR_CAPITALS && capitals.length / letters.length >= MIN_CAPITALS_SHARE;
@@ -41,11 +42,12 @@ const isDrawing = (text: string): boolean => {
 };
 
 // Un message qui répète, crie ou dessine au lieu de dire quelque chose : le renard ne le lit pas. Les seuils sont ceux du
-// brainstorm du 06/10 ; le journal du serveur dit lequel a joué, de quoi les régler.
-export function toSpamKind(text: string): SpamKind | null {
+// brainstorm du 06/10 ; le journal du serveur dit lequel a joué, de quoi les régler. Un message de `capitalsMaxLength`
+// caractères ou moins passe la règle des majuscules (« GG », « JEANRENARD ») ; les autres règles jouent toujours.
+export function toSpamKind(text: string, capitalsMaxLength: number): SpamKind | null {
   if ((text.match(GLYPH) ?? []).length >= MIN_GLYPHS) return "drawing";
   if (SAME_CHARACTER.test(text)) return "letters";
   if (isRepetition(text)) return "repetition";
-  if (isCapitals(text)) return "capitals";
+  if (isCapitals(text, capitalsMaxLength)) return "capitals";
   return isDrawing(text) ? "drawing" : null;
 }

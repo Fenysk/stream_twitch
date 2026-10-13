@@ -2,6 +2,7 @@ import type { RawMessage } from "./chat.types";
 import { type ContactKind, toContactKind } from "./chat-contact.rules";
 import { toTextWithoutEmotes } from "./chat-emotes.rules";
 import { type InsultList, toInsultMatch } from "./chat-insults.rules";
+import { toSpokenMentions } from "./chat-mentions.rules";
 import { toHiddenKind } from "./chat-message.rules";
 import { type SpamKind, toSpamKind } from "./chat-spam.rules";
 import type { Settings } from "./settings.schema";
@@ -21,6 +22,8 @@ export type FilterReason =
 
 export type ChatFilterRules = {
   maxLength: number;
+  // Au plus de caractères, un message en majuscules n'est pas du spam.
+  capitalsMaxLength: number;
   emoteNames: readonly string[];
   // Les noms de compte des bots, en minuscules (toChatBots).
   bots: readonly string[];
@@ -34,7 +37,8 @@ const ignored = (reason: FilterReason): ChatSpeech => ({ ok: false, reason });
 
 // Le filtre, une famille après l'autre, dans l'ordre du brainstorm du 06/10 ; la première qui joue donne la raison. Les
 // liens et la longueur se jugent sur le message tel que le viewer l'a écrit ; le spam et les insultes sur ce qui sera dit,
-// emotes retirées (OMEGALUL n'est pas un cri). Le pseudo n'est jamais dit : seul le texte entre ici.
+// emotes retirées (OMEGALUL n'est pas un cri) et mentions lues sans arobase. Le nickname de l'auteur n'est jamais dit : seul
+// le texte entre ici.
 export function toChatSpeech(raw: RawMessage, rules: ChatFilterRules): ChatSpeech {
   const hidden = toHiddenKind(raw, rules.bots);
   if (hidden) return ignored({ family: hidden });
@@ -42,10 +46,14 @@ export function toChatSpeech(raw: RawMessage, rules: ChatFilterRules): ChatSpeec
   if (contact) return ignored({ family: "contact", kind: contact });
   const length = Array.from(raw.text).length;
   if (length > rules.maxLength) return ignored({ family: "length", length, max: rules.maxLength });
-  const text = toTextWithoutEmotes(raw.text, raw.emotes, rules.emoteNames);
-  const spam = toSpamKind(text);
+  const { text, insult: mentioned } = toSpokenMentions(
+    toTextWithoutEmotes(raw.text, raw.emotes, rules.emoteNames),
+    rules.insults,
+  );
+  const spam = toSpamKind(text, rules.capitalsMaxLength);
   if (spam) return ignored({ family: "spam", kind: spam });
-  if (text === "") return ignored({ family: "emotes" });
+  if (text === "")
+    return ignored(mentioned === null ? { family: "emotes" } : { family: "insult", entry: mentioned });
   const insult = toInsultMatch(text, rules.insults);
   if (insult !== null) return ignored({ family: "insult", entry: insult });
   return { ok: true, text };
@@ -98,11 +106,20 @@ export const isOwnMessage = (raw: RawMessage, channel: string): boolean =>
 export const isTooSoon = (lastAt: number | undefined, now: number, gap: number): boolean =>
   lastAt !== undefined && now - lastAt < gap;
 
+// Un message accepté qui attend dans la queue depuis plus de `maxWait` (ms) n'est plus lu.
+export const hasWaitedTooLong = (queuedAt: number, now: number, maxWait: number): boolean =>
+  now - queuedAt > maxWait;
+
+// Une durée pour le journal du serveur : des minutes pleines (« 2 min »), sinon des secondes (« 90 s », « 1,5 s »).
+export const toWaitText = (ms: number): string =>
+  ms >= 60_000 && ms % 60_000 === 0 ? `${ms / 60_000} min` : `${String(ms / 1000).replace(".", ",")} s`;
+
 // Les réglages de la lecture du tchat (settings.json, `foxShouldRead*` et `foxRead*`).
 export type ChatReadRules = {
   shouldReadChat: boolean;
   shouldReadOwn: boolean;
   maxLength: number;
+  capitalsMaxLength: number;
   gap: number;
   queueSize: number;
   emoteNames: readonly string[];
@@ -114,6 +131,7 @@ export function toReadRules(settings: Settings): ChatReadRules | undefined {
     foxShouldReadChat,
     foxShouldReadOwn,
     foxReadMaxLength,
+    foxCapitalsMaxLength,
     foxReadGap,
     foxReadQueueSize,
     foxEmoteNames,
@@ -122,6 +140,7 @@ export function toReadRules(settings: Settings): ChatReadRules | undefined {
     foxShouldReadChat === undefined ||
     foxShouldReadOwn === undefined ||
     foxReadMaxLength === undefined ||
+    foxCapitalsMaxLength === undefined ||
     foxReadGap === undefined ||
     foxReadQueueSize === undefined ||
     foxEmoteNames === undefined
@@ -131,6 +150,7 @@ export function toReadRules(settings: Settings): ChatReadRules | undefined {
     shouldReadChat: foxShouldReadChat,
     shouldReadOwn: foxShouldReadOwn,
     maxLength: foxReadMaxLength,
+    capitalsMaxLength: foxCapitalsMaxLength,
     gap: foxReadGap,
     queueSize: foxReadQueueSize,
     emoteNames: foxEmoteNames,

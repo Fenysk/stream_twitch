@@ -27,6 +27,7 @@
     { "canonical": "bounce",    "meaning": "L'écrasement et l'étirement du corps du renard, qui suivent le level de sa voix pendant qu'il parle.", "banned": ["rebond"] },
     { "canonical": "filter",    "meaning": "La suite de règles qui décide si le renard lit un message du tchat, et ce qu'il en lit.", "banned": ["filtre"] },
     { "canonical": "queue",     "meaning": "Les messages du tchat acceptés et pas encore finis d'être lus, celui qu'on lit compris.", "banned": ["fifo", "backlog"] },
+    { "canonical": "wait",      "meaning": "Le temps en ms qu'un message accepté a passé dans la queue sans être lu ; au-delà de maxWait (foxReadMaxWait), il expire et n'est plus lu.", "banned": ["attente", "ttl"] },
     { "canonical": "pace",      "meaning": "Le temps en ms avant que le renard relise un message du même viewer.", "banned": ["throttle", "cooldown"] },
     { "canonical": "insult",    "meaning": "Un mot ou une expression injurieuse ou haineuse, listée dans moderation/insults.fr.txt.", "banned": ["injure", "profanity", "slur"] },
     { "canonical": "spam",      "meaning": "Un message qui répète, crie ou dessine au lieu de dire quelque chose.", "banned": ["flood"] },
@@ -43,6 +44,7 @@
     { "canonical": "nickname",  "meaning": "Le nom qu'un viewer affiche devant ses messages, dans la couleur qu'il a choisie sur Twitch.", "banned": ["pseudo", "username"] },
     { "canonical": "emote",     "meaning": "Une image Twitch placée dans le texte d'un message.", "banned": ["emoticon", "smiley"] },
     { "canonical": "fragment",  "meaning": "Un morceau d'un message : un texte, ou une emote.", "banned": ["segment", "piece", "morceau"] },
+    { "canonical": "mention",   "meaning": "Le nickname d'un viewer cité dans un message avec une arobase (@Benitoad) : le renard le dit sans l'arobase.", "banned": ["arobase", "ping"] },
     { "canonical": "command",   "meaning": "Un message qui commence par « ! » (!discord, !lurk) : une demande à un bot, pas une phrase. Masqué par défaut.", "banned": ["cmd"] },
     { "canonical": "bot",       "meaning": "Un viewer automatique connu (Nightbot, StreamElements), listé dans settings.json. Ses messages sont masqués par défaut.", "banned": ["robot"] }
   ],

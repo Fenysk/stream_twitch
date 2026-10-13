@@ -94,6 +94,7 @@ export function createFoxChat({
     if (isOwn && !read.shouldReadOwn) return { ok: false, reason: { family: "own" } };
     const speech = toChatSpeech(raw, {
       maxLength: read.maxLength,
+      capitalsMaxLength: read.capitalsMaxLength,
       emoteNames: [...emotes.getNames(), ...read.emoteNames],
       bots: toChatBots(settings),
       insults,
@@ -130,6 +131,7 @@ export function createFoxChat({
     if (!rules?.shouldReadChat) return;
     const speech = toChatSpeech(raw, {
       maxLength: rules.maxLength,
+      capitalsMaxLength: rules.capitalsMaxLength,
       emoteNames: [...emotes.getNames(), ...rules.emoteNames],
       bots: toChatBots(settings),
       insults,

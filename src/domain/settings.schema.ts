@@ -71,6 +71,8 @@ const FOX_KEYS: readonly string[] = [
   "foxReadMaxLength",
   "foxReadGap",
   "foxReadQueueSize",
+  "foxCapitalsMaxLength",
+  "foxReadMaxWait",
   "foxEmoteNames",
   "foxListenMin",
   "foxListenMax",
@@ -205,6 +207,10 @@ export const SettingsFieldsSchema = z
     foxReadMaxLength: positiveWhole().max(500, "doit être d'au plus 500 caractères").optional(),
     foxReadGap: positiveWhole().optional(),
     foxReadQueueSize: positiveWhole().max(20, "doit être d'au plus 20 messages").optional(),
+    // Un message de cette longueur (en caractères) ou moins passe la règle des majuscules : « GG », « JEANRENARD ».
+    foxCapitalsMaxLength: positiveWhole().max(500, "doit être d'au plus 500 caractères").optional(),
+    // Le temps en ms qu'un message accepté peut attendre dans la queue ; au-delà, il n'est plus lu.
+    foxReadMaxWait: positiveWhole().optional(),
     foxEmoteNames: z
       .array(z.string("doit être un texte").min(1, "ne peut pas être vide"), "doit être une liste de noms")
       .optional(),
@@ -351,6 +357,8 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxReadMaxLength: true,
   foxReadGap: true,
   foxReadQueueSize: true,
+  foxCapitalsMaxLength: true,
+  foxReadMaxWait: true,
   foxListenMin: true,
   foxListenMax: true,
   foxReadSilence: true,

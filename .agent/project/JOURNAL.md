@@ -11,6 +11,18 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-13 — Un message qui attend trop longtemps dans la queue n'est plus lu : `wait` entre au lexique
+
+**Contexte.** Quand Alexis parle longtemps, les messages s'empilent dans la queue et seraient lus des minutes trop tard, hors de propos.
+**Décision.** La queue retire un message ordinaire dont le `wait` dépasse `foxReadMaxWait` (2 min, réglable dans l'onglet Renard) et l'écrit dans `server.log` ; un remerciement, le message qui lui est joint et une pique n'expirent jamais. La règle (`hasWaitedTooLong`) est pure, dans `domain` ; l'heure est injectée (`clock`). `lexique.json` : nouveau nom `wait` (bannis : attente, ttl).
+**Renoncement.** Faire expirer aussi les remerciements : un follow ou un sub dit tard vaut mieux que jamais.
+
+## 2026-10-13 — Une mention se lit sans arobase : `mention` entre au lexique
+
+**Contexte.** Le renard lisait « arobase Benitoad t'as vu ça » : l'arobase d'une mention n'a rien à faire dans la phrase dite.
+**Décision.** Une règle pure de `domain` (`toSpokenMentions`) retire l'arobase, ajoute une virgule quand la mention ouvre le message, et retire du texte lu un nickname cité que le filtre d'insultes refuse. `lexique.json` : nouveau nom `mention` (bannis : arobase, ping).
+**Renoncement.** Réécrire le texte brut du message : l'affichage du chat garde « @Benitoad », et la réaction du renard (mots-clés) lit toujours le texte tel qu'il est écrit.
+
 ## 2026-10-13 — Le retour de Twitch ramène sur l'onglet Renard : pas de page HTML à part, l'état se lit par `/api/twitch/status`
 
 **Contexte.** Après l'autorisation, Twitch renvoie le navigateur d'Alexis vers `/auth/twitch/callback` ; il faut lui dire si la connexion a marché.
