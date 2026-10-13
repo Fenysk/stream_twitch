@@ -59,8 +59,9 @@ export type UseSettings = {
   edit: (key: SliderKey, value: number | null) => void;
   // L'expression active : son identifiant, ou `null` pour la photo. S'applique aussitôt, sans attendre de frappe.
   choose: (expression: string | null) => Promise<void>;
-  // Un choix qui s'applique aussitôt, hors curseur : un style, une animation, une case cochée. `null` revient à la valeur par défaut.
-  change: (changes: SettingsChanges) => Promise<void>;
+  // Un choix qui s'applique aussitôt, hors curseur : un style, une animation, une case cochée, une liste de phrases. `null`
+  // revient à la valeur par défaut. Rend `true` quand le serveur l'a pris, `false` quand il l'a refusé (le refus s'écrit sous le champ).
+  change: (changes: SettingsChanges) => Promise<boolean>;
   // Revient aux valeurs par défaut de ces réglages seulement : ceux d'un autre onglet gardent les leurs.
   reset: (keys: readonly string[]) => Promise<void>;
 };
@@ -125,12 +126,19 @@ export const useSettings = (): UseSettings => {
 
   const change = useCallback(
     async (changes: SettingsChanges) => {
-      take(await ask("PUT", changes));
+      const answer = await ask("PUT", changes);
+      take(answer);
+      return "view" in answer;
     },
     [take],
   );
 
-  const choose = useCallback((expression: string | null) => change({ expression }), [change]);
+  const choose = useCallback(
+    async (expression: string | null) => {
+      await change({ expression });
+    },
+    [change],
+  );
 
   const reset = useCallback(
     async (keys: readonly string[]) => {

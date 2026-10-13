@@ -5,13 +5,15 @@
   gap: var(--space-4);
 }
 
-/* Un curseur, et sa phrase d'aide dessous */
-.settings-slider {
+/* Un curseur ou une case, et sa phrase d'aide dessous */
+.settings-slider,
+.settings-toggle {
   display: grid;
   gap: var(--space-1);
 }
 
-.settings-slider p {
+.settings-slider p,
+.settings-toggle p {
   margin: 0;
 }
 

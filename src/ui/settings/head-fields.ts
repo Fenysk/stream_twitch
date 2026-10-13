@@ -17,6 +17,23 @@ export type SliderSpec = {
   fallback: number;
 };
 
+// Les réglages qu'un champ multiligne change : ceux dont la valeur est une liste de textes, une phrase par ligne.
+export type ListKey = {
+  [Key in keyof EditableSettings]-?: EditableSettings[Key] extends readonly string[] | undefined
+    ? Key
+    : never;
+}[keyof EditableSettings];
+
+export type ListSpec = { key: ListKey; label: string; help: string; rows?: number };
+
+// Les réglages qu'une case change : ceux dont la valeur est vrai ou faux.
+export type ToggleKey = {
+  [Key in keyof EditableSettings]-?: EditableSettings[Key] extends boolean | undefined ? Key : never;
+}[keyof EditableSettings];
+
+// `fallback` : l'état montré quand le réglage n'a pas de valeur dans settings.json.
+export type ToggleSpec = { key: ToggleKey; label: string; help: string; fallback: boolean };
+
 // De `from` à `to` par pas de `step`, à l'entier près : 0.1 × 3 ne donne pas 0.30000000000000004.
 export const toSteps = (
   from: number,

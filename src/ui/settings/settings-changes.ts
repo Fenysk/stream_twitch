@@ -2,10 +2,11 @@
 
 import type { EditableSettings, LocalSettings, SettingsIssue } from "../../domain/settings.schema";
 import { CHAT_SLIDERS } from "./chat-fields";
+import { FOX_LISTS, FOX_SLIDERS } from "./fox-fields";
 import { SLIDERS, type SliderKey } from "./head-fields";
 
-// Les curseurs de tous les onglets : ceux de la tête, puis ceux du tchat.
-const ALL_SLIDERS = [...SLIDERS, ...CHAT_SLIDERS];
+// Les curseurs de tous les onglets : ceux de la tête, du tchat, puis du renard.
+const ALL_SLIDERS = [...SLIDERS, ...CHAT_SLIDERS, ...FOX_SLIDERS];
 const SLIDER_KEYS: readonly SliderKey[] = ALL_SLIDERS.map(({ key }) => key);
 
 // Les valeurs choisies, pas encore (ou pas) appliquées. `null` : le réglage local est retiré.
@@ -26,6 +27,15 @@ export const toChanges = (drafts: Drafts, local: LocalSettings, effective: Edita
   return changes;
 };
 
+// L'onglet est aux valeurs par défaut : aucune de ses clés dans settings.local.json, et aucun brouillon à envoyer.
+export const isDefaultTab = (
+  keys: readonly string[],
+  drafts: Drafts,
+  local: LocalSettings,
+  effective: EditableSettings,
+): boolean =>
+  keys.every((key) => !(key in local)) && Object.keys(toChanges(drafts, local, effective)).length === 0;
+
 // Après un changement accepté : seuls restent les brouillons que le serveur n'a pas pris en compte (un geste arrivé pendant l'envoi).
 export const toRemainingDrafts = (
   drafts: Drafts,
@@ -42,7 +52,9 @@ export const toRemainingDrafts = (
 };
 
 // Le serveur parle de `threshold` ; l'interface montre « Seuil du micro » : un refus se lit avec les libellés des curseurs.
-const LABELS = new Map<string, string>(ALL_SLIDERS.map(({ key, label }): [string, string] => [key, label]));
+const LABELS = new Map<string, string>(
+  [...ALL_SLIDERS, ...FOX_LISTS].map(({ key, label }): [string, string] => [key, label]),
+);
 
 const toReadable = (message: string): string =>
   message.replace(/\b[A-Za-z]+\b/g, (word) => {
@@ -55,9 +67,15 @@ export type FieldErrors = { byKey: Partial<Record<string, string>>; general: str
 // Un refus qui nomme un curseur s'écrit sous lui ; une règle entre plusieurs réglages, ou une panne, s'écrit en haut.
 export const toFieldErrors = (issues: readonly SettingsIssue[]): FieldErrors => {
   const known = new Set<string>(SLIDER_KEYS);
+  const lists = new Set<string>(FOX_LISTS.map(({ key }) => key));
   const errors: FieldErrors = { byKey: {}, general: [] };
   for (const { path, message } of issues) {
+    // Un refus sur une ligne d'une liste (`foxJabs.3`) s'écrit sous la liste, avec le numéro de la ligne.
+    const [listKey, index] = path.split(".");
     if (known.has(path)) errors.byKey[path] ??= toReadable(message);
+    else if (listKey !== undefined && lists.has(listKey) && index !== undefined && /^\d+$/.test(index)) {
+      errors.byKey[listKey] ??= `ligne ${Number(index) + 1} : ${toReadable(message)}`;
+    } else if (lists.has(path)) errors.byKey[path] ??= toReadable(message);
     else errors.general.push(toReadable(path ? `${path} : ${message}` : message));
   }
   return errors;

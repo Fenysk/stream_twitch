@@ -11,11 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ChatRouteImport } from './routes/chat'
+import { Route as FoxRouteImport } from './routes/fox'
 import { Route as HeadRouteImport } from './routes/head'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsChatRouteImport } from './routes/settings.chat'
 import { Route as SettingsCutRouteImport } from './routes/settings.cut'
+import { Route as SettingsFoxRouteImport } from './routes/settings.fox'
 import { Route as SettingsHeadRouteImport } from './routes/settings.head'
 
 const IndexRoute = IndexRouteImport.update({
@@ -26,6 +28,11 @@ const IndexRoute = IndexRouteImport.update({
 const ChatRoute = ChatRouteImport.update({
   id: '/chat',
   path: '/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FoxRoute = FoxRouteImport.update({
+  id: '/fox',
+  path: '/fox',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HeadRoute = HeadRouteImport.update({
@@ -53,6 +60,11 @@ const SettingsCutRoute = SettingsCutRouteImport.update({
   path: '/cut',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsFoxRoute = SettingsFoxRouteImport.update({
+  id: '/fox',
+  path: '/fox',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsHeadRoute = SettingsHeadRouteImport.update({
   id: '/head',
   path: '/head',
@@ -62,19 +74,23 @@ const SettingsHeadRoute = SettingsHeadRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
+  '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
+  '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
+  '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
+  '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings': typeof SettingsIndexRoute
 }
@@ -82,10 +98,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
+  '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
+  '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/': typeof SettingsIndexRoute
 }
@@ -94,29 +112,35 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/chat'
+    | '/fox'
     | '/head'
     | '/settings'
     | '/settings/chat'
     | '/settings/cut'
+    | '/settings/fox'
     | '/settings/head'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/chat'
+    | '/fox'
     | '/head'
     | '/settings/chat'
     | '/settings/cut'
+    | '/settings/fox'
     | '/settings/head'
     | '/settings'
   id:
     | '__root__'
     | '/'
     | '/chat'
+    | '/fox'
     | '/head'
     | '/settings'
     | '/settings/chat'
     | '/settings/cut'
+    | '/settings/fox'
     | '/settings/head'
     | '/settings/'
   fileRoutesById: FileRoutesById
@@ -124,6 +148,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChatRoute: typeof ChatRoute
+  FoxRoute: typeof FoxRoute
   HeadRoute: typeof HeadRoute
   SettingsRoute: typeof SettingsRouteWithChildren
 }
@@ -142,6 +167,13 @@ declare module '@tanstack/react-router' {
       path: '/chat'
       fullPath: '/chat'
       preLoaderRoute: typeof ChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fox': {
+      id: '/fox'
+      path: '/fox'
+      fullPath: '/fox'
+      preLoaderRoute: typeof FoxRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/head': {
@@ -179,6 +211,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsCutRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/fox': {
+      id: '/settings/fox'
+      path: '/fox'
+      fullPath: '/settings/fox'
+      preLoaderRoute: typeof SettingsFoxRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/head': {
       id: '/settings/head'
       path: '/head'
@@ -192,6 +231,7 @@ declare module '@tanstack/react-router' {
 interface SettingsRouteChildren {
   SettingsChatRoute: typeof SettingsChatRoute
   SettingsCutRoute: typeof SettingsCutRoute
+  SettingsFoxRoute: typeof SettingsFoxRoute
   SettingsHeadRoute: typeof SettingsHeadRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
@@ -199,6 +239,7 @@ interface SettingsRouteChildren {
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsChatRoute: SettingsChatRoute,
   SettingsCutRoute: SettingsCutRoute,
+  SettingsFoxRoute: SettingsFoxRoute,
   SettingsHeadRoute: SettingsHeadRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
@@ -210,6 +251,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRoute,
+  FoxRoute: FoxRoute,
   HeadRoute: HeadRoute,
   SettingsRoute: SettingsRouteWithChildren,
 }

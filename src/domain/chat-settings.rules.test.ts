@@ -7,7 +7,7 @@ import {
   toChatChannel,
   toChatLook,
 } from "./chat-settings.rules";
-import { SettingsSchema } from "./settings.schema";
+import { EditableSettingsSchema, SettingsSchema } from "./settings.schema";
 
 describe("toChatLook", () => {
   it("prend les valeurs par défaut quand les réglages ne disent rien", () => {
@@ -63,5 +63,25 @@ describe("toChatChannel", () => {
   it("lit la chaîne des réglages, et `fenysk` par défaut", () => {
     expect(toChatChannel({ chatChannel: "autre" })).toBe("autre");
     expect(toChatChannel({})).toBe("fenysk");
+  });
+});
+
+describe("chatChannelId", () => {
+  const file: unknown = JSON.parse(readFileSync("settings.json", "utf8"));
+  const settings = SettingsSchema.parse(file);
+
+  it("est l'identifiant Twitch de fenysk dans settings.json : 7TV et BTTV cherchent les emotes d'une chaîne par lui", () => {
+    expect(settings.chatChannelId).toBe("68710381");
+  });
+
+  it("n'accepte que des chiffres", () => {
+    expect(SettingsSchema.safeParse({ ...settings, chatChannelId: "abc" }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ ...settings, chatChannelId: "" }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ ...settings, chatChannelId: "12/34" }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ ...settings, chatChannelId: "123456" }).success).toBe(true);
+  });
+
+  it("n'est pas un réglage de l'interface : il reste dans settings.json", () => {
+    expect(Object.keys(EditableSettingsSchema.shape)).not.toContain("chatChannelId");
   });
 });

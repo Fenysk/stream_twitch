@@ -2,6 +2,7 @@ import type { ChatEvent, ChatMessage } from "../domain/chat.schema";
 import type { RawMessage } from "../domain/chat.types";
 import { toChatMessage } from "../domain/chat-message.rules";
 import { type ChatSettings, isSameChatLook, toChatBots, toChatLook } from "../domain/chat-settings.rules";
+import type { LiveEvent } from "../domain/live.types";
 
 // De quoi remplir une page qui se connecte (ou se rafraîchit) : les derniers messages, pas tout le tchat.
 export const CHAT_HISTORY_SIZE = 50;
@@ -10,7 +11,9 @@ export const CHAT_HISTORY_SIZE = 50;
 export type ChatSourceEvent =
   | { kind: "message"; message: RawMessage }
   | { kind: "message-deleted"; messageId: string }
-  | { kind: "viewer-messages-deleted"; viewerId: string };
+  | { kind: "viewer-messages-deleted"; viewerId: string }
+  // Un sub, un resub, un sub offert ou des bits : le renard les remercie.
+  | { kind: "live"; event: LiveEvent };
 
 // Le tchat vu du usecase : infra l'implémente (ComfyJS), app le câble.
 export type ChatSource = {
@@ -30,6 +33,9 @@ export type Chat = {
   stop(): void;
   // De nouveaux réglages, appliqués aussitôt : l'allure part vers les pages, les bots valent pour les messages suivants.
   update(settings: ChatSettings): void;
+  // Les évènements de la source tels quels (le message brut, avec son viewer et ses emotes, et les suppressions de la
+  // modération) : le renard y lit les messages. Ils arrivent après la publication aux pages.
+  subscribeSource(listener: (event: ChatSourceEvent) => void): () => void;
 };
 
 export type ChatDeps = { source: ChatSource; settings: ChatSettings; clock: () => number };
@@ -41,6 +47,7 @@ export function createChat({ source, settings, clock }: ChatDeps): Chat {
   let bots = toChatBots(settings);
   let history: Entry[] = [];
   const listeners = new Set<(event: ChatEvent) => void>();
+  const sourceListeners = new Set<(event: ChatSourceEvent) => void>();
 
   const publish = (event: ChatEvent) => {
     for (const listener of listeners) listener(event);
@@ -71,6 +78,7 @@ export function createChat({ source, settings, clock }: ChatDeps): Chat {
         deleteWhere((entry) => entry.viewerId === event.viewerId);
         break;
     }
+    for (const listener of sourceListeners) listener(event);
   };
 
   return {
@@ -82,6 +90,12 @@ export function createChat({ source, settings, clock }: ChatDeps): Chat {
           listeners.delete(listener);
         };
       },
+    },
+    subscribeSource(listener) {
+      sourceListeners.add(listener);
+      return () => {
+        sourceListeners.delete(listener);
+      };
     },
     start: () => source.start(receive),
     stop: () => source.stop(),

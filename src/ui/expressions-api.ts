@@ -27,7 +27,7 @@ const toRefusal = async (response: Response): Promise<string> => {
   return `le serveur répond ${response.status}`;
 };
 
-const ask = async <Value>(
+export const ask = async <Value>(
   path: string,
   init: RequestInit,
   toValue: (body: unknown) => Value | undefined,

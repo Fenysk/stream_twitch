@@ -181,3 +181,121 @@ describe("createChatClient : les suppressions", () => {
     expect(messages).toHaveLength(1);
   });
 });
+
+// Les subs, les subs offerts et les cheers arrivent par le tchat (IRC), sans jeton : ComfyJS les donne tels quels.
+describe("createChatClient : les évènements du live", () => {
+  const TIER = { prime: false, plan: "1000", planName: null };
+
+  it("donne un sub sans message : le pseudo seul", () => {
+    const { comfy, events } = setup();
+    comfy.onSub("Alice", "", TIER, extra());
+    expect(events).toEqual([{ kind: "live", event: { kind: "sub", user: "Alice", message: null } }]);
+  });
+
+  it("donne un sub avec son message, comme un message du tchat (viewer, emotes)", () => {
+    const { comfy, events } = setup();
+    comfy.onSub("Alice", "Merci Kappa", TIER, extra({ messageEmotes: { "25": ["6-10"] } }));
+    expect(events).toEqual([
+      {
+        kind: "live",
+        event: {
+          kind: "sub",
+          user: "Alice",
+          message: {
+            id: "msg-1",
+            viewerId: "42",
+            viewerLogin: "alice",
+            nickname: "Alice",
+            color: "#1E90FF",
+            text: "Merci Kappa",
+            emotes: [{ id: "25", start: 6, end: 10 }],
+            isCommand: false,
+          },
+        },
+      },
+    ]);
+  });
+
+  it("donne un resub comme un sub, avec son message", () => {
+    const { comfy, events } = setup();
+    comfy.onResub("Alice", "Encore un mois !", 3, 7, TIER, extra({ messageEmotes: null }));
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    expect(event?.kind).toBe("live");
+    expect(event?.kind === "live" ? event.event.kind : null).toBe("sub");
+    expect(event?.kind === "live" && event.event.kind === "sub" ? event.event.message?.text : null).toBe(
+      "Encore un mois !",
+    );
+  });
+
+  it("donne un sub dont le message est illisible sans message : le sub est remercié quand même", () => {
+    const { comfy, events } = setup();
+    comfy.onSub("Alice", "Merci", TIER, null);
+    expect(events).toEqual([{ kind: "live", event: { kind: "sub", user: "Alice", message: null } }]);
+  });
+
+  it("donne un sub offert à une personne : le donateur et celui qui reçoit", () => {
+    const { comfy, events } = setup();
+    comfy.onSubGift("Alice", 0, "Bob", 1, TIER, extra({ userState: { "msg-param-recipient-id": "7" } }));
+    expect(events).toEqual([{ kind: "live", event: { kind: "gift", user: "Alice", recipient: "Bob" } }]);
+  });
+
+  it("ignore un sub offert qui fait partie d'une série : la série compte pour un seul évènement", () => {
+    const { comfy, events } = setup();
+    comfy.onSubGift(
+      "Alice",
+      0,
+      "Bob",
+      5,
+      TIER,
+      extra({ userState: { "msg-param-community-gift-id": "123456" } }),
+    );
+    expect(events).toEqual([]);
+  });
+
+  it("donne une série de subs offerts : le donateur et le nombre", () => {
+    const { comfy, events } = setup();
+    comfy.onSubMysteryGift("Alice", 5, 12, TIER, extra());
+    expect(events).toEqual([{ kind: "live", event: { kind: "mystery-gift", user: "Alice", count: 5 } }]);
+  });
+
+  it("une série de 5 subs offerts donne un seul évènement, même avec ses 5 sub offerts qui suivent", () => {
+    const { comfy, events } = setup();
+    const series = extra({ userState: { "msg-param-community-gift-id": "123456" } });
+    comfy.onSubMysteryGift("Alice", 5, 12, TIER, extra());
+    for (const recipient of ["B1", "B2", "B3", "B4", "B5"]) {
+      comfy.onSubGift("Alice", 0, recipient, 12, TIER, series);
+    }
+    expect(events).toEqual([{ kind: "live", event: { kind: "mystery-gift", user: "Alice", count: 5 } }]);
+  });
+
+  it("donne des bits : le pseudo, le nombre, et le message", () => {
+    const { comfy, events } = setup();
+    comfy.onCheer("Alice", "Cheer100 bravo", 100, {}, extra({ messageEmotes: null }));
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    expect(event?.kind === "live" && event.event.kind === "cheer" ? event.event.bits : null).toBe(100);
+    expect(event?.kind === "live" && event.event.kind === "cheer" ? event.event.message?.text : null).toBe(
+      "Cheer100 bravo",
+    );
+  });
+
+  it("donne des bits sans message quand il n'y en a pas, ou qu'il est illisible", () => {
+    const { comfy, events } = setup();
+    comfy.onCheer("Alice", "", 100, {}, extra());
+    comfy.onCheer("Bob", "Cheer50", 50, {}, undefined);
+    expect(events).toEqual([
+      { kind: "live", event: { kind: "cheer", user: "Alice", bits: 100, message: null } },
+      { kind: "live", event: { kind: "cheer", user: "Bob", bits: 50, message: null } },
+    ]);
+  });
+
+  it("marque comme commande le message d'un sub qui commence par « ! »", () => {
+    const { comfy, events } = setup();
+    comfy.onSub("Alice", "!lurk", TIER, extra());
+    const event = events[0];
+    expect(event?.kind === "live" && event.event.kind === "sub" ? event.event.message?.isCommand : null).toBe(
+      true,
+    );
+  });
+});

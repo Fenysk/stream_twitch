@@ -180,3 +180,55 @@ describe("createChat : update", () => {
     expect(message?.kind === "message" && message.message.isHidden).toBe(true);
   });
 });
+
+describe("createChat : les évènements de la source, pour le renard", () => {
+  it("donne à qui s'y abonne le message brut, avec son viewer et ses emotes, après l'avoir publié aux pages", () => {
+    const { chat, events, sendMessage } = setup();
+    const received: ChatSourceEvent[] = [];
+    chat.subscribeSource((event) => {
+      received.push(event);
+      expect(events.some((event) => event.kind === "message")).toBe(true);
+    });
+    sendMessage({ id: "m7", viewerId: "7", text: "Bonjour" });
+    expect(received).toEqual([
+      { kind: "message", message: raw({ id: "m7", viewerId: "7", text: "Bonjour" }) },
+    ]);
+  });
+
+  it("donne aussi les suppressions : un message, ou tous ceux d'un viewer banni ou en timeout", () => {
+    const { chat, fake } = setup();
+    const received: ChatSourceEvent[] = [];
+    chat.subscribeSource((event) => received.push(event));
+    fake.send({ kind: "message-deleted", messageId: "m1" });
+    fake.send({ kind: "viewer-messages-deleted", viewerId: "42" });
+    expect(received).toEqual([
+      { kind: "message-deleted", messageId: "m1" },
+      { kind: "viewer-messages-deleted", viewerId: "42" },
+    ]);
+  });
+
+  it("donne les messages que l'affichage masque (commandes, bots) : c'est au renard de les juger", () => {
+    const { chat, sendMessage } = setup();
+    const received: ChatSourceEvent[] = [];
+    chat.subscribeSource((event) => received.push(event));
+    sendMessage({ text: "!lurk", emotes: [], isCommand: true });
+    expect(received).toHaveLength(1);
+  });
+
+  it("n'envoie plus rien à qui s'est désabonné", () => {
+    const { chat, sendMessage } = setup();
+    const received: ChatSourceEvent[] = [];
+    const unsubscribe = chat.subscribeSource((event) => received.push(event));
+    unsubscribe();
+    sendMessage();
+    expect(received).toEqual([]);
+  });
+
+  it("ne change rien pour l'affichage : l'historique et le flux des pages restent ceux d'avant", () => {
+    const { chat, events, sendMessage } = setup();
+    chat.subscribeSource(() => undefined);
+    sendMessage({ id: "m1" });
+    expect(snapshotMessages(chat).map(({ id }) => id)).toEqual(["m1"]);
+    expect(events.map(({ kind }) => kind)).toEqual(["message"]);
+  });
+});

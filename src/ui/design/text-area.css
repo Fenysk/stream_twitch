@@ -1,0 +1,12 @@
+/* Un champ de texte sur plusieurs lignes : le fond et le focus des champs (text-field.css), mais haut de ses lignes, aux coins
+   d'un cadre et non d'une pilule */
+
+.lp-textarea {
+  height: auto;
+  min-height: calc(var(--control-size) * 2);
+  padding: var(--space-2) 14px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}

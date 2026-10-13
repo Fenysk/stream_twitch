@@ -10,12 +10,12 @@ import { SLIDER_KEYS, SLIDERS } from "./head-fields";
 import { HeadPreview } from "./head-preview";
 import { MicMeter } from "./mic-meter";
 import { SettingSlider } from "./setting-slider";
-import { toChanges } from "./settings-changes";
+import { isDefaultTab } from "./settings-changes";
 import { useExpressions } from "./use-expressions";
 import { useMicLevel } from "./use-mic-level";
 import { useSettings } from "./use-settings";
 
-// Les réglages de cet onglet : revenir aux valeurs par défaut ne touche pas à ceux du tchat.
+// Les réglages de cet onglet : revenir aux valeurs par défaut ne touche pas à ceux du tchat ni du renard.
 const HEAD_KEYS = [...SLIDER_KEYS, "expression"];
 
 export const HeadSettingsTab = () => {
@@ -25,9 +25,7 @@ export const HeadSettingsTab = () => {
   const { view } = settings;
   if (!view) return <p className="lp-type-body lp-muted">{DESIGN_TEXTS.loading}</p>;
   const { effective } = view;
-  const isDefault =
-    HEAD_KEYS.every((key) => !(key in view.local)) &&
-    Object.keys(toChanges(settings.drafts, view.local, effective)).length === 0;
+  const isDefault = isDefaultTab(HEAD_KEYS, settings.drafts, view.local, effective);
   return (
     <div className="settings-tab">
       {expressions && expressions.length > 1 && (

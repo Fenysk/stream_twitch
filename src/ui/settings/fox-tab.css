@@ -1,0 +1,42 @@
+/* L'onglet « Renard » : « Faire parler », puis un groupe de curseurs par comportement. La mise en page de l'aperçu et des
+   contrôles est celle de l'onglet de la tête (head-preview.css). */
+
+.fox-speak {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.fox-speak-actions {
+  display: flex;
+}
+
+.fox-group {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.fox-group h2 {
+  margin: 0;
+}
+
+/* Les boutons du bloc « Connexion à Twitch » */
+.twitch-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Une liste de phrases : le champ, puis son aide et ses variables dessous */
+.settings-lines {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.settings-lines p {
+  margin: 0;
+}
+
+/* Le renard qui s'en va glisse hors du cadre, comme hors de la source dans OBS : le bas du cadre le coupe. */
+.fox-preview-stage {
+  overflow: hidden;
+  padding-bottom: 0;
+}

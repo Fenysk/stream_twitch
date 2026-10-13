@@ -1,0 +1,253 @@
+# Les insultes et les propos haineux que Jean-Renard ne lit pas à voix haute.
+#
+# Une entrée par ligne. `#` ouvre un commentaire. Les accents, les majuscules, les chiffres à la place des lettres
+# (0 en o, 1 en i, 3 en e, 4 en a, 5 en s, @ en a, $ en s), les lettres répétées, les espaces et les signes au milieu d'un
+# mot sont ignorés : « c0nn4rd », « c o n n a r d » et « connnnard » sont « connard ».
+#
+# Une lettre écrite DOUBLE dans l'entrée reste double : « connard » veut « nn » (« conard » n'est pas trouvé), « =conne » ne
+# touche pas « cône » et « =nigger » ne touche pas « Niger ». Écrire l'entrée comme le mot s'écrit. Une lettre seule dans
+# l'entrée accepte d'être répétée à volonté (« saaalope » est « salope »).
+#
+#   mot         cherché PARTOUT dans le message, espaces et signes retirés. À réserver aux mots que rien d'innocent ne contient :
+#               au moins 5 lettres une fois les lettres répétées ramenées à une.
+#   =mot        cherché comme MOT ENTIER seulement (le pluriel compte, « pique-nique » est un seul mot). Pour les mots courts ou
+#               qui se cachent dans d'autres mots : « =nique » ne touche ni « technique » ni « pique-nique ».
+#   plusieurs mots (sans « = »)   une expression : « sale juif » est cherchée avec ou sans espaces.
+#
+# Pour compléter la liste : ajouter une ligne, relancer le serveur. Le journal du serveur dit, pour chaque message ignoré,
+# laquelle de ces entrées a joué. Une entrée trop large (un mot ordinaire ignoré à tort) se corrige en la passant en
+# « =mot », ou en la remplaçant par une expression plus longue. Un test (insults.repository.test.ts) refuse la liste si elle
+# ignore une des phrases ordinaires qu'il connaît : y ajouter la phrase qui a posé problème.
+
+# --- Insultes vulgaires
+connard
+connasse
+# Les orthographes courantes sans la lettre doublée : une lettre doublée dans l'entrée en veut deux dans le message.
+conard
+conasse
+poufiasse
+=con
+=conne
+enculé
+enfoiré
+=salope
+salopard
+=saloperie
+salaud
+pétasse
+putain
+=pute
+putasse
+pouffiasse
+grognasse
+=garce
+bâtard
+fils de pute
+fille de pute
+=fdp
+=ntm
+=tg
+=ftg
+=tglc
+=vtff
+=ptn
+=ptain
+=chier
+merde
+trou du cul
+trouduc
+tête de noeud
+crevard
+dégénéré
+lèche cul
+raclure
+gros porc
+abruti
+crétin
+imbécile
+idiot
+ta gueule
+ferme ta gueule
+va te faire foutre
+sale pute
+sale conne
+
+# --- Le verbe « niquer » (« nique » seul se cache dans « technique », « unique » et « pique-nique »)
+=nique
+=niquer
+=niquez
+=niquent
+=niquait
+=niquerai
+nique ta mère
+nique ta race
+nique ta grand mère
+nique ta famille
+nique tes morts
+nique toi
+nique sa mère
+ta mère en slip
+
+# --- Racisme
+sale arabe
+sale noir
+sale blanc
+sale nègre
+sale négro
+sale juif
+sale asiat
+sale chinois
+sale gitan
+sale rom
+sale musulman
+sale africain
+sale migrant
+sale race
+sale macaque
+sale singe
+sale françaissale raton
+sale bougnoule
+sous race
+sous homme
+=negre
+=negresse
+=negro
+bamboula
+bougnoule
+=bicot
+crouille
+crouillat
+youpin
+=youtre
+=feuj
+chinetoque
+niakoué
+bledard
+heil hitler
+sieg heil
+vive hitler
+hitler avait raison
+hitler a eu raison
+mort aux juifs
+mort aux arabes
+mort aux noirs
+mort aux blancs
+mort aux pd
+mort aux gays
+mort aux homos
+mort aux musulmans
+mort aux chrétiens
+retourne dans ton pays
+rentre dans ton pays
+retourne en afrique
+retourne dans ta jungle
+chambre à gaz
+juifs au four
+white power
+sandnigger
+porch monkey
+# « nigger » garde ses deux g : « Niger » (le pays) est lu.
+=nigger
+=nigga
+=kike
+=chink
+=spic
+=gook
+=wetback
+=beaner
+=paki
+=towelhead
+
+# --- Homophobie, transphobie
+=pd
+=pede
+=tapette
+tarlouze
+tafiole
+=fiotte
+=gouine
+=tantouze
+=tantouse
+=travelo
+sale pd
+sale gay
+sale homo
+sale lesbienne
+sale trans
+=faggot
+=tranny
+=dyke
+
+# --- Sexisme
+retourne à la cuisine
+suce moi
+suce ma bite
+montre tes seins
+montre ton cul
+envoie des nudes
+=nudes
+=catin
+te violer
+viol collectif
+
+# --- Validisme
+mongolien
+=mongolo
+trisomique
+débile mental
+malade mental
+=spastique
+sale handicapé
+sale autiste
+
+# --- Menaces, harcèlement, suicide
+=kys
+kill yourself
+neck yourself
+i hope you die
+va te tuer
+va te suicider
+va te pendre
+pends toi
+suicide toi
+suicidez vous
+tue toi
+va crever
+crève en enfer
+brûle en enfer
+mange tes morts
+je vais te tuer
+je vais te buter
+on va te buter
+je connais ton adresse
+je vais te défoncer
+je vais te péter la gueule
+je te pète la gueule
+
+# --- Pédophilie
+pédophile
+=pedo
+
+# --- Anglais (les insultes qu'on voit le plus dans un tchat de stream)
+fuck you
+fuck off
+=fuck
+=fucker
+=fucking
+motherfucker
+cocksucker
+dickhead
+asshole
+dumbass
+jackass
+=bitch
+=cunt
+=whore
+=slut
+=pussy
+=twat
+=wanker
+=bastard
+=retarded
+=stfu
+=gtfo

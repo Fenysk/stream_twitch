@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RawMessage } from "./chat.types";
-import { toChatMessage } from "./chat-message.rules";
+import { toChatMessage, toHiddenKind } from "./chat-message.rules";
 
 const raw = (overrides: Partial<RawMessage> = {}): RawMessage => ({
   id: "msg-1",
@@ -42,5 +42,19 @@ describe("toChatMessage", () => {
   it("n'envoie pas une couleur qui n'est pas #RRGGBB : elle redevient la couleur par défaut", () => {
     expect(toChatMessage(raw({ color: "red" }), [], 0).color).toBeNull();
     expect(toChatMessage(raw({ color: null }), [], 0).color).toBeNull();
+  });
+});
+
+describe("toHiddenKind", () => {
+  const bots = ["nightbot"];
+
+  it("dit une commande, un bot, ou rien pour un viewer ordinaire", () => {
+    expect(toHiddenKind(raw({ text: "!lurk", emotes: [], isCommand: true }), bots)).toBe("command");
+    expect(toHiddenKind(raw({ viewerLogin: "NightBot" }), bots)).toBe("bot");
+    expect(toHiddenKind(raw(), bots)).toBeNull();
+  });
+
+  it("donne la commande avant le bot : une commande d'un bot est une commande", () => {
+    expect(toHiddenKind(raw({ viewerLogin: "nightbot", isCommand: true }), bots)).toBe("command");
   });
 });
