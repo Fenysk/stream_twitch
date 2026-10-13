@@ -1,4 +1,5 @@
--- Lance le serveur de la tête (`pnpm start`) quand OBS charge ce script, sans fenêtre de console.
+-- Lance le serveur de la tête (`pnpm start --open`) quand OBS charge ce script, sans fenêtre de console.
+-- `--open` ouvre aussi les réglages dans le navigateur par défaut, une fois le serveur prêt.
 -- Le script n'arrête rien : le serveur s'arrête seul quand OBS se ferme ou ne revient pas en 30 s.
 -- Sortie du serveur : server.log, à la racine du dépôt.
 local obs = obslua
@@ -67,7 +68,7 @@ local function startServer()
   local root = getRepositoryRoot()
   local shell = os.getenv("ComSpec") or "C:\\Windows\\System32\\cmd.exe"
   -- `/s /c "…"` : cmd retire les guillemets extérieurs. Le dossier courant évite tout chemin à guillemets (« projets perso »).
-  local commandLine = toWide(string.format('"%s" /d /s /c "pnpm start >> server.log 2>&1"', shell))
+  local commandLine = toWide(string.format('"%s" /d /s /c "pnpm start --open >> server.log 2>&1"', shell))
 
   local startup = ffi.new("STARTUPINFOW")
   startup.cb = ffi.sizeof("STARTUPINFOW")
@@ -86,7 +87,7 @@ local function startServer()
 end
 
 function script_description()
-  return "Lance le serveur de la tête (pnpm start) au chargement du script, sans fenêtre. Il s'arrête seul quand OBS se ferme."
+  return "Lance le serveur de la tête (pnpm start) au chargement du script, sans fenêtre, et ouvre les réglages dans le navigateur. Le serveur s'arrête seul quand OBS se ferme."
 end
 
 function script_load(settings)

@@ -9,7 +9,7 @@ pnpm gate
 
 ## La tête dans OBS
 
-- Lancer : `pnpm start` (construit puis sert `http://localhost:4747/head`, port 4747), ou dans OBS : Outils, Scripts, +, `obs/start-server.lua` (journal : `server.log`) ; le serveur s'arrête avec OBS.
+- Lancer : `pnpm start` (construit puis sert `http://localhost:4747/head`, port 4747), ou dans OBS : Outils, Scripts, +, `obs/start-server.lua` (journal : `server.log`) ; il ouvre aussi les réglages dans le navigateur par défaut, et le serveur s'arrête avec OBS.
 - Source navigateur OBS : URL `http://localhost:4747/head`, taille conseillée 800 × 700.
 - Réglages en direct : `http://localhost:4747/` (menu, vumètre du micro) ; ils restent dans `settings.local.json`, `settings.json` garde les valeurs par défaut.
 - Mot de passe du WebSocket d'OBS : copier `.env.example` en `.env`, remplir `OBS_PASSWORD`.
