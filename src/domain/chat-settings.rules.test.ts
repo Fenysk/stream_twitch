@@ -57,6 +57,17 @@ describe("toChatBots", () => {
     expect(toChatBots({ chatBots: ["NightBot", "StreamElements"] })).toEqual(["nightbot", "streamelements"]);
     expect(toChatBots({})).toEqual([]);
   });
+
+  it("ignore les espaces autour, un @ devant le nom et les lignes vides", () => {
+    expect(toChatBots({ chatBots: [" WZBot ", "@NightBot", "@", "  ", ""] })).toEqual(["wzbot", "nightbot"]);
+  });
+
+  it("compte WZBot parmi les bots de settings.json, à côté de WizeBot : ce sont deux comptes", () => {
+    const file: unknown = JSON.parse(readFileSync("settings.json", "utf8"));
+    const bots = toChatBots(SettingsSchema.parse(file));
+    expect(bots).toContain("wzbot");
+    expect(bots).toContain("wizebot");
+  });
 });
 
 describe("toChatChannel", () => {

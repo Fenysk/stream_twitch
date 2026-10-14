@@ -6,6 +6,7 @@ import {
   FOX_GROUPS,
   FOX_KEYS,
   FOX_LISTS,
+  FOX_READ_LISTS,
   FOX_READ_SLIDERS,
   FOX_SLIDER_KEYS,
   FOX_SLIDERS,
@@ -16,7 +17,7 @@ import { SLIDER_KEYS } from "./head-fields";
 import { isDefaultTab, toChanges, toFieldErrors } from "./settings-changes";
 
 // Les réglages de chaque onglet, comme les onglets les désignent à « Revenir aux valeurs par défaut » : la tête (ses six
-// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses cinquante-neuf curseurs, ses trente-sept listes, ses deux heures, la voix et cinq cases).
+// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses cinquante-neuf curseurs, ses trente-huit listes, ses deux heures, la voix et cinq cases).
 const HEAD_KEYS = [...SLIDER_KEYS, "expression"];
 const CHAT_KEYS = [
   ...CHAT_SLIDERS.map(({ key }) => key),
@@ -325,6 +326,7 @@ describe("les listes de phrases de l'onglet Renard", () => {
       "foxOvertimePhrases",
       "foxBedtimePhrases",
       "foxPronunciations",
+      "chatBots",
     ]);
     expect(FOX_GROUPS.find(({ title }) => title === "Remerciements")?.lists?.map(({ key }) => key)).toEqual([
       "foxThanksFollow",
@@ -390,6 +392,21 @@ describe("les listes de phrases de l'onglet Renard", () => {
     ]);
   });
 
+  it("ont, avec la lecture du tchat, la liste des comptes ignorés : un compte par ligne", () => {
+    expect(FOX_READ_LISTS.map(({ key }) => key)).toEqual(["chatBots"]);
+    const [bots] = FOX_READ_LISTS;
+    expect(bots?.label).toBe("Comptes ignorés");
+    expect(bots?.help).toBe(
+      "Un compte par ligne. Leurs messages sont masqués du tchat affiché et jamais lus par Jean-Renard.",
+    );
+  });
+
+  it("lisent le refus d'une ligne des comptes ignorés sous leur champ, avec son libellé", () => {
+    const errors = toFieldErrors([{ path: "chatBots.1", message: "ne peut pas être vide" }]);
+    expect(errors.byKey).toEqual({ chatBots: "ligne 2 : ne peut pas être vide" });
+    expect(errors.general).toEqual([]);
+  });
+
   it("lisent le refus d'une ligne sous la liste, avec son numéro, et le refus de la liste entière sous elle", () => {
     const errors = toFieldErrors([
       { path: "foxJabs.3", message: "ne peut pas être vide" },
@@ -404,8 +421,9 @@ describe("les listes de phrases de l'onglet Renard", () => {
 });
 
 describe("les clés de chaque onglet", () => {
-  it("sont cent quatre pour le renard : ses cinquante-neuf curseurs, ses trente-sept listes, ses deux heures, les cases de l'accueil, des remerciements et du bilan, la voix et les deux cases de la lecture du tchat", () => {
-    expect(FOX_KEYS).toHaveLength(104);
+  it("sont cent cinq pour le renard : ses cinquante-neuf curseurs, ses trente-huit listes, ses deux heures, les cases de l'accueil, des remerciements et du bilan, la voix et les deux cases de la lecture du tchat", () => {
+    expect(FOX_KEYS).toHaveLength(105);
+    expect(FOX_KEYS).toContain("chatBots");
     expect(FOX_KEYS).toContain("foxThanksPrediction");
     expect(FOX_KEYS).toContain("foxThanksPredictionNoLoser");
     expect(FOX_KEYS).toContain("foxClashRewards");

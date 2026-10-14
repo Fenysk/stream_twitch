@@ -778,8 +778,8 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
   },
 ];
 
-// La lecture du tchat : cinq curseurs ; les deux interrupteurs (« Lire le tchat », « Lire mes messages ») sont des cases
-// (fox-settings-tab.tsx). Un message du tchat tient dans 500 caractères ; la valeur de repli est celle de settings.json.
+// La lecture du tchat : cinq curseurs et une liste ; les deux interrupteurs (« Lire le tchat », « Lire mes messages ») sont des
+// cases (fox-settings-tab.tsx). Un message du tchat tient dans 500 caractères ; la valeur de repli est celle de settings.json.
 export const FOX_READ_SLIDERS: readonly SliderSpec[] = [
   {
     key: "foxReadMaxLength",
@@ -818,6 +818,16 @@ export const FOX_READ_SLIDERS: readonly SliderSpec[] = [
   },
 ];
 
+// La liste de la lecture du tchat : les comptes masqués et jamais lus (chatBots).
+export const FOX_READ_LISTS: readonly ListSpec[] = [
+  {
+    key: "chatBots",
+    label: "Comptes ignorés",
+    help: "Un compte par ligne. Leurs messages sont masqués du tchat affiché et jamais lus par Jean-Renard.",
+    rows: 8,
+  },
+];
+
 export const FOX_SLIDERS: readonly SliderSpec[] = [
   ...FOX_GROUPS.flatMap(({ sliders }) => sliders),
   ...FOX_READ_SLIDERS,
@@ -825,8 +835,11 @@ export const FOX_SLIDERS: readonly SliderSpec[] = [
 
 export const FOX_SLIDER_KEYS: readonly SliderKey[] = FOX_SLIDERS.map(({ key }) => key);
 
-// Les listes de phrases de l'onglet, de tous ses groupes.
-export const FOX_LISTS: readonly ListSpec[] = FOX_GROUPS.flatMap(({ lists }) => lists ?? []);
+// Les listes de l'onglet : celles de tous ses groupes, puis celle de la lecture du tchat.
+export const FOX_LISTS: readonly ListSpec[] = [
+  ...FOX_GROUPS.flatMap(({ lists }) => lists ?? []),
+  ...FOX_READ_LISTS,
+];
 
 // Les heures des groupes de l'onglet.
 export const FOX_TIMES: readonly TimeSpec[] = FOX_GROUPS.flatMap(({ times }) => times ?? []);

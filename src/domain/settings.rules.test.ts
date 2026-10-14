@@ -156,6 +156,26 @@ describe("toNextLocal", () => {
     }
   });
 
+  it("accepte la liste des comptes ignorés, la vide et la retire avec null", () => {
+    expect(toNextLocal({}, { chatBots: ["nightbot", "WZBot"] })).toEqual({
+      ok: true,
+      value: { chatBots: ["nightbot", "WZBot"] },
+    });
+    expect(toNextLocal({}, { chatBots: [] })).toEqual({ ok: true, value: { chatBots: [] } });
+    expect(toNextLocal({ chatBots: ["wzbot"], tilt: 0.5 }, { chatBots: null })).toEqual({
+      ok: true,
+      value: { tilt: 0.5 },
+    });
+  });
+
+  it("refuse un compte ignoré vide ou qui n'est pas un texte", () => {
+    const result = toNextLocal({}, { chatBots: ["wzbot", ""] });
+    expect(result.ok ? [] : result.issues).toContainEqual({
+      path: "chatBots.1",
+      message: "ne peut pas être vide",
+    });
+  });
+
   it("refuse l'adresse d'OBS et un réglage inconnu", () => {
     const result = toNextLocal({}, { obsAddress: "ws://autre:4455", foo: 1 });
     expect(result.ok).toBe(false);

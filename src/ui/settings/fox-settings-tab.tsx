@@ -9,7 +9,7 @@ import { Checkbox } from "../design/checkbox";
 import { ChoiceList } from "../design/choice-list";
 import { DESIGN_TEXTS } from "../design/design-texts";
 import { useFox } from "../use-fox";
-import { FOX_GROUPS, FOX_KEYS, FOX_READ_SLIDERS } from "./fox-fields";
+import { FOX_GROUPS, FOX_KEYS, FOX_READ_LISTS, FOX_READ_SLIDERS } from "./fox-fields";
 import { FoxPreview } from "./fox-preview";
 import { FoxSpeakForm } from "./fox-speak-form";
 import { LinesField } from "./lines-field";
@@ -112,6 +112,9 @@ export const FoxSettingsTab = () => {
             </p>
             {FOX_READ_SLIDERS.map((spec) => (
               <SettingSlider key={spec.key} spec={spec} settings={settings} effective={effective} />
+            ))}
+            {FOX_READ_LISTS.map((spec) => (
+              <LinesField key={spec.key} spec={spec} settings={settings} effective={effective} />
             ))}
           </section>
           <div className="settings-actions">

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { RawMessage } from "./chat.types";
 import {
@@ -12,7 +13,8 @@ import {
   toWaitText,
 } from "./chat-filter.rules";
 import { toInsultList } from "./chat-insults.rules";
-import type { Settings } from "./settings.schema";
+import { toChatBots } from "./chat-settings.rules";
+import { type Settings, SettingsSchema } from "./settings.schema";
 
 const rules: ChatFilterRules = {
   maxLength: 150,
@@ -38,6 +40,27 @@ const reasonOf = (message: RawMessage, custom: ChatFilterRules = rules): FilterR
   const speech = toChatSpeech(message, custom);
   return speech.ok ? null : speech.reason;
 };
+
+describe("toChatSpeech : les comptes ignorés", () => {
+  it("ignore WZBot, quelle que soit la casse du compte ou de la liste", () => {
+    const bots = toChatBots({ chatBots: ["WZBot"] });
+    expect(reasonOf(raw("Bienvenue !", { viewerLogin: "wzbot" }), { ...rules, bots })).toEqual({
+      family: "bot",
+    });
+    expect(reasonOf(raw("Bienvenue !", { viewerLogin: "WZBot" }), { ...rules, bots })).toEqual({
+      family: "bot",
+    });
+    expect(reasonOf(raw("Bienvenue !", { viewerLogin: "alice" }), { ...rules, bots })).toBeNull();
+  });
+
+  it("ignore WZBot avec la liste de settings.json", () => {
+    const file: unknown = JSON.parse(readFileSync("settings.json", "utf8"));
+    const bots = toChatBots(SettingsSchema.parse(file));
+    expect(reasonOf(raw("Bienvenue !", { viewerLogin: "WZBot" }), { ...rules, bots })).toEqual({
+      family: "bot",
+    });
+  });
+});
 
 describe("toChatSpeech : un message ordinaire", () => {
   it("rend le texte seul, sans le nickname", () => {

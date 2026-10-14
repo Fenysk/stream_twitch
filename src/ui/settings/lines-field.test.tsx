@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { EditableSettings } from "../../domain/settings.schema";
+import { FOX_READ_LISTS } from "./fox-fields";
 import { LinesField } from "./lines-field";
 import type { UseSettings } from "./use-settings";
 
@@ -38,6 +39,22 @@ describe("le champ d'une liste de phrases", () => {
 
   it("n'écrit pas de variables pour une liste qui n'en a pas (les piques)", () => {
     expect(render({ foxJabs: ["A"] })).not.toContain("Variables");
+  });
+
+  it("montre les comptes ignorés, un par ligne, sous leur libellé et leur aide", () => {
+    const [botsSpec] = FOX_READ_LISTS;
+    if (!botsSpec) throw new Error("liste des comptes ignorés absente");
+    const html = renderToStaticMarkup(
+      createElement(LinesField, {
+        spec: botsSpec,
+        settings: settings(),
+        effective: { chatBots: ["nightbot", "wzbot"] } as EditableSettings,
+      }),
+    );
+    expect(html).toContain("Comptes ignorés");
+    expect(html).toContain("nightbot\nwzbot");
+    expect(html).toContain("jamais lus par Jean-Renard");
+    expect(html).not.toContain("Variables");
   });
 
   it("écrit le refus du serveur sous le champ", () => {

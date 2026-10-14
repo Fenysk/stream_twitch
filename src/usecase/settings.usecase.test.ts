@@ -69,6 +69,14 @@ describe("createSettingsStore : au démarrage", () => {
 });
 
 describe("createSettingsStore : update", () => {
+  it("applique la liste des comptes ignorés sans redémarrer : elle s'écrit et part dans le changement que le tchat et le renard reçoivent", () => {
+    const { store, written, changes } = setup();
+    const result = store.update({ chatBots: ["nightbot", "WZBot"] });
+    expect(result.ok).toBe(true);
+    expect(written).toEqual([{ chatBots: ["nightbot", "WZBot"] }]);
+    expect(changes).toEqual([{ ...defaults, chatBots: ["nightbot", "WZBot"] }]);
+  });
+
   it("applique un changement valide : il s'écrit, s'applique et se lit", () => {
     const { store, written, changes } = setup();
     const result = store.update({ threshold: -35 });

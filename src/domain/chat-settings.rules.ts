@@ -47,8 +47,8 @@ export const isSameChatLook = (first: ChatLook, second: ChatLook): boolean =>
   first.animation === second.animation &&
   first.shouldShowHidden === second.shouldShowHidden;
 
-// Les noms de compte des bots, en minuscules : c'est ainsi que Twitch les écrit.
+// Les noms de compte des bots, en minuscules : c'est ainsi que Twitch les écrit. Espaces autour et @ devant le nom ignorés.
 export const toChatBots = (settings: ChatSettings): string[] =>
-  (settings.chatBots ?? []).map((bot) => bot.toLowerCase());
+  (settings.chatBots ?? []).map((bot) => bot.trim().replace(/^@/, "").trim().toLowerCase()).filter(Boolean);
 
 export const toChatChannel = (settings: ChatSettings): string => settings.chatChannel ?? DEFAULT_CHAT_CHANNEL;

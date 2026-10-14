@@ -439,7 +439,7 @@ export const SettingsFieldsSchema = z
         "doit être une liste de lignes",
       )
       .optional(),
-    // Le tchat : la chaîne lue et les bots masqués restent dans settings.json ; les sept autres sont ceux de l'onglet « Tchat ».
+    // Le tchat : la chaîne lue reste dans settings.json ; les bots (comptes ignorés) se règlent dans l'onglet « Renard », les sept autres dans « Tchat ».
     chatChannel: z
       .string("doit être un texte")
       .regex(/^[a-z0-9_]{1,25}$/, "doit être le nom d'une chaîne Twitch : minuscules, chiffres et _")
@@ -520,9 +520,9 @@ export const SettingsSchema = SettingsFieldsSchema.refine(hasAllOrNoneOfScale, {
 
 export type Settings = z.infer<typeof SettingsSchema>;
 
-// Les réglages que l'interface change : six curseurs de la tête, l'expression active, ceux du renard (sa liste d'emotes reste dans settings.json) et les sept du
-// tchat. Tous les autres (le micro, le délai, le rythme, les niveaux, les extrêmes de l'effet de la voix, l'intervalle et la
-// levée du repos, l'adresse d'OBS, la chaîne et les bots du tchat) restent dans `settings.json` seulement.
+// Les réglages que l'interface change : six curseurs de la tête, l'expression active, ceux du renard (sa liste d'emotes reste dans settings.json), les sept du
+// tchat et les comptes ignorés (onglet « Renard »). Tous les autres (le micro, le délai, le rythme, les niveaux, les extrêmes de
+// l'effet de la voix, l'intervalle et la levée du repos, l'adresse d'OBS, la chaîne du tchat) restent dans `settings.json` seulement.
 export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   threshold: true,
   tilt: true,
@@ -635,6 +635,7 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxSulkAfter: true,
   foxResumeAfter: true,
   foxResumePhrases: true,
+  chatBots: true,
   chatStyle: true,
   chatOpacity: true,
   chatTextSize: true,
