@@ -473,3 +473,23 @@ describe("createFox : les WAV", () => {
     expect(fox.getSpeech("id9")).toEqual(WAV);
   });
 });
+
+describe("createFox : l'humeur", () => {
+  it("commence ordinaire", () => {
+    const { fox } = setup();
+    expect(fox.getAttitude()).toBe("plain");
+  });
+
+  it("publie l'humeur quand elle change, et seulement alors", () => {
+    const { fox, events } = setup();
+    fox.updateAttitude("plain");
+    fox.updateAttitude("sulking");
+    fox.updateAttitude("sulking");
+    fox.updateAttitude("cheerful");
+    expect(events).toEqual([
+      { kind: "attitude", attitude: "sulking" },
+      { kind: "attitude", attitude: "cheerful" },
+    ]);
+    expect(fox.getAttitude()).toBe("cheerful");
+  });
+});

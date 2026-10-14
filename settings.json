@@ -42,6 +42,15 @@
   "foxReadSilence": 1000,
   "foxStopAfter": 1000,
   "foxReactionDuration": 1000,
+  "foxEmoteReactions": [
+    "LUL = sourire",
+    "KEKW = sourire",
+    "OMEGALUL = sourire",
+    "WutFace = choc",
+    "monkaS = choc",
+    "PogChamp = choc",
+    "Kappa = clin"
+  ],
   "foxAwayAfter": 180000,
   "foxCrouchDuration": 300,
   "foxJumpDuration": 400,
@@ -165,6 +174,7 @@
   "foxLateAfter": "23:30",
   "foxLateYawnMin": 300000,
   "foxLateYawnMax": 600000,
+  "foxShouldReviewAtEnd": true,
   "foxPronunciations": [
     "wtf = what the fuck",
     "omg = oh my god",
@@ -286,6 +296,31 @@
     "Un lurk de {user} ! Fenysk, fais semblant d'être intéressant."
   ],
   "foxThanksLurkGeneric": ["Merci pour le lurk !"],
+  "foxTalkativeMessages": 50,
+  "foxThanksTalkative": [
+    "{user}, {messages} messages ! Merci, tu portes le tchat.",
+    "Merci {user} ! {messages} messages. Fenysk devrait te payer.",
+    "{user} a écrit {messages} messages. Je lis tout, hein."
+  ],
+  "foxShouldWelcome": true,
+  "foxWelcomeLiveGap": 21600000,
+  "foxWelcomeLiveCounts": ["10", "25", "50", "100"],
+  "foxWelcomeReturnAfter": 1209600000,
+  "foxWelcomeMilestone": [
+    "{user} ! {lives}e live. Tu paies un loyer ?",
+    "{user}, {lives}e live. À ce stade, t'es de la famille."
+  ],
+  "foxWelcomeReturn": ["{user} ! {absence} sans nouvelles.", "Tiens, {user}. Ça faisait {absence}."],
+  "foxWelcomeYesterday": ["Oh, {user}, tu étais là hier !", "{user}, encore toi ? T'étais déjà là hier."],
+  "foxWelcomeFirst": [
+    "Un nouveau ! Bienvenue, {user}.",
+    "Bienvenue, {user} ! Fenysk, fais semblant d'être normal !"
+  ],
+  "foxCheerfulCount": 15,
+  "foxCheerfulPeriod": 300000,
+  "foxSulkAfter": 90000,
+  "foxResumeAfter": 300000,
+  "foxResumePhrases": ["Ah, maintenant vous parlez ?"],
   "foxEmoteNames": [
     "OMEGALUL",
     "LULW",

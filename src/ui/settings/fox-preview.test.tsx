@@ -32,6 +32,14 @@ describe("FoxSpeakForm", () => {
     expect(html).toMatch(/<button[^>]*disabled[^>]*>/);
   });
 
+  it("propose « Faire le bilan » à côté de « Faire parler », actif même sans phrase", () => {
+    const html = renderToStaticMarkup(<FoxSpeakForm isMuted={false} />);
+    expect(html).toContain("Faire le bilan");
+    const review = html.match(/<button[^>]*>(?:(?!<\/button>).)*Faire le bilan/s)?.[0] ?? "";
+    expect(review).not.toContain("disabled");
+    expect(html.indexOf("Faire parler")).toBeLessThan(html.indexOf("Faire le bilan"));
+  });
+
   it("limite la phrase à 500 caractères", () => {
     expect(renderToStaticMarkup(<FoxSpeakForm isMuted={false} />)).toContain('maxLength="500"');
   });

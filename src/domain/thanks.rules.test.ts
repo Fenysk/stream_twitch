@@ -161,11 +161,12 @@ describe("toThanksRules", () => {
     delay: 250,
   };
 
-  it("reprend la case, le délai et les huit listes de phrases des réglages", () => {
+  it("reprend la case, le délai, le nombre de messages d'un viewer très impliqué et les neuf listes de phrases des réglages", () => {
     const rules = toThanksRules({
       ...base,
       foxShouldThank: true,
       foxThankGap: 10_000,
+      foxTalkativeMessages: 50,
       foxThanksFollow: ["a"],
       foxThanksFollowGeneric: ["b"],
       foxThanksSub: ["c"],
@@ -174,10 +175,12 @@ describe("toThanksRules", () => {
       foxThanksCheer: ["f"],
       foxThanksLurk: ["g"],
       foxThanksLurkGeneric: ["h"],
+      foxThanksTalkative: ["i"],
     });
     expect(rules).toEqual({
       shouldThank: true,
       gap: 10_000,
+      talkativeAt: 50,
       phrases: {
         foxThanksFollow: ["a"],
         foxThanksFollowGeneric: ["b"],
@@ -187,11 +190,30 @@ describe("toThanksRules", () => {
         foxThanksCheer: ["f"],
         foxThanksLurk: ["g"],
         foxThanksLurkGeneric: ["h"],
+        foxThanksTalkative: ["i"],
       },
     });
   });
 
   it("ne donne aucune règle sans les réglages du renard", () => {
     expect(toThanksRules(base)).toBeUndefined();
+  });
+});
+
+describe("toThanksPlan : un viewer très impliqué", () => {
+  it("la liste des viewers impliqués, le pseudo et le nombre de messages, un sourire", () => {
+    expect(toThanksPlan({ kind: "talkative", user: "Alice", messages: 50 }, open)).toEqual({
+      list: "foxThanksTalkative",
+      values: { user: "Alice", messages: 50 },
+      show: "smile",
+    });
+  });
+
+  it("un pseudo refusé devient « quelqu'un » : la phrase reste dite, le pseudo non", () => {
+    expect(toThanksPlan({ kind: "talkative", user: "Vilain", messages: 50 }, refuse("Vilain"))).toEqual({
+      list: "foxThanksTalkative",
+      values: { user: SOMEONE, messages: 50 },
+      show: "smile",
+    });
   });
 });

@@ -22,6 +22,7 @@ const fox = {
   foxReadSilence: 1000,
   foxStopAfter: 1000,
   foxReactionDuration: 1000,
+  foxEmoteReactions: ["LUL = sourire", "WutFace = choc", "Kappa = clin"],
   foxJoyDuration: 800,
   foxAwayAfter: 180_000,
   foxCrouchDuration: 300,
@@ -64,6 +65,7 @@ const fox = {
   foxLateAfter: "23:30",
   foxLateYawnMin: 300_000,
   foxLateYawnMax: 600_000,
+  foxShouldReviewAtEnd: true,
   foxPronunciations: ["wtf = what the fuck", "fenysk = Fénisque"],
   foxShouldThank: true,
   foxThankGap: 10_000,
@@ -75,6 +77,21 @@ const fox = {
   foxThanksCheer: ["{bits} bits de {user} !"],
   foxThanksLurk: ["Merci pour le lurk, {user}."],
   foxThanksLurkGeneric: ["Merci pour le lurk !"],
+  foxTalkativeMessages: 50,
+  foxThanksTalkative: ["{user}, {messages} messages !"],
+  foxShouldWelcome: true,
+  foxWelcomeLiveGap: 21_600_000,
+  foxWelcomeLiveCounts: ["10", "25", "50", "100"],
+  foxWelcomeReturnAfter: 1_209_600_000,
+  foxWelcomeMilestone: ["{user} ! {lives}e live."],
+  foxWelcomeReturn: ["{user} ! {absence} sans nouvelles."],
+  foxWelcomeYesterday: ["Oh, {user}, tu étais là hier !"],
+  foxWelcomeFirst: ["Un nouveau ! Bienvenue, {user}."],
+  foxCheerfulCount: 15,
+  foxCheerfulPeriod: 300_000,
+  foxSulkAfter: 90_000,
+  foxResumeAfter: 300_000,
+  foxResumePhrases: ["Ah, maintenant vous parlez ?"],
   foxShouldReadChat: true,
   foxShouldReadOwn: true,
   foxReadMaxLength: 150,
@@ -302,6 +319,75 @@ describe("les réglages fox*", () => {
       "foxStartleLevel",
     );
     expect(toEffectiveSettings(defaults, { foxStartleRise: 12.5, foxStartleLevel: 0 }).ok).toBe(true);
+  });
+
+  it("règlent l'humeur du tchat : des nombres et des durées strictement positifs, des phrases de reprise qui peuvent manquer", () => {
+    for (const key of ["foxCheerfulCount", "foxCheerfulPeriod", "foxSulkAfter", "foxResumeAfter"] as const) {
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: 0 }))[0]?.path, key).toBe(key);
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: 1.5 }))[0]?.path, key).toBe(key);
+    }
+    expect(issuesOf(toEffectiveSettings(defaults, { foxResumePhrases: [""] }))[0]?.path).toBe(
+      "foxResumePhrases.0",
+    );
+    expect(toEffectiveSettings(defaults, { foxResumePhrases: [] }).ok).toBe(true);
+    expect(toEffectiveSettings(defaults, { foxCheerfulCount: 20, foxSulkAfter: 60_000 }).ok).toBe(true);
+  });
+
+  it("règlent les emotes qui changent sa tête : une ligne « nom = sourire, choc ou clin » par emote", () => {
+    expect(
+      issuesOf(toEffectiveSettings(defaults, { foxEmoteReactions: ["LUL = sourire", "Kappa = triste"] })),
+    ).toEqual([
+      {
+        path: "foxEmoteReactions.1",
+        message: "doit s'écrire « nom de l'emote = sourire, choc ou clin »",
+      },
+    ]);
+    for (const line of ["LUL", "= sourire", "deux mots = choc", ""]) {
+      expect(issuesOf(toEffectiveSettings(defaults, { foxEmoteReactions: [line] }))[0]?.path, line).toBe(
+        "foxEmoteReactions.0",
+      );
+    }
+    expect(toEffectiveSettings(defaults, { foxEmoteReactions: [] }).ok).toBe(true);
+    expect(toEffectiveSettings(defaults, { foxEmoteReactions: ["PogU = clin d'œil"] }).ok).toBe(true);
+  });
+
+  it("règlent le viewer très impliqué : un nombre de messages entier strictement positif, une phrase au moins", () => {
+    expect(issuesOf(toEffectiveSettings(defaults, { foxTalkativeMessages: 0 }))[0]?.path).toBe(
+      "foxTalkativeMessages",
+    );
+    expect(issuesOf(toEffectiveSettings(defaults, { foxTalkativeMessages: 12.5 }))[0]?.path).toBe(
+      "foxTalkativeMessages",
+    );
+    expect(issuesOf(toEffectiveSettings(defaults, { foxThanksTalkative: [] }))[0]?.path).toBe(
+      "foxThanksTalkative",
+    );
+    expect(toEffectiveSettings(defaults, { foxTalkativeMessages: 100 }).ok).toBe(true);
+  });
+
+  it("règlent l'accueil des habitués : un silence et une absence strictement positifs, des nombres de lives entiers, des phrases qui peuvent manquer", () => {
+    for (const key of ["foxWelcomeLiveGap", "foxWelcomeReturnAfter"] as const) {
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: 0 }))[0]?.path, key).toBe(key);
+    }
+    expect(issuesOf(toEffectiveSettings(defaults, { foxWelcomeLiveCounts: ["10", "dix"] }))[0]?.path).toBe(
+      "foxWelcomeLiveCounts.1",
+    );
+    for (const line of ["0", "-5", "1,5", ""]) {
+      expect(issuesOf(toEffectiveSettings(defaults, { foxWelcomeLiveCounts: [line] }))[0]?.path, line).toBe(
+        "foxWelcomeLiveCounts.0",
+      );
+    }
+    expect(issuesOf(toEffectiveSettings(defaults, { foxWelcomeReturn: [""] }))[0]?.path).toBe(
+      "foxWelcomeReturn.0",
+    );
+    expect(
+      toEffectiveSettings(defaults, {
+        foxWelcomeLiveCounts: [],
+        foxWelcomeMilestone: [],
+        foxWelcomeReturn: [],
+        foxWelcomeYesterday: [],
+        foxWelcomeFirst: [],
+      }).ok,
+    ).toBe(true);
   });
 
   it("règlent l'heure du live : des durées strictement positives, les bâillements tardifs du plus court au plus long", () => {

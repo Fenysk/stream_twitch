@@ -33,7 +33,7 @@
     { "canonical": "spam",      "meaning": "Un message qui répète, crie ou dessine au lieu de dire quelque chose.", "banned": ["flood"] },
     { "canonical": "mode",      "meaning": "Ce que le renard montre en plus de sa bouche : idle, listening, reaction, wave ou yawn. Le serveur le décide, la page l'affiche.", "banned": [] },
     { "canonical": "listening", "meaning": "Le mode du renard quand Alexis parle et qu'il ne lit pas : il regarde en face ou à droite, jamais à gauche.", "banned": ["ecoute"] },
-    { "canonical": "reaction",  "meaning": "L'image que le renard montre 1 s avant de lire un message qui contient un mot-clé (sourire, choc, clin d'œil).", "banned": ["reagir"] },
+    { "canonical": "reaction",  "meaning": "L'image que le renard montre 1 s avant de lire un message qui contient un mot-clé ou une emote de foxEmoteReactions (sourire, choc, clin d'œil). Un message d'emotes seules la montre sans rien lire, si le renard est visible et se tait.", "banned": ["reagir"] },
     { "canonical": "wave",      "meaning": "Le coucou : deux images qui alternent 1 s avant de lire le premier message d'un viewer.", "banned": ["coucou", "greet", "greeting"] },
     { "canonical": "yawn",      "meaning": "Le bâillement du renard, quand ni Alexis ni le tchat n'ont rien dit depuis longtemps.", "banned": ["baillement"] },
     { "canonical": "presence",  "meaning": "Si le renard est visible, s'en va (il glisse vers le bas), est parti, ou revient en sautant : le serveur le décide, la page l'anime.", "banned": ["absence"] },
@@ -59,7 +59,14 @@
     { "canonical": "slot",      "meaning": "Un créneau de la timetable : un début et un titre éventuel. Annulé, il n'existe pas.", "banned": ["creneau"] },
     { "canonical": "lurk",      "meaning": "Un message dont le premier mot est !lurk : le viewer regarde sans parler. Le renard le remercie une fois par viewer, sans le lire.", "banned": [] },
     { "canonical": "spike",     "meaning": "Une hausse soudaine du level du desktop : au moins foxStartleRise dB en moins de foxStartleWithin ms, jusqu'au-dessus de foxStartleLevel dB.", "banned": [] },
-    { "canonical": "startle",   "meaning": "Le mode du renard quand le desktop a un spike : la tête choquée left-large-rest, tournée vers le chat (sans miroir), le temps d'une réaction. Pas de phrase.", "banned": [] }
+    { "canonical": "startle",   "meaning": "Le mode du renard quand le desktop a un spike : la tête choquée left-large-rest, tournée vers le chat (sans miroir), le temps d'une réaction. Pas de phrase.", "banned": [] },
+    { "canonical": "regular",   "meaning": "Un viewer connu de data/viewers.json : sa première venue, sa dernière venue et son nombre de lives, jamais ses messages. Un live de plus = son premier message accepté après foxWelcomeLiveGap de silence.", "banned": ["habitue"] },
+    { "canonical": "welcome",   "meaning": "La phrase dite avant le premier message d'un viewer dans un live, après le coucou : un palier de lives, un retour après une longue absence, la venue de la veille, ou le tout premier message.", "banned": ["accueil"] },
+    { "canonical": "tally",     "meaning": "Le compte des messages acceptés de chaque viewer depuis le démarrage du serveur : en mémoire, jamais le contenu d'un message, ni le compte de la chaîne ni les bots.", "banned": [] },
+    { "canonical": "talkative", "meaning": "Un viewer qui atteint foxTalkativeMessages messages acceptés dans le tally : le renard le remercie une fois, comme un lurk, sans classement ni dépassement annoncé.", "banned": ["bavard"] },
+    { "canonical": "review",    "meaning": "Le bilan du live, dit au chat : le total des messages et des personnes du tally, le plus bavard, le premier arrivé. Une partie vide ou au pseudo refusé est sautée. « Faire le bilan », ou tout seul juste après l'annonce de la fin prévue.", "banned": ["bilan"] },
+    { "canonical": "attitude",  "meaning": "L'humeur du renard selon le chat : plain (ordinaire), cheerful (joyeux : foxCheerfulCount messages acceptés dans foxCheerfulPeriod) ou sulking (boudeur : visible, sans message du chat depuis foxSulkAfter). Le serveur la décide, la page en tire ses gazes au repos ; elle ne change rien d'autre.", "banned": [] },
+    { "canonical": "resume",    "meaning": "La phrase dite au chat avant le premier message accepté qui suit foxResumeAfter sans message du chat, au plus une toutes les 30 min ; elle passe avant le welcome.", "banned": ["reprise"] }
   ],
 
   "verbs": [

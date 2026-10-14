@@ -19,14 +19,17 @@ import type { Slot } from "../domain/timetable.rules";
 import type { Voice } from "../domain/voice.schema";
 import type { ChatSourceEvent } from "./chat.usecase";
 import { createFox, type VoicePort } from "./fox.usecase";
+import { createFoxAttitude } from "./fox-attitude.usecase";
 import { createFoxBalance } from "./fox-balance.usecase";
 import { createFoxChat } from "./fox-chat.usecase";
 import { type Broadcast, createFoxHours } from "./fox-hours.usecase";
 import { createFoxJab } from "./fox-jab.usecase";
 import { createFoxMode } from "./fox-mode.usecase";
 import { createFoxQueue } from "./fox-queue.usecase";
+import { createFoxReview } from "./fox-review.usecase";
 import { createFoxShout } from "./fox-shout.usecase";
 import { createFoxStartle } from "./fox-startle.usecase";
+import { createFoxTally } from "./fox-tally.usecase";
 import { createFoxThanks } from "./fox-thanks.usecase";
 import { createFoxTunnel } from "./fox-tunnel.usecase";
 
@@ -203,6 +206,14 @@ const build = (
     foxThanksCheer: ["Merci {user} pour {bits} bits."],
     foxThanksLurk: ["Merci {user} pour le lurk."],
     foxThanksLurkGeneric: ["Merci pour le lurk."],
+    foxTalkativeMessages: 50,
+    foxThanksTalkative: ["{user} a écrit {messages} messages."],
+    // L'humeur ne bouge pas, sauf pour un test qui la règle : pas de joie à 1 000 messages, pas de bouderie ni de reprise avant 24 h.
+    foxCheerfulCount: 1000,
+    foxCheerfulPeriod: 300_000,
+    foxSulkAfter: 86_400_000,
+    foxResumeAfter: 86_400_000,
+    foxResumePhrases: ["Ah, maintenant vous parlez ?"],
     ...options.overrides,
   };
   const sim = { now: options.startAt ?? 1_000_000, order: 0, ids: 0 };
@@ -303,10 +314,23 @@ const build = (
     schedule,
     log: (line) => logs.push(line),
   });
+  const tally = createFoxTally();
+  const attitude = createFoxAttitude({
+    mode,
+    fox,
+    settings: serverSettings,
+    clock: () => sim.now,
+    random: seeded(23),
+    log: (line) => logs.push(line),
+  });
   const foxChat = createFoxChat({
     chat,
     queue,
+    mode,
     emotes: { getNames: () => [] },
+    regulars: { noteMessage: () => null },
+    tally,
+    attitude,
     settings: serverSettings,
     insults,
     clock: () => sim.now,
@@ -351,10 +375,18 @@ const build = (
       };
     },
   };
+  const review = createFoxReview({
+    tally,
+    queue,
+    settings: serverSettings,
+    insults,
+    log: (line) => logs.push(line),
+  });
   const hours = createFoxHours({
     broadcast,
     queue,
     mode,
+    review,
     settings: serverSettings,
     clock: () => sim.now,
     random: seeded(17),
@@ -384,6 +416,7 @@ const build = (
     queue,
     foxChat,
     viewers: { getCount: () => options.viewers ?? null },
+    tally,
     jab,
     settings: serverSettings,
     insults,
@@ -395,6 +428,7 @@ const build = (
   mode.start();
   queue.start();
   foxChat.start();
+  attitude.start();
   jab.start();
   shout.start();
   tunnel.start();
@@ -2258,5 +2292,207 @@ describe("S : il sursaute avec le jeu", () => {
     const since = harness.events.length;
     await explode(harness);
     expect(harness.timeline(since).map(({ label: name }) => name)).not.toContain("mode:startle");
+  });
+});
+
+describe("U : il remercie un viewer très impliqué", () => {
+  const alice = (id: string, text: string): RawMessage =>
+    message(id, text, { viewerId: "alice", nickname: "Alice" });
+
+  it("remercie le viewer qui atteint le seuil devant son message, une seule fois", async () => {
+    const harness = build({ overrides: { foxTalkativeMessages: 2 } });
+    await harness.receive(alice("1", "Premier"));
+    await harness.run(15_000);
+    await harness.receive(alice("2", "Second"));
+    await harness.run(15_000);
+    await harness.receive(alice("3", "Troisième"));
+    await harness.run(15_000);
+    expect(harness.synthesized).toEqual(["Premier", "Alice a écrit 2 messages.", "Second", "Troisième"]);
+  });
+
+  it("ne compte pas les messages que le filtre ignore", async () => {
+    const harness = build({ overrides: { foxTalkativeMessages: 2 } });
+    await harness.receive(alice("1", "Premier"));
+    await harness.run(15_000);
+    await harness.receive(alice("2", "https://exemple.fr"));
+    await harness.run(15_000);
+    expect(harness.synthesized).toEqual(["Premier"]);
+  });
+});
+
+describe("V : le bilan du live", () => {
+  const END = {
+    foxEndTime: "00:00",
+    foxEndWarning: 600_000,
+    foxEndWarningPhrases: [],
+    foxEndPhrases: ["{fin}. Le live est fini."],
+    foxOvertimePhrases: [],
+    foxBedtimePhrases: [],
+  };
+  const REVIEW_TEXT =
+    "Ce live : 3 messages, de 2 personnes. Le plus bavard : Alice, avec 2 messages. Premier arrivé : Alice.";
+  const writeAll = async (harness: ReturnType<typeof build>) => {
+    await harness.receive(message("1", "Premier", { viewerId: "alice", nickname: "Alice" }));
+    await harness.run(15_000);
+    await harness.receive(message("2", "Salut", { viewerId: "bob", nickname: "Bob" }));
+    await harness.run(15_000);
+    await harness.receive(message("3", "Second", { viewerId: "alice", nickname: "Alice" }));
+    await harness.run(15_000);
+  };
+
+  it("le dit juste après l'annonce de la fin prévue, tourné vers le tchat, une seule fois", async () => {
+    const harness = build({ startAt: at(23, 40), hours: END, overrides: { foxShouldReviewAtEnd: true } });
+    harness.updateBroadcast({ isLive: true, duration: 0 });
+    await writeAll(harness);
+    const since = harness.synthesized.length;
+    await harness.run(20 * 60_000);
+    expect(harness.synthesized.slice(since).slice(0, 2)).toEqual(["Minuit. Le live est fini.", REVIEW_TEXT]);
+    expect(harness.synthesized.filter((text) => text === REVIEW_TEXT)).toHaveLength(1);
+  });
+
+  it("ne le dit pas à la fin prévue quand la case est décochée", async () => {
+    const harness = build({ startAt: at(23, 40), hours: END, overrides: { foxShouldReviewAtEnd: false } });
+    harness.updateBroadcast({ isLive: true, duration: 0 });
+    await writeAll(harness);
+    await harness.run(20 * 60_000);
+    expect(harness.synthesized).not.toContain(REVIEW_TEXT);
+  });
+});
+
+describe("Q : les emotes changent sa tête", () => {
+  const withEmotes = {
+    overrides: {
+      foxEmoteReactions: ["LUL = sourire", "WutFace = choc"],
+      foxEmoteNames: ["LUL", "WutFace"],
+    },
+  };
+
+  it("un message qui contient une emote de la liste montre sa réaction 1 s, puis la lecture commence", async () => {
+    const harness = build(withEmotes);
+    await harness.wave("alice");
+    const since = harness.events.length;
+    const from = harness.sim.now;
+    await harness.receive(message("2", "trop drôle LUL", { viewerId: "alice" }));
+    await harness.run(3000);
+    expect(
+      harness.timeline(since).map((entry) => ({ ...entry, at: entry.at - (from - harness.start) })),
+    ).toEqual([
+      { at: 0, label: "mode:reaction:front-smile-rest" },
+      { at: 1000, label: "mode:idle" },
+      { at: 1000, label: "speech" },
+    ]);
+    expect(harness.synthesized.at(-1)).toBe("trop drôle");
+  });
+
+  it("un message d'emotes seules montre sa réaction 1 s, sans rien lire", async () => {
+    const harness = build(withEmotes);
+    await harness.run(10_000);
+    const since = harness.events.length;
+    const at = harness.sim.now - harness.start;
+    await harness.receive(message("1", "WutFace WutFace", { viewerId: "alice" }));
+    await harness.run(3000);
+    expect(harness.timeline(since)).toEqual([
+      { at, label: "mode:reaction:left-large-rest" },
+      { at: at + 1000, label: "mode:idle" },
+    ]);
+    expect(harness.synthesized).toEqual([]);
+    expect(harness.speeches()).toHaveLength(0);
+  });
+
+  it("ne le fait pas revenir quand il est caché", async () => {
+    const harness = build(withEmotes);
+    await harness.run(AWAY_AT + 6000);
+    const since = harness.events.length;
+    await harness.receive(message("1", "LUL", { viewerId: "alice" }));
+    await harness.run(3000);
+    expect(harness.timeline(since)).toEqual([]);
+  });
+
+  it("n'en montre qu'une toutes les 5 s", async () => {
+    const harness = build(withEmotes);
+    await harness.run(10_000);
+    const since = harness.events.length;
+    await harness.receive(message("1", "LUL", { viewerId: "alice" }));
+    await harness.run(2000);
+    await harness.receive(message("2", "LUL", { viewerId: "bob" }));
+    await harness.run(3000);
+    await harness.receive(message("3", "WutFace", { viewerId: "carole" }));
+    await harness.run(2000);
+    expect(
+      harness
+        .timeline(since)
+        .map(({ label: name }) => name)
+        .filter((name) => name.startsWith("mode:reaction")),
+    ).toEqual(["mode:reaction:front-smile-rest", "mode:reaction:left-large-rest"]);
+  });
+});
+
+describe("R : son humeur suit le tchat", () => {
+  const MINUTE = 60_000;
+  const attitudes = (harness: ReturnType<typeof build>, since = 0) =>
+    harness.events.slice(since).flatMap(({ event }) => (event.kind === "attitude" ? [event.attitude] : []));
+  const alice = (id: string, text = "Bonjour") => message(id, text, { viewerId: "alice", nickname: "Alice" });
+  const RESUME = { foxResumeAfter: 5 * MINUTE, foxResumePhrases: ["Ah, maintenant vous parlez ?"] };
+
+  it("boude quand le tchat se tait depuis 90 s, visible, et redevient ordinaire au premier message", async () => {
+    const harness = build({ overrides: { foxSulkAfter: 90_000 } });
+    await harness.run(89_000);
+    expect(attitudes(harness)).toEqual([]);
+    await harness.run(2000);
+    expect(attitudes(harness)).toEqual(["sulking"]);
+    await harness.receive(alice("1"));
+    expect(attitudes(harness)).toEqual(["sulking", "plain"]);
+  });
+
+  it("ne boude plus dès qu'il est parti : l'humeur ne se voit pas, il ne revient pas pour elle", async () => {
+    const harness = build({ overrides: { foxSulkAfter: 90_000 } });
+    await harness.run(AWAY_AT + 3000);
+    expect(attitudes(harness)).toEqual(["sulking", "plain"]);
+    const since = harness.events.length;
+    await harness.run(5 * MINUTE);
+    expect(harness.timeline(since)).toEqual([]);
+  });
+
+  it("est joyeux au nombre de messages acceptés réglé, dans la période", async () => {
+    const harness = build({ overrides: { foxCheerfulCount: 5 } });
+    for (let index = 0; index < 5; index += 1) {
+      await harness.receive(message(`m${index}`, `Message ${index}`, { viewerId: `viewer-${index}` }));
+      await harness.run(5000);
+    }
+    expect(attitudes(harness)).toEqual(["cheerful"]);
+  });
+
+  it("dit la reprise avant le premier message qui suit le silence, d'une seule traite", async () => {
+    const harness = build({
+      overrides: { foxResumeAfter: 60_000, foxResumePhrases: RESUME.foxResumePhrases },
+    });
+    await harness.run(61_000);
+    await harness.receive(alice("1", "Bonjour"));
+    await harness.run(20_000);
+    expect(harness.synthesized).toEqual(["Ah, maintenant vous parlez ? Bonjour"]);
+    expect(harness.timeline().map(({ label: name }) => name)).not.toContain("mode:address");
+  });
+
+  it("revient en sautant s'il était parti, puis dit la reprise avant de lire", async () => {
+    const harness = build({ overrides: RESUME });
+    await harness.run(5 * MINUTE);
+    const since = harness.events.length;
+    await harness.receive(alice("1", "Bonjour"));
+    await harness.run(20_000);
+    const names = harness.timeline(since).map(({ label: name }) => name);
+    expect(names.indexOf("presence:returning")).toBeGreaterThanOrEqual(0);
+    expect(names.indexOf("presence:returning")).toBeLessThan(names.indexOf("speech"));
+    expect(harness.synthesized).toEqual(["Ah, maintenant vous parlez ? Bonjour"]);
+  });
+
+  it("ne la dit pas deux fois en 30 min", async () => {
+    const harness = build({ overrides: RESUME });
+    await harness.run(6 * MINUTE);
+    await harness.receive(alice("1", "Premier"));
+    await harness.run(15_000);
+    await harness.run(6 * MINUTE);
+    await harness.receive(alice("2", "Second"));
+    await harness.run(15_000);
+    expect(harness.synthesized).toEqual(["Ah, maintenant vous parlez ? Premier", "Second"]);
   });
 });

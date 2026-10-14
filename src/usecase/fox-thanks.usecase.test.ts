@@ -6,6 +6,7 @@ import type { LiveEvent } from "../domain/live.types";
 import type { Settings } from "../domain/settings.schema";
 import type { ChatSourceEvent } from "./chat.usecase";
 import type { QueueItem } from "./fox-queue.usecase";
+import type { Counted } from "./fox-tally.usecase";
 import { createFoxThanks } from "./fox-thanks.usecase";
 
 const base: Settings = {
@@ -24,6 +25,8 @@ const base: Settings = {
   foxThanksCheer: ["Merci {user} pour {bits} bits."],
   foxThanksLurk: ["Merci {user} pour le lurk."],
   foxThanksLurkGeneric: ["Merci pour le lurk."],
+  foxTalkativeMessages: 50,
+  foxThanksTalkative: ["{user} a écrit {messages} messages."],
 };
 
 const insults = toInsultList("connard\nsalope");
@@ -48,6 +51,7 @@ const setup = (overrides: Partial<Settings> = {}, options: { viewers?: number | 
   const order: string[] = [];
   const logs: string[] = [];
   const listeners = new Set<(event: ChatSourceEvent) => void>();
+  const tallyListeners = new Set<(counted: Counted) => void>();
   const thanks = createFoxThanks({
     chat: {
       subscribeSource(listener) {
@@ -70,6 +74,14 @@ const setup = (overrides: Partial<Settings> = {}, options: { viewers?: number | 
       },
     },
     viewers: { getCount: () => state.viewers },
+    tally: {
+      subscribe(listener) {
+        tallyListeners.add(listener);
+        return () => {
+          tallyListeners.delete(listener);
+        };
+      },
+    },
     jab: {
       noteActivity() {
         state.activity += 1;
@@ -104,6 +116,10 @@ const setup = (overrides: Partial<Settings> = {}, options: { viewers?: number | 
   const emit = (event: LiveEvent) => {
     for (const listener of listeners) listener({ kind: "live", event });
   };
+  // Le compte d'un viewer après l'un de ses messages.
+  const count = (counted: Counted) => {
+    for (const listener of tallyListeners) listener(counted);
+  };
   return {
     thanks,
     state,
@@ -113,7 +129,9 @@ const setup = (overrides: Partial<Settings> = {}, options: { viewers?: number | 
     logs,
     run,
     emit,
+    count,
     listeners,
+    tallyListeners,
     pending: () => timers.filter(({ isCancelled }) => !isCancelled).length,
     texts: () => pushed.map(({ text }) => text),
   };
@@ -521,6 +539,110 @@ describe("un message « !lurk » est remercié comme un follow", () => {
     const { thanks, listeners, pushed } = started();
     thanks.stop();
     say(listeners, "!lurk");
+    expect(pushed).toEqual([]);
+  });
+});
+
+describe("un viewer très impliqué est remercié une fois, à 50 messages", () => {
+  const started = (overrides: Partial<Settings> = {}) => {
+    const harness = setup(overrides);
+    harness.thanks.start();
+    return harness;
+  };
+  const alice = (messages: number): Counted => ({ viewerId: "v1", nickname: "Alice", messages });
+
+  it("remercie par un sourire d'1 s puis une phrase avec le pseudo et le nombre de messages, devant les messages, sans être coupé", () => {
+    const { count, pushed, state } = started();
+    count(alice(50));
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0]).toMatchObject({
+      kind: "thanks",
+      text: "Alice a écrit 50 messages.",
+      isCuttable: false,
+      isUrgent: true,
+    });
+    expect(pushed[0]?.toShow()).toEqual(SMILE_MODE);
+    expect(state.activity).toBe(1);
+  });
+
+  it("l'écrit au journal", () => {
+    const { count, logs } = started();
+    count(alice(50));
+    expect(logs).toEqual(["Renard : remerciement (viewer très impliqué) : « Alice a écrit 50 messages. »"]);
+  });
+
+  it("ne remercie pas avant 50 messages", () => {
+    const { count, pushed } = started();
+    for (let messages = 1; messages < 50; messages += 1) count(alice(messages));
+    expect(pushed).toEqual([]);
+  });
+
+  it("ne remercie un viewer qu'une fois : ni à 51, ni à 100", () => {
+    const { count, texts } = started();
+    count(alice(50));
+    count(alice(51));
+    count(alice(100));
+    expect(texts()).toEqual(["Alice a écrit 50 messages."]);
+  });
+
+  it("remercie chaque viewer à son tour, sans classement ni mot sur les autres", () => {
+    const { count, texts } = started();
+    count({ viewerId: "v2", nickname: "Bob", messages: 50 });
+    count(alice(50));
+    count({ viewerId: "v2", nickname: "Bob", messages: 51 });
+    expect(texts()).toEqual(["Bob a écrit 50 messages.", "Alice a écrit 50 messages."]);
+  });
+
+  it("dit le nombre de messages du viewer quand il dépasse déjà le seuil réglé", () => {
+    const { count, texts } = started();
+    count(alice(57));
+    expect(texts()).toEqual(["Alice a écrit 57 messages."]);
+  });
+
+  it("suit le seuil changé en direct", () => {
+    const { thanks, count, texts } = started();
+    thanks.update({ ...base, foxTalkativeMessages: 20 });
+    count(alice(20));
+    expect(texts()).toEqual(["Alice a écrit 20 messages."]);
+  });
+
+  it("ne dit pas un pseudo refusé par le filtre d'insultes : « quelqu'un », et le dit au journal", () => {
+    const { count, texts, logs } = started();
+    count({ viewerId: "v3", nickname: "connard", messages: 50 });
+    expect(texts()).toEqual(["quelqu'un a écrit 50 messages."]);
+    expect(logs).toContain(
+      "Renard : pseudo refusé par le filtre d'insultes (viewer très impliqué), il n'est pas dit.",
+    );
+  });
+
+  it("ne remercie pas case décochée, et remercie au message suivant une fois la case recochée", () => {
+    const { thanks, count, texts } = started({ foxShouldThank: false });
+    count(alice(50));
+    expect(texts()).toEqual([]);
+    thanks.update({ ...base, foxShouldThank: true });
+    count(alice(51));
+    count(alice(52));
+    expect(texts()).toEqual(["Alice a écrit 51 messages."]);
+  });
+
+  it("tire les phrases de la liste sans répéter avant d'avoir tout dit", () => {
+    const { count, texts } = started({ foxThanksTalkative: ["A {user}", "B {user}"] });
+    count({ viewerId: "v1", nickname: "Al", messages: 50 });
+    count({ viewerId: "v2", nickname: "Bo", messages: 50 });
+    count({ viewerId: "v3", nickname: "Cy", messages: 50 });
+    expect(texts()).toEqual(["A Al", "B Bo", "A Cy"]);
+  });
+
+  it("n'écoute le compte qu'une fois démarré, et plus après l'arrêt", () => {
+    const { thanks, tallyListeners, count, pushed } = setup();
+    count(alice(50));
+    expect(pushed).toEqual([]);
+    thanks.start();
+    thanks.start();
+    expect(tallyListeners.size).toBe(1);
+    thanks.stop();
+    expect(tallyListeners.size).toBe(0);
+    count(alice(50));
     expect(pushed).toEqual([]);
   });
 });

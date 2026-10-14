@@ -11,6 +11,46 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-14 — Son humeur suit le tchat : `attitude` (ordinaire, joyeux, boudeur) change ses regards au repos, la `resume` ouvre le premier message après un long silence ; `attitude` et `resume` entrent au lexique
+
+**Contexte.** Le renard est le même que le chat soit en feu ou mort ; Alexis veut qu'il le montre, sans que cela change autre chose que ses regards et une phrase.
+**Décision.** Le serveur décide l'`attitude` à chaque pas de 100 ms et l'envoie aux pages (évènement `attitude`, aussi à la connexion). `cheerful` : `foxCheerfulCount` messages acceptés en `foxCheerfulPeriod` (15 en 5 min) → `front-smile-rest` entre dans la rotation des regards de B, une fois sur trois, jamais deux de suite. `sulking` : le renard est visible et le chat se tait depuis `foxSulkAfter` (90 s, compté depuis le démarrage du serveur) → ses regards se limitent à `right-closed-rest` et `front-closed-rest` ; le silence l'emporte sur la joie. Le chat se tait quand aucun viewer n'écrit, message accepté ou non : le compte de la chaîne et les bots ne comptent pas. La `resume` : le premier message accepté après `foxResumeAfter` (5 min) de silence reçoit la phrase de `foxResumePhrases` (« Ah, maintenant vous parlez ? »), tournée vers le chat, au plus une par 30 min, avant le `welcome` (une seule phrase avant un message). `lexique.json` : `attitude`, `resume` (banni : reprise).
+**Renoncement.** `mood` pour `attitude` : déjà banni pour `expression`, le visage de la tête, un autre concept. Ne compter que les messages acceptés pour le silence : un chat qui n'écrit que des emotes n'est pas un chat qui se tait. Une image pour la joie ou la bouderie : les 12 images suffisent.
+
+---
+
+## 2026-10-14 — Des emotes changent la tête du renard : la liste `foxEmoteReactions` rejoint les mots-clés de `reaction`
+
+**Contexte.** Les mots-clés de E sont fixes dans le code ; Alexis veut qu'une emote du chat (LUL, WutFace, Kappa…) donne aussi une réaction, et qu'un message qui n'est fait que d'emotes (rien à lire) ne soit plus muet pour le renard.
+**Décision.** `foxEmoteReactions` : une ligne `nom = sourire | choc | clin` par emote (nom exact, majuscules comprises, mot entier), éditable dans l'onglet Renard ; une emote de la liste vaut un mot-clé de sa réaction et suit l'ordre de E (sourire, choc, clin d'œil). Un message d'emotes seules (raison « il ne reste que des emotes » du filtre) montre sa réaction de lui-même (`flash`, comme le sursaut du jeu) : seulement visible, sans rien dans la file, au plus une par 5 s, et il ne fait pas revenir le renard caché. Les mots-clés de E comptent aussi dans ce cas (« <3 » seul). `lexique.json` : le sens de `reaction` s'élargit aux emotes, rien de nouveau.
+**Renoncement.** Une liste fixe dans le code : les emotes de la chaîne changent. Réagir à un message d'emotes seules en le lisant : il n'y a rien à lire, et le filtre l'ignore à raison.
+
+---
+
+## 2026-10-14 — Le bilan du live : « Faire le bilan » à la demande, et tout seul après l'annonce de la fin prévue ; `review` entre au lexique
+
+**Contexte.** Alexis veut finir un live sur un résumé de ce qui s'est passé dans le chat, sans compter à la main ; le `tally` a déjà tout ce qu'il faut.
+**Décision.** Le `review` se lit dans le `tally` (ses viewers dans l'ordre d'arrivée) : « Ce live : N messages, de M personnes. Le plus bavard : X, avec N messages. Premier arrivé : Y. » ; une partie vide est sautée, un pseudo refusé par le filtre d'insultes n'est jamais dit, personne n'a écrit : rien à dire. Il passe par la file (urgent, jamais coupé, tourné vers le chat) comme une annonce de l'heure du live. Le bouton « Faire le bilan » de l'onglet Renard (`POST /api/fox/review`) le dit à la demande ; l'heure du live le lance une fois par diffusion quand l'annonce de la fin prévue est finie (case `foxShouldReviewAtEnd`, activée). `lexique.json` : `review` (banni : bilan).
+**Renoncement.** Passer par « Faire parler » : il parle sans attendre le silence de Fenysk ni la file. Une liste de phrases réglable pour le bilan : ses parties sont fixes, ce qui varie, ce sont les comptes.
+
+---
+
+## 2026-10-14 — Un viewer très impliqué est remercié à 50 messages : `tally` et `talkative` entrent au lexique
+
+**Contexte.** Un viewer qui écrit beaucoup n'a droit qu'au coucou ; Alexis veut le remercier une fois, comme un lurk, sans jamais faire de classement entre les viewers.
+**Décision.** Le `tally` compte, par `viewerId`, les messages acceptés (qui passent le filtre, pace et file compris) depuis le démarrage du serveur, en mémoire (comme les lurkers) ; ni le compte de la chaîne ni un bot n'y entrent. Il notifie ses abonnés à chaque message ; les remerciements remercient le viewer `talkative` au premier compte à `foxTalkativeMessages` (50) ou plus, une fois (`foxThanksTalkative`, `{user}` et `{messages}`), sous la case des remerciements, avec les règles des autres (devant les messages, jamais coupé, fait revenir). Un seul seuil, aucun classement. `lexique.json` : `tally`, `talkative` (banni : bavard).
+**Renoncement.** Compter dans le fichier des habitués : un redémarrage du serveur est un nouveau live, et 50 messages de la veille ne remercieraient personne. Compter aussi les messages que le filtre ignore : un lien, du spam ou un bot ne sont pas de l'implication.
+
+---
+
+## 2026-10-14 — Le renard reconnaît ses habitués : data/viewers.json garde leur venue, une phrase d'accueil précède leur premier message ; `regular` et `welcome` entrent au lexique
+
+**Contexte.** Le coucou (G) est le même pour tous ; Alexis veut que le renard sache qui revient, qui fête son 25e live et qui est nouveau, sans jamais affirmer ce qu'il ne peut pas prouver.
+**Décision.** `data/viewers.json` (hors de git, écrit au plus toutes les 5 s et à l'arrêt, un fichier illisible mis de côté en `.invalid`) garde par login en minuscules `firstSeen`, `lastSeen` et `lives` (jamais un message). Un live de plus = le premier message accepté après `foxWelcomeLiveGap` (6 h) sans message de ce viewer. À ce moment, une phrase tirée sans répéter, dite d'une traite avant le message (après le coucou), dans cet ordre : palier de lives (`foxWelcomeLiveCounts`), retour après `foxWelcomeReturnAfter` (14 jours), la veille (jour calendaire à Paris), tout premier message. Les 14 premiers jours du fichier, ni « nouveau » ni « de retour ». Au plus une phrase par 30 s, pas pour un pseudo refusé par le filtre d'insultes, pas pour le compte de la chaîne ; le fichier se met à jour case décochée. `lexique.json` : `regular` (banni : habitue), `welcome` (banni : accueil).
+**Renoncement.** Une entrée de file à part pour la phrase : elle expirerait, se retirerait et se compterait séparément du message qu'elle précède. Un compteur gardé en mémoire : un redémarrage du serveur effacerait tout ce que le renard « sait ».
+
+---
+
 ## 2026-10-14 — Le jeu fait sursauter le renard : un pic soudain du son du PC (`spike`) donne le mode `startle` ; `spike` et `startle` entrent au lexique
 
 **Contexte.** Dans un jeu d'action, une explosion ou un cri fait exploser le son du PC ; le renard visible doit sursauter avec Fenysk, sans rien dire. N donne déjà le level du `desktop`.

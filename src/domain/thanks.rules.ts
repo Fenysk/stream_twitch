@@ -10,7 +10,8 @@ export type ThanksKey =
   | "foxThanksGiftMany"
   | "foxThanksCheer"
   | "foxThanksLurk"
-  | "foxThanksLurkGeneric";
+  | "foxThanksLurkGeneric"
+  | "foxThanksTalkative";
 
 // Ce qu'il montre avant la phrase : un sourire (1 s) pour un follow ou un cheer, un saut de joie pour un sub.
 export type ThanksShow = "smile" | "joy";
@@ -24,7 +25,12 @@ export type ThanksPlan = {
 };
 
 // Plusieurs follows regroupés (une rafale) : une seule phrase, sans pseudo. Un lurk : un viewer a écrit « !lurk » dans le tchat.
-export type ThanksSubject = LiveEvent | { kind: "follow-group" } | { kind: "lurk"; user: string };
+// Un viewer très impliqué : il vient d'atteindre `foxTalkativeMessages` messages acceptés depuis le démarrage du serveur.
+export type ThanksSubject =
+  | LiveEvent
+  | { kind: "follow-group" }
+  | { kind: "lurk"; user: string }
+  | { kind: "talkative"; user: string; messages: number };
 
 // Le premier mot du message est « !lurk », majuscules ignorées : le viewer regarde sans parler.
 export const isLurk = (text: string): boolean => text.trim().split(/\s+/, 1)[0]?.toLowerCase() === "!lurk";
@@ -74,14 +80,21 @@ export function toThanksPlan(subject: ThanksSubject, { isRefused, viewers }: Tha
     case "lurk":
       if (isRefused(subject.user)) return { list: "foxThanksLurkGeneric", values: {}, show: "smile" };
       return { list: "foxThanksLurk", values: { user: subject.user }, show: "smile" };
+    case "talkative":
+      return {
+        list: "foxThanksTalkative",
+        values: { user: name(subject.user), messages: subject.messages },
+        show: "smile",
+      };
   }
 }
 
-// Les réglages des remerciements : la case, le délai entre deux remerciements nominatifs de follow (ms), et les phrases de
-// chaque sorte d'évènement.
+// Les réglages des remerciements : la case, le délai entre deux remerciements nominatifs de follow (ms), le nombre de messages
+// d'un viewer très impliqué, et les phrases de chaque sorte d'évènement.
 export type ThanksRules = {
   shouldThank: boolean;
   gap: number;
+  talkativeAt: number;
   phrases: Readonly<Record<ThanksKey, readonly string[]>>;
 };
 
@@ -90,6 +103,7 @@ export function toThanksRules(settings: Settings): ThanksRules | undefined {
   const {
     foxShouldThank,
     foxThankGap,
+    foxTalkativeMessages,
     foxThanksFollow,
     foxThanksFollowGeneric,
     foxThanksSub,
@@ -98,10 +112,12 @@ export function toThanksRules(settings: Settings): ThanksRules | undefined {
     foxThanksCheer,
     foxThanksLurk,
     foxThanksLurkGeneric,
+    foxThanksTalkative,
   } = settings;
   if (
     foxShouldThank === undefined ||
     foxThankGap === undefined ||
+    foxTalkativeMessages === undefined ||
     foxThanksFollow === undefined ||
     foxThanksFollowGeneric === undefined ||
     foxThanksSub === undefined ||
@@ -109,12 +125,14 @@ export function toThanksRules(settings: Settings): ThanksRules | undefined {
     foxThanksGiftMany === undefined ||
     foxThanksCheer === undefined ||
     foxThanksLurk === undefined ||
-    foxThanksLurkGeneric === undefined
+    foxThanksLurkGeneric === undefined ||
+    foxThanksTalkative === undefined
   )
     return undefined;
   return {
     shouldThank: foxShouldThank,
     gap: foxThankGap,
+    talkativeAt: foxTalkativeMessages,
     phrases: {
       foxThanksFollow,
       foxThanksFollowGeneric,
@@ -124,6 +142,7 @@ export function toThanksRules(settings: Settings): ThanksRules | undefined {
       foxThanksCheer,
       foxThanksLurk,
       foxThanksLurkGeneric,
+      foxThanksTalkative,
     },
   };
 }

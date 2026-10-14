@@ -70,6 +70,11 @@ export const FoxModeSchema = z.discriminatedUnion("kind", [
 ]);
 export type FoxMode = z.infer<typeof FoxModeSchema>;
 
+// Son humeur selon le tchat : ordinaire, joyeux (le tchat s'anime) ou boudeur (le tchat se tait). Elle ne change que ses regards
+// au repos (la page les tire) et la phrase de la reprise (le serveur la dit).
+export const AttitudeSchema = z.enum(["plain", "cheerful", "sulking"]);
+export type Attitude = z.infer<typeof AttitudeSchema>;
+
 // H : s'il est visible, s'il glisse vers le bas, s'il est parti, ou s'il revient en sautant.
 export const PresenceViewSchema = z.enum(["visible", "leaving", "away", "returning"]);
 export type PresenceView = z.infer<typeof PresenceViewSchema>;
@@ -92,9 +97,14 @@ export const FoxEventSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("mode"), mode: FoxModeSchema }),
   // Sa présence (à la connexion, puis à chaque phase), avec le temps déjà écoulé dans cette phase.
   z.object({ kind: z.literal("presence"), presence: PresenceViewSchema, elapsed: z.number().min(0) }),
+  // Son humeur (à la connexion, puis à chaque changement).
+  z.object({ kind: z.literal("attitude"), attitude: AttitudeSchema }),
 ]);
 export type FoxEvent = z.infer<typeof FoxEventSchema>;
 
 // « Faire parler » : le texte que l'interface envoie, et l'adresse du WAV que le serveur rend.
 export const SpeakRequestSchema = z.object({ text: z.string() });
 export const SpeakAnswerSchema = z.object({ url: z.string().min(1) });
+
+// « Faire le bilan » : le bilan que le serveur va dire.
+export const ReviewAnswerSchema = z.object({ text: z.string().min(1) });

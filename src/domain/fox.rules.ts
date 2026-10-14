@@ -1,4 +1,4 @@
-import type { FoxImage, FoxMode, FoxPlace, FoxRules } from "./fox.schema";
+import type { Attitude, FoxImage, FoxMode, FoxPlace, FoxRules } from "./fox.schema";
 import { IDLE_MODE, isSameMode } from "./fox-mode.rules";
 import type { Settings } from "./settings.schema";
 
@@ -12,6 +12,12 @@ export const LISTEN_IMAGES = [
   "front-closed-rest",
   "right-closed-rest",
 ] as const satisfies readonly GazeImage[];
+// Boudeur : il ne regarde plus vers le tchat, comme quand il écoute.
+export const SULK_IMAGES = LISTEN_IMAGES;
+// Joyeux : le grand sourire entre dans la rotation des regards, une fois sur trois.
+export const SMILE_GAZE = "front-smile-rest" satisfies FoxImage;
+export const SMILE_GAZE_CHANCE = 1 / 3;
+export type Gaze = GazeImage | typeof SMILE_GAZE;
 export const YAWN_IMAGE = "shut-yawn-cover" satisfies FoxImage;
 // Le coucou alterne ces deux images toutes les 250 ms.
 export const WAVE_IMAGES = ["front-smile-wave", "front-small-wave"] as const satisfies readonly FoxImage[];
@@ -31,7 +37,7 @@ export type MouthImage = (typeof MOUTH_IMAGES)[keyof typeof MOUTH_IMAGES];
 // (-1 écrasé, +1 étiré), l'instant où la bouche a changé, s'il parle, le mode que le serveur lui donne (et depuis quand),
 // s'il écoute (le regard change alors d'intervalle), et l'instant du dernier pas.
 export type FoxState = {
-  gaze: GazeImage;
+  gaze: Gaze;
   gazeAt: number | null;
   blinkAt: number | null;
   blinkEndsAt: number | null;
@@ -71,6 +77,8 @@ export type NextFoxInput = {
   random: () => number;
   // Ce que le serveur lui fait montrer en plus de la bouche ; au repos sans précision.
   mode?: FoxMode;
+  // Son humeur ; ordinaire sans précision.
+  attitude?: Attitude;
 };
 
 // Ce que la page affiche : l'image, et l'échelle du corps (ancré aux pieds).
@@ -196,6 +204,7 @@ const toNextMouth = (
 type Timing = {
   isBusy: boolean;
   isListening: boolean;
+  attitude: Attitude;
   now: number;
   rules: FoxRules;
   random: () => number;
@@ -203,21 +212,44 @@ type Timing = {
 
 type GazeState = Pick<FoxState, "gaze" | "gazeAt">;
 
+// Quand il écoute, il alterne entre face et droite, jamais à gauche ; boudeur, de même (à son intervalle de repos).
+const toGazePool = ({
+  isListening,
+  attitude,
+}: Pick<Timing, "isListening" | "attitude">): readonly GazeImage[] => {
+  if (isListening) return LISTEN_IMAGES;
+  return attitude === "sulking" ? SULK_IMAGES : GAZE_IMAGES;
+};
+
+// Joyeux au repos : une fois sur trois, le sourire à la place d'un des trois regards (jamais deux sourires de suite).
+const pickGaze = (
+  current: Gaze,
+  pool: readonly GazeImage[],
+  canSmile: boolean,
+  random: () => number,
+): Gaze =>
+  canSmile && current !== SMILE_GAZE && random() < SMILE_GAZE_CHANCE
+    ? SMILE_GAZE
+    : pickOther<Gaze>(current, pool, random);
+
 // Le regard ne change pas quand il est occupé ; en repartant, il reprend un intervalle entier. Quand il écoute, il alterne
 // entre face et droite à son propre intervalle, et ne reste jamais à gauche : en entrant dans l'écoute, il se tourne tout
-// de suite.
+// de suite. Son humeur choisit les regards permis (boudeur : pas vers le tchat ; joyeux : le sourire s'y ajoute).
 const toNextGaze = (
   { gaze, gazeAt, isListening: wasListening }: GazeState & { isListening: boolean },
-  { isBusy, isListening, now, rules, random }: Timing,
+  timing: Timing,
 ): GazeState => {
+  const { isBusy, isListening, now, rules, random } = timing;
   if (isBusy) return { gaze, gazeAt: null };
-  const pool: readonly GazeImage[] = isListening ? LISTEN_IMAGES : GAZE_IMAGES;
+  const pool = toGazePool(timing);
+  const canSmile = !isListening && timing.attitude === "cheerful";
+  const allowed: readonly Gaze[] = canSmile ? [...pool, SMILE_GAZE] : pool;
   const [min, max] = isListening ? [rules.listenMin, rules.listenMax] : [rules.gazeMin, rules.gazeMax];
-  const current = pool.includes(gaze) ? gaze : (pool[0] ?? gaze);
+  const current = allowed.includes(gaze) ? gaze : (pool[0] ?? gaze);
   const planned = wasListening === isListening && current === gaze ? gazeAt : null;
   if (planned === null) return { gaze: current, gazeAt: now + toDuration(min, max, random) };
   if (now < planned) return { gaze: current, gazeAt: planned };
-  return { gaze: pickOther(current, pool, random), gazeAt: now + toDuration(min, max, random) };
+  return { gaze: pickGaze(current, pool, canSmile, random), gazeAt: now + toDuration(min, max, random) };
 };
 
 type BlinkState = Pick<FoxState, "blinkAt" | "blinkEndsAt">;
@@ -264,11 +296,19 @@ const isShowing = ({ kind }: FoxMode): boolean =>
 
 // Un pas de l'animation : la page l'appelle à chaque image, avec le level de la voix (null : il ne parle pas) et le mode
 // que le serveur lui donne.
-export function toNextFox({ previous, now, level, rules, random, mode = IDLE_MODE }: NextFoxInput): FoxState {
+export function toNextFox({
+  previous,
+  now,
+  level,
+  rules,
+  random,
+  mode = IDLE_MODE,
+  attitude = "plain",
+}: NextFoxInput): FoxState {
   const isSpeaking = level !== null;
   const isBusy = isSpeaking || isShowing(mode);
   const isListening = !isBusy && mode.kind === "listening";
-  const timing: Timing = { isBusy, isListening, now, rules, random };
+  const timing: Timing = { isBusy, isListening, attitude, now, rules, random };
   return {
     ...toNextGaze(previous, timing),
     ...toNextBlink(previous, timing),

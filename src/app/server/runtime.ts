@@ -15,6 +15,7 @@ import {
   updateLocalSettings,
 } from "../../infra/local-settings.repository";
 import { createObsClient, createObsSocket, type ObsClient } from "../../infra/obs.client";
+import { createRegularsStore } from "../../infra/regulars.repository";
 import { getSettings } from "../../infra/settings.repository";
 import { createTwitchAuthClient } from "../../infra/twitch-auth.client";
 import { createFollowFeed } from "../../infra/twitch-follows.client";
@@ -26,14 +27,18 @@ import { type Chat, createChat } from "../../usecase/chat.usecase";
 import { createEmoteSync } from "../../usecase/emote-sync.usecase";
 import { createExpressionLibrary, type ExpressionLibrary } from "../../usecase/expression.usecase";
 import { createFox, type Fox } from "../../usecase/fox.usecase";
+import { createFoxAttitude } from "../../usecase/fox-attitude.usecase";
 import { createFoxBalance } from "../../usecase/fox-balance.usecase";
 import { createFoxChat } from "../../usecase/fox-chat.usecase";
 import { createFoxHours } from "../../usecase/fox-hours.usecase";
 import { createFoxJab } from "../../usecase/fox-jab.usecase";
 import { createFoxMode, type FoxModeController } from "../../usecase/fox-mode.usecase";
 import { createFoxQueue } from "../../usecase/fox-queue.usecase";
+import { createFoxRegulars } from "../../usecase/fox-regulars.usecase";
+import { createFoxReview, type FoxReview } from "../../usecase/fox-review.usecase";
 import { createFoxShout } from "../../usecase/fox-shout.usecase";
 import { createFoxStartle } from "../../usecase/fox-startle.usecase";
+import { createFoxTally } from "../../usecase/fox-tally.usecase";
 import { createFoxThanks, type FoxThanks } from "../../usecase/fox-thanks.usecase";
 import { createFoxTunnel } from "../../usecase/fox-tunnel.usecase";
 import { createHeadLoop, type HeadFeed } from "../../usecase/head.usecase";
@@ -57,6 +62,8 @@ export type Runtime = {
   thanks: FoxThanks;
   // La connexion d'Alexis à Twitch : son jeton, et l'écoute des follows (EventSub).
   twitch: TwitchConnection;
+  // Le bilan du live : « Faire le bilan », et la fin prévue.
+  review: FoxReview;
 };
 
 // Le plugin Nitro et les routes serveur partagent ce module : c'est le seul état du serveur.
@@ -133,6 +140,9 @@ export function startRuntime(): Runtime {
       startle.update(effective);
       hours.update(effective);
       thanks.update(effective);
+      review.update(effective);
+      attitude.update(effective);
+      regulars.update(effective);
       chat.update(effective);
       foxChat.update(effective);
     },
@@ -199,7 +209,42 @@ export function startRuntime(): Runtime {
   });
   // La file de parole : les messages du tchat (et plus tard les remerciements et les piques) y attendent leur tour.
   const queue = createFoxQueue({ fox, mode, settings: initial, clock: Date.now, schedule, log });
-  const foxChat = createFoxChat({ chat, queue, emotes, settings: initial, insults, clock: Date.now, log });
+  // Les habitués : data/viewers.json (hors de git) garde la venue de chaque viewer, de quoi l'accueillir d'une phrase.
+  const regulars = createFoxRegulars({
+    port: createRegularsStore(join(root, "data", "viewers.json"), log),
+    settings: initial,
+    insults,
+    clock: Date.now,
+    schedule,
+    random: Math.random,
+    log,
+  });
+  process.once("exit", regulars.stop);
+  // Le compte des messages acceptés de chaque viewer depuis le démarrage du serveur.
+  const tally = createFoxTally();
+  const review = createFoxReview({ tally, queue, settings: initial, insults, log });
+  // L'humeur du renard suit le tchat : joyeux quand il s'anime, boudeur quand il se tait, et la phrase de la reprise.
+  const attitude = createFoxAttitude({
+    mode,
+    fox,
+    settings: initial,
+    clock: Date.now,
+    random: Math.random,
+    log,
+  });
+  const foxChat = createFoxChat({
+    chat,
+    queue,
+    mode,
+    emotes,
+    regulars,
+    tally,
+    attitude,
+    settings: initial,
+    insults,
+    clock: Date.now,
+    log,
+  });
   // L'application Twitch (LivePlace) : ses identifiants viennent de .env. Sans eux, le nombre de viewers et le planning restent
   // inconnus, la connexion d'Alexis est indisponible et les follows attendent ; le journal le dit une fois.
   const twitchApp = getTwitchApp(process.env);
@@ -277,6 +322,7 @@ export function startRuntime(): Runtime {
     broadcast: obs.broadcast,
     queue,
     mode,
+    review,
     settings: initial,
     clock: Date.now,
     random: Math.random,
@@ -294,6 +340,7 @@ export function startRuntime(): Runtime {
     queue,
     foxChat,
     viewers,
+    tally,
     jab,
     settings: initial,
     insults,
@@ -327,6 +374,8 @@ export function startRuntime(): Runtime {
   queue.start();
   void emotes.start();
   foxChat.start();
+  regulars.start();
+  attitude.start();
   jab.start();
   shout.start();
   tunnel.start();
@@ -342,7 +391,7 @@ export function startRuntime(): Runtime {
     `Serveur démarré : http://localhost:${port}/head, /chat et /fox (réglages : http://localhost:${port}/)`,
   );
   log(`Réglages : micro « ${initial.micName} », seuil ${initial.threshold} dB, délai ${initial.delay} ms.`);
-  current = { feed: loop.feed, expressions, settings, obs, chat, fox, mode, thanks, twitch };
+  current = { feed: loop.feed, expressions, settings, obs, chat, fox, mode, thanks, twitch, review };
   return current;
 }
 

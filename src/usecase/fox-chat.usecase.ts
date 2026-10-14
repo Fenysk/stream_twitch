@@ -10,19 +10,37 @@ import {
   toReasonText,
 } from "../domain/chat-filter.rules";
 import type { InsultList } from "../domain/chat-insults.rules";
+import { isBotMessage } from "../domain/chat-message.rules";
 import { toChatBots, toChatChannel } from "../domain/chat-settings.rules";
 import { type Show, WAVE_MODE } from "../domain/fox-mode.rules";
-import { toReaction } from "../domain/reaction.rules";
+import {
+  EMOTE_REACTION_GAP_MS,
+  type EmoteReaction,
+  toEmoteReactions,
+  toReaction,
+} from "../domain/reaction.rules";
 import type { Settings } from "../domain/settings.schema";
 import type { Chat, ChatSourceEvent } from "./chat.usecase";
 import type { EmoteSync } from "./emote-sync.usecase";
+import type { FoxAttitude } from "./fox-attitude.usecase";
+import type { FoxModeController } from "./fox-mode.usecase";
 import type { FoxQueue, QueueItem } from "./fox-queue.usecase";
+import type { FoxRegulars } from "./fox-regulars.usecase";
+import type { FoxTally } from "./fox-tally.usecase";
 
 export type FoxChatDeps = {
   chat: Pick<Chat, "subscribeSource">;
   queue: Pick<FoxQueue, "push" | "count" | "removeWhere">;
+  // Q : la réaction d'un message d'emotes seules, montrée de lui-même (visible, rien d'autre montré).
+  mode: Pick<FoxModeController, "flash">;
   // Les emotes de 7TV, BTTV et FFZ synchronisées ; `foxEmoteNames` s'y ajoute (les ajouts à la main).
   emotes: Pick<EmoteSync, "getNames">;
+  // T : data/viewers.json, et la phrase d'accueil dite avant le premier message d'un viewer dans un live.
+  regulars: Pick<FoxRegulars, "noteMessage">;
+  // U : le compte des messages acceptés de chaque viewer.
+  tally: Pick<FoxTally, "noteMessage">;
+  // R : l'humeur du renard suit le tchat, et la phrase de la reprise après un long silence.
+  attitude: Pick<FoxAttitude, "noteMessage">;
   settings: Settings;
   insults: InsultList;
   clock: () => number;
@@ -53,7 +71,11 @@ const toLogText = (text: string): string => {
 export function createFoxChat({
   chat,
   queue,
+  mode,
   emotes,
+  regulars,
+  tally,
+  attitude,
   settings: initial,
   insults,
   clock,
@@ -61,6 +83,9 @@ export function createFoxChat({
 }: FoxChatDeps): FoxChat {
   let settings = initial;
   let rules = toReadRules(initial);
+  // Q : les emotes qui changent sa tête, et quand la dernière a changé celle d'un message d'emotes seules.
+  let emoteReactions: readonly EmoteReaction[] = toEmoteReactions(initial.foxEmoteReactions);
+  let lastEmoteReactionAt: number | null = null;
   const lastReadAt = new Map<string, number>();
   // G : les viewers déjà lus depuis le démarrage du serveur, le coucou est pour les autres.
   const greeted = new Set<string>();
@@ -75,8 +100,20 @@ export function createFoxChat({
       greeted.add(raw.viewerId);
       return WAVE_MODE;
     }
-    const image = toReaction(raw.text);
+    const image = toReaction(raw.text, emoteReactions);
     return image ? { kind: "reaction", image } : null;
+  };
+
+  // Q : un message d'emotes seules (rien à lire) montre quand même sa réaction, sans lecture : seulement visible et muet, au plus
+  // une toutes les 5 s. Caché, il ne revient pas.
+  const reactToEmotes = (raw: RawMessage) => {
+    const image = toReaction(raw.text, emoteReactions);
+    if (image === null) return;
+    const now = clock();
+    if (lastEmoteReactionAt !== null && now - lastEmoteReactionAt < EMOTE_REACTION_GAP_MS) return;
+    if (queue.count(() => true) > 0) return;
+    if (mode.flash({ kind: "reaction", image }) === 0) return;
+    lastEmoteReactionAt = now;
   };
 
   // Ce qui retient un message que le filtre laisse passer : le pace de son viewer, ou une file pleine. Un message ignoré par
@@ -104,26 +141,43 @@ export function createFoxChat({
     return hold ? { ok: false, reason: hold } : speech;
   };
 
-  // H : un message accepté (après le filtre) réveille le renard, qui revient s'il était parti ; un message ignoré, non.
-  const receiveMessage = (raw: RawMessage) => {
-    if (!rules?.shouldReadChat) return;
-    const isOwn = isOwnMessage(raw, toChatChannel(settings));
-    const decision = decide(raw, rules, isOwn);
-    if (!decision.ok) {
-      skip(raw, decision.reason);
-      return;
-    }
+  // Un message que le filtre ignore : le journal le dit. D'emotes seules (Q), il montre quand même sa réaction.
+  const ignore = (raw: RawMessage, reason: FilterReason) => {
+    skip(raw, reason);
+    if (reason.family === "emotes") reactToEmotes(raw);
+  };
+
+  // H : un message accepté (après le filtre) réveille le renard, qui revient s'il était parti. Le compte (U), le fichier des
+  // habitués (T) et l'humeur (R) le voient. Une seule phrase est dite avant lui, d'une seule traite : la reprise après un long
+  // silence du tchat, sinon l'accueil d'un habitué.
+  const accept = (raw: RawMessage, text: string, isOwn: boolean) => {
     lastReadAt.set(raw.viewerId, clock());
+    if (!isOwn) tally.noteMessage(raw);
+    const resume = isOwn ? null : attitude.noteMessage({ isAccepted: true });
+    const welcome = isOwn ? null : regulars.noteMessage(raw, { canWelcome: resume === null });
+    const before = resume ?? welcome;
     queue.push({
       kind: "message",
       label: `message de ${raw.nickname}`,
-      text: decision.text,
+      text: before === null ? text : `${before} ${text}`,
       messageId: raw.id,
       viewerId: raw.viewerId,
       isCuttable: true,
       isUrgent: false,
       toShow: () => toShow(raw, isOwn),
     });
+  };
+
+  const receiveMessage = (raw: RawMessage) => {
+    const isOwn = isOwnMessage(raw, toChatChannel(settings));
+    const decision = rules?.shouldReadChat ? decide(raw, rules, isOwn) : undefined;
+    if (decision?.ok) {
+      accept(raw, decision.text, isOwn);
+      return;
+    }
+    // Ni lu ni accepté, le tchat a quand même parlé (R) ; seuls le compte de la chaîne et les bots ne comptent pas.
+    if (!isOwn && !isBotMessage(raw, toChatBots(settings))) attitude.noteMessage({ isAccepted: false });
+    if (decision) ignore(raw, decision.reason);
   };
 
   // Le filtre, puis la file devant les messages, sans coucou ni réaction : le remerciement a déjà eu la sienne.
@@ -180,6 +234,7 @@ export function createFoxChat({
       const wasReading = rules?.shouldReadChat;
       settings = next;
       rules = toReadRules(next);
+      emoteReactions = toEmoteReactions(next.foxEmoteReactions);
       const isReading = rules?.shouldReadChat;
       if (wasReading !== isReading) log(`Renard : lecture du tchat ${isReading ? "activée" : "désactivée"}.`);
       if (!isReading) queue.removeWhere(isMessage);

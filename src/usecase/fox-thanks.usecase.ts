@@ -25,6 +25,7 @@ import type { Chat } from "./chat.usecase";
 import type { FoxChat } from "./fox-chat.usecase";
 import type { FoxJab } from "./fox-jab.usecase";
 import type { FoxQueue } from "./fox-queue.usecase";
+import type { Counted, FoxTally } from "./fox-tally.usecase";
 import type { Viewers } from "./viewers.usecase";
 
 export type FoxThanksDeps = {
@@ -32,6 +33,8 @@ export type FoxThanksDeps = {
   queue: Pick<FoxQueue, "push">;
   foxChat: Pick<FoxChat, "speakAttached">;
   viewers: Pick<Viewers, "getCount">;
+  // U : le compte des messages acceptés de chaque viewer.
+  tally: Pick<FoxTally, "subscribe">;
   // Un remerciement est quelque chose qui se passe dans le live : le silence de la relance repart.
   jab: Pick<FoxJab, "noteActivity">;
   settings: Settings;
@@ -44,7 +47,7 @@ export type FoxThanksDeps = {
 };
 
 export type FoxThanks = {
-  // Le renard écoute les subs, resubs, subs offerts et cheers du tchat.
+  // Le renard écoute les subs, resubs, subs offerts, cheers et lurks du tchat, et le compte des messages de chaque viewer.
   start(): void;
   stop(): void;
   update(settings: Settings): void;
@@ -61,6 +64,7 @@ const SUBJECT_TEXTS: Record<ThanksSubject["kind"], string> = {
   "mystery-gift": "série de subs offerts",
   cheer: "cheer",
   lurk: "lurk",
+  talkative: "viewer très impliqué",
 };
 
 const toEmptySaid = (): Record<ThanksKey, string[]> => ({
@@ -72,6 +76,7 @@ const toEmptySaid = (): Record<ThanksKey, string[]> => ({
   foxThanksCheer: [],
   foxThanksLurk: [],
   foxThanksLurkGeneric: [],
+  foxThanksTalkative: [],
 });
 
 // Le message qui accompagne l'évènement, prêt à passer le filtre : un cheer n'y garde pas ses cheermotes (« Cheer100 »).
@@ -87,12 +92,14 @@ const toAttachedMessage = (event: LiveEvent): RawMessage | null => {
 // Les remerciements : un évènement du live (follow, sub, resub, sub offert, cheer) donne une phrase tirée au hasard dans la
 // liste de son espèce, qui passe devant les messages de la file. Elle attend le silence de Fenysk mais sa voix ne la coupe
 // pas. Les follows en rafale ne sont remerciés nominativement qu'un par délai, les autres sont regroupés en une phrase. Un
-// message du tchat dont le premier mot est « !lurk » est remercié de même, une fois par viewer depuis le démarrage du serveur.
+// message du tchat dont le premier mot est « !lurk » est remercié de même, une fois par viewer depuis le démarrage du serveur,
+// comme un viewer qui atteint `foxTalkativeMessages` messages acceptés (jamais de classement ni de dépassement annoncé).
 export function createFoxThanks({
   chat,
   queue,
   foxChat,
   viewers,
+  tally,
   jab,
   settings: initial,
   insults,
@@ -106,9 +113,12 @@ export function createFoxThanks({
   let cancelGroup: (() => void) | undefined;
   // Les viewers déjà remerciés d'un lurk depuis le démarrage du serveur.
   const lurkers = new Set<string>();
+  // Les viewers déjà remerciés de leurs messages depuis le démarrage du serveur.
+  const talkatives = new Set<string>();
   // Les phrases déjà dites de chaque liste depuis son dernier tour : pas de répétition avant d'avoir tout dit.
   const said = toEmptySaid();
   let unsubscribe: (() => void) | undefined;
+  let unsubscribeTally: (() => void) | undefined;
 
   const thank = (subject: ThanksSubject, attached: RawMessage | null) => {
     if (!rules) return;
@@ -192,16 +202,26 @@ export function createFoxThanks({
     thank({ kind: "lurk", user: nickname }, null);
   };
 
+  // U : le premier viewer à atteindre le nombre de messages réglé, remercié une fois.
+  const receiveCount = ({ viewerId, nickname, messages }: Counted) => {
+    if (!rules?.shouldThank || messages < rules.talkativeAt || talkatives.has(viewerId)) return;
+    talkatives.add(viewerId);
+    thank({ kind: "talkative", user: nickname, messages }, null);
+  };
+
   return {
     start() {
       unsubscribe ??= chat.subscribeSource((event) => {
         if (event.kind === "live") receive(event.event);
         else if (event.kind === "message") receiveMessage(event.message);
       });
+      unsubscribeTally ??= tally.subscribe(receiveCount);
     },
     stop() {
       unsubscribe?.();
       unsubscribe = undefined;
+      unsubscribeTally?.();
+      unsubscribeTally = undefined;
       resetBurst();
     },
     update(next) {

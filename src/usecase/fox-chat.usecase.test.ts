@@ -130,7 +130,20 @@ const setup = (custom: Settings = settings) => {
   const stub = createStubMode();
   // Les noms d'emotes de 7TV, BTTV et FFZ que la synchro a reçus ; un test y ajoute les siens.
   const syncedNames: string[] = [];
-  const state = { now: 100_000 };
+  // T : la phrase d'accueil que le fichier des habitués rend (`welcome`), et les messages qu'il a reçus.
+  const state = {
+    now: 100_000,
+    welcome: null as string | null,
+    // R : la phrase de la reprise que l'humeur rend (`resume`), et les messages du tchat qu'elle a reçus.
+    resume: null as string | null,
+    flashMs: 1000,
+  };
+  const notes: { isAccepted: boolean }[] = [];
+  // Q : ce que le renard montre de lui-même pour un message d'emotes seules.
+  const flashes: Show[] = [];
+  const visits: { raw: RawMessage; canWelcome: boolean }[] = [];
+  // U : les messages que le compte a reçus.
+  const counted: RawMessage[] = [];
   const timers: { at: number; callback: () => void; isCancelled: boolean }[] = [];
   const messages: string[] = [];
   const spoken: Spoken[] = [];
@@ -179,7 +192,26 @@ const setup = (custom: Settings = settings) => {
   const reader = createFoxChat({
     chat,
     queue,
+    mode: {
+      flash(show) {
+        flashes.push(show);
+        return state.flashMs;
+      },
+    },
     emotes: { getNames: () => syncedNames },
+    regulars: {
+      noteMessage(raw, { canWelcome }) {
+        visits.push({ raw, canWelcome });
+        return state.welcome;
+      },
+    },
+    tally: { noteMessage: (raw) => counted.push(raw) },
+    attitude: {
+      noteMessage(note) {
+        notes.push(note);
+        return note.isAccepted ? state.resume : null;
+      },
+    },
     settings: custom,
     insults,
     clock: () => state.now,
@@ -227,6 +259,10 @@ const setup = (custom: Settings = settings) => {
     messages,
     stub,
     syncedNames,
+    visits,
+    counted,
+    notes,
+    flashes,
     subscribers: () => subscribers,
     pendingTimers: () => timers.filter(({ isCancelled }) => !isCancelled).length,
     receive: async (raw: RawMessage) => {
@@ -1078,7 +1114,11 @@ describe("de bout en bout : du message du tchat à la voix du renard", () => {
     const foxChat = createFoxChat({
       chat,
       queue,
+      mode: { flash: () => 0 },
       emotes: { getNames: () => [] },
+      regulars: { noteMessage: () => null },
+      tally: { noteMessage: () => undefined },
+      attitude: { noteMessage: () => null },
       settings,
       insults,
       clock: () => state.now,
@@ -1226,5 +1266,304 @@ describe("createFoxChat : le message qui accompagne un sub ou des bits", () => {
     expect(spoken[0]?.isCancelled()).toBe(false);
     await deleteMessage("1");
     expect(spoken[0]?.isCancelled()).toBe(true);
+  });
+});
+
+describe("createFoxChat : T, la phrase d'accueil des habitués", () => {
+  it("dit la phrase d'accueil juste avant le message, d'une seule traite, après le coucou", async () => {
+    const { receive, spoken, state, stub } = setup();
+    state.welcome = "Un nouveau ! Bienvenue, Alice.";
+    await receive(message("1", "Bonjour tout le monde", { viewerId: "alice", nickname: "Alice" }));
+    expect(spoken.map(({ text }) => text)).toEqual(["Un nouveau ! Bienvenue, Alice. Bonjour tout le monde"]);
+    expect(stub.calls.intros.map(({ show }) => show)).toEqual([{ kind: "wave" }]);
+  });
+
+  it("lit le message seul quand le fichier n'a pas de phrase d'accueil à dire", async () => {
+    const { receive, spoken } = setup();
+    await receive(message("1", "Bonjour", { viewerId: "alice" }));
+    expect(spoken.map(({ text }) => text)).toEqual(["Bonjour"]);
+  });
+
+  it("annonce au fichier chaque message accepté d'un viewer, avec le droit d'accueillir", async () => {
+    const { receive, visits } = setup();
+    await receive(message("1", "Bonjour", { viewerId: "alice", viewerLogin: "Alice" }));
+    expect(visits.map(({ raw, canWelcome }) => [raw.viewerLogin, canWelcome])).toEqual([["Alice", true]]);
+  });
+
+  it("n'annonce pas au fichier un message que le filtre ignore, ni celui d'un bot", async () => {
+    const { receive, visits } = setup();
+    await receive(message("1", "!lurk", { viewerId: "alice", isCommand: true }));
+    await receive(message("2", "https://exemple.fr", { viewerId: "bob" }));
+    await receive(message("3", "Bonjour", { viewerId: "nightbot", viewerLogin: "nightbot" }));
+    expect(visits).toEqual([]);
+  });
+
+  it("n'annonce pas au fichier le compte de la chaîne, et ne lui dit aucune phrase d'accueil", async () => {
+    const { receive, visits, spoken, state } = setup();
+    state.welcome = "Un nouveau ! Bienvenue, Fenysk.";
+    await receive(
+      message("1", "Bienvenue", { viewerId: "owner", viewerLogin: "Fenysk", nickname: "Fenysk" }),
+    );
+    expect(visits).toEqual([]);
+    expect(spoken.map(({ text }) => text)).toEqual(["Bienvenue"]);
+  });
+
+  it("n'annonce rien quand « Lire le tchat » est désactivé", async () => {
+    const { receive, visits } = setup({ ...settings, foxShouldReadChat: false });
+    await receive(message("1", "Bonjour", { viewerId: "alice" }));
+    expect(visits).toEqual([]);
+  });
+});
+
+describe("createFoxChat : U, le compte des messages acceptés", () => {
+  it("compte chaque message accepté d'un viewer", async () => {
+    const { receive, counted, finishSynthesis, advance } = setup();
+    await receive(message("1", "Bonjour", { viewerId: "alice" }));
+    await finishSynthesis(0, 500);
+    await advance(10_000);
+    await receive(message("2", "Re-bonjour", { viewerId: "alice" }));
+    expect(counted.map(({ viewerId, text }) => [viewerId, text])).toEqual([
+      ["alice", "Bonjour"],
+      ["alice", "Re-bonjour"],
+    ]);
+  });
+
+  it("ne compte pas un message ignoré par le filtre : commande, lien, spam, viewer trop pressé, file pleine", async () => {
+    const { receive, counted } = setup();
+    await receive(message("1", "!lurk", { viewerId: "alice", isCommand: true }));
+    await receive(message("2", "https://exemple.fr", { viewerId: "bob" }));
+    await receive(message("3", "aaaaaaaaaaaa", { viewerId: "carole" }));
+    await receive(message("4", "Bonjour", { viewerId: "dave" }));
+    await receive(message("5", "Encore", { viewerId: "dave" }));
+    expect(counted.map(({ viewerId }) => viewerId)).toEqual(["dave"]);
+  });
+
+  it("ne compte ni le compte de la chaîne ni un bot", async () => {
+    const { receive, counted } = setup();
+    await receive(message("1", "Bienvenue", { viewerId: "owner", viewerLogin: "Fenysk" }));
+    await receive(message("2", "Bonjour", { viewerId: "nightbot", viewerLogin: "nightbot" }));
+    expect(counted).toEqual([]);
+  });
+});
+
+describe("createFoxChat : Q, les emotes changent sa tête", () => {
+  const emoteSettings: Settings = {
+    ...settings,
+    foxEmoteReactions: ["LUL = sourire", "WutFace = choc", "Kappa = clin"],
+    foxEmoteNames: ["KEKW", "LUL", "WutFace", "Kappa"],
+  };
+  const reaction = (image: "front-smile-rest" | "left-large-rest" | "wink-tongue-rest"): Show => ({
+    kind: "reaction",
+    image,
+  });
+
+  // Le viewer est salué par un premier message, puis un second, 10 s plus tard, porte l'emote.
+  const getSecondShow = async (text: string) => {
+    const harness = setup(emoteSettings);
+    await harness.receive(message("1", "Bonjour", { viewerId: "alice" }));
+    await harness.finishSynthesis(0, 500);
+    await harness.advance(10_000);
+    await harness.receive(message("2", text, { viewerId: "alice" }));
+    return harness.stub.calls.intros[1]?.show;
+  };
+
+  it("montre la réaction de l'emote que le message contient, avant de le lire", async () => {
+    expect(await getSecondShow("trop drôle LUL")).toEqual(reaction("front-smile-rest"));
+    expect(await getSecondShow("hein WutFace quoi")).toEqual(reaction("left-large-rest"));
+    expect(await getSecondShow("bien joué Kappa")).toEqual(reaction("wink-tongue-rest"));
+  });
+
+  it("ne montre rien pour une emote qui n'est pas dans la liste, ni pour un nom mal écrit", async () => {
+    expect(await getSecondShow("trop drôle KEKW")).toBeNull();
+    expect(await getSecondShow("trop drôle lul")).toBeNull();
+  });
+
+  it("suit la liste changée en direct", async () => {
+    const harness = setup(emoteSettings);
+    harness.foxChat.update({ ...emoteSettings, foxEmoteReactions: ["KEKW = choc"] });
+    await harness.receive(message("1", "Bonjour", { viewerId: "alice" }));
+    await harness.finishSynthesis(0, 500);
+    await harness.advance(10_000);
+    await harness.receive(message("2", "ah KEKW", { viewerId: "alice" }));
+    expect(harness.stub.calls.intros[1]?.show).toEqual(reaction("left-large-rest"));
+  });
+
+  it("laisse le coucou à la place de la réaction au premier message lu d'un viewer", async () => {
+    const { receive, stub } = setup(emoteSettings);
+    await receive(message("1", "mdr LUL", { viewerId: "alice" }));
+    expect(stub.calls.intros.map(({ show }) => show)).toEqual([{ kind: "wave" }]);
+  });
+
+  describe("un message d'emotes seules", () => {
+    it("montre la réaction sans rien lire, et sans le faire attendre ou parler", async () => {
+      const { receive, flashes, spoken, stub, messages } = setup(emoteSettings);
+      await receive(
+        message("1", "LUL LUL", {
+          emotes: [
+            { id: "425618", start: 0, end: 2 },
+            { id: "425618", start: 4, end: 6 },
+          ],
+        }),
+      );
+      expect(flashes).toEqual([reaction("front-smile-rest")]);
+      expect(spoken).toEqual([]);
+      expect(stub.calls.wakes).toBe(0);
+      expect(stub.calls.intros).toEqual([]);
+      expect(messages.at(-1)).toContain("il ne reste que des emotes");
+    });
+
+    it("donne la réaction de chaque emote de la liste, emotes de Twitch et de la liste à la main", async () => {
+      const { receive, flashes, advance } = setup(emoteSettings);
+      await receive(message("1", "WutFace", { viewerId: "a", emotes: [{ id: "28087", start: 0, end: 6 }] }));
+      await advance(5000);
+      await receive(message("2", "KEKW LUL", { viewerId: "b" }));
+      await advance(5000);
+      await receive(message("3", "Kappa", { viewerId: "c", emotes: [{ id: "25", start: 0, end: 4 }] }));
+      expect(flashes).toEqual([
+        reaction("left-large-rest"),
+        reaction("front-smile-rest"),
+        reaction("wink-tongue-rest"),
+      ]);
+    });
+
+    it("ne montre rien pour des emotes qui ne sont pas dans la liste", async () => {
+      const { receive, flashes } = setup(emoteSettings);
+      await receive(message("1", "KEKW KEKW"));
+      expect(flashes).toEqual([]);
+    });
+
+    it("ne montre qu'une réaction toutes les 5 s", async () => {
+      const { receive, flashes, advance } = setup(emoteSettings);
+      await receive(message("1", "LUL", { viewerId: "a" }));
+      await advance(4999);
+      await receive(message("2", "LUL", { viewerId: "b" }));
+      expect(flashes).toHaveLength(1);
+      await advance(1);
+      await receive(message("3", "LUL", { viewerId: "c" }));
+      expect(flashes).toHaveLength(2);
+    });
+
+    it("ne compte pas pour les 5 s une réaction qui n'a pas pu se montrer (caché, ou autre chose montré)", async () => {
+      const { receive, flashes, state } = setup(emoteSettings);
+      state.flashMs = 0;
+      await receive(message("1", "LUL", { viewerId: "a" }));
+      state.flashMs = 1000;
+      await receive(message("2", "LUL", { viewerId: "b" }));
+      expect(flashes).toHaveLength(2);
+    });
+
+    it("ne montre rien quand le renard parle ou va parler : un message ou un remerciement dans la file", async () => {
+      const { receive, flashes, finishSynthesis, advance } = setup(emoteSettings);
+      await receive(message("1", "Bonjour", { viewerId: "alice" }));
+      await receive(message("2", "LUL", { viewerId: "bob" }));
+      expect(flashes).toEqual([]);
+      await finishSynthesis(0, 1000);
+      await advance(1400);
+      await receive(message("3", "LUL", { viewerId: "carole" }));
+      expect(flashes).toEqual([reaction("front-smile-rest")]);
+    });
+
+    it("donne aussi les mots-clés de E : un « ;) » ou « <3 » d'emote de Twitch seul", async () => {
+      const { receive, flashes } = setup(emoteSettings);
+      await receive(message("1", "<3", { emotes: [{ id: "9", start: 0, end: 1 }] }));
+      expect(flashes).toEqual([reaction("front-smile-rest")]);
+    });
+
+    it("ne fait rien pour un message ignoré pour une autre raison (lien, commande, spam)", async () => {
+      const { receive, flashes } = setup(emoteSettings);
+      await receive(message("1", "LUL https://exemple.fr", { viewerId: "a" }));
+      await receive(message("2", "!lurk LUL", { viewerId: "b", isCommand: true }));
+      await receive(message("3", "aaaaaaaaaaaa", { viewerId: "c" }));
+      expect(flashes).toEqual([]);
+    });
+
+    it("ne fait rien quand « Lire le tchat » est désactivé", async () => {
+      const off = setup({ ...emoteSettings, foxShouldReadChat: false });
+      await off.receive(message("1", "LUL"));
+      expect(off.flashes).toEqual([]);
+    });
+
+    it("ne compte pas comme un viewer lu : ni file, ni pace, ni compte, ni accueil", async () => {
+      const { receive, visits, counted } = setup(emoteSettings);
+      await receive(message("1", "LUL", { viewerId: "alice" }));
+      expect(visits).toEqual([]);
+      expect(counted).toEqual([]);
+    });
+  });
+});
+
+describe("createFoxChat : R, l'humeur et la reprise", () => {
+  it("dit la phrase de la reprise juste avant le message, d'une seule traite, après le coucou", async () => {
+    const { receive, spoken, state, stub } = setup();
+    state.resume = "Ah, maintenant vous parlez ?";
+    await receive(message("1", "Bonjour", { viewerId: "alice" }));
+    expect(spoken.map(({ text }) => text)).toEqual(["Ah, maintenant vous parlez ? Bonjour"]);
+    expect(stub.calls.intros.map(({ show }) => show)).toEqual([{ kind: "wave" }]);
+  });
+
+  it("passe avant la phrase d'accueil : une seule phrase avant un message, et l'accueil n'est pas dit", async () => {
+    const { receive, spoken, state, visits } = setup();
+    state.resume = "Ah, maintenant vous parlez ?";
+    state.welcome = "Un nouveau ! Bienvenue, Alice.";
+    await receive(message("1", "Bonjour", { viewerId: "alice" }));
+    expect(spoken.map(({ text }) => text)).toEqual(["Ah, maintenant vous parlez ? Bonjour"]);
+    expect(visits.map(({ canWelcome }) => canWelcome)).toEqual([false]);
+  });
+
+  it("laisse l'accueil quand il n'y a pas de reprise", async () => {
+    const { receive, spoken, state, visits } = setup();
+    state.welcome = "Un nouveau ! Bienvenue, Alice.";
+    await receive(message("1", "Bonjour", { viewerId: "alice" }));
+    expect(spoken.map(({ text }) => text)).toEqual(["Un nouveau ! Bienvenue, Alice. Bonjour"]);
+    expect(visits.map(({ canWelcome }) => canWelcome)).toEqual([true]);
+  });
+
+  it("annonce à l'humeur chaque message accepté d'un viewer", async () => {
+    const { receive, notes } = setup();
+    await receive(message("1", "Bonjour", { viewerId: "alice" }));
+    expect(notes).toEqual([{ isAccepted: true }]);
+  });
+
+  it("annonce à l'humeur un message que le filtre ignore : le tchat a parlé quand même", async () => {
+    const { receive, notes } = setup();
+    await receive(message("1", "!lurk", { viewerId: "alice", isCommand: true }));
+    await receive(message("2", "https://exemple.fr", { viewerId: "bob" }));
+    await receive(message("3", "aaaaaaaaaaaa", { viewerId: "carole" }));
+    await receive(message("4", "KEKW", { viewerId: "dave" }));
+    expect(notes).toEqual([
+      { isAccepted: false },
+      { isAccepted: false },
+      { isAccepted: false },
+      { isAccepted: false },
+    ]);
+  });
+
+  it("annonce à l'humeur aussi le message d'un viewer lu trop vite", async () => {
+    const { receive, notes } = setup();
+    await receive(message("1", "Bonjour", { viewerId: "alice" }));
+    await receive(message("2", "Encore", { viewerId: "alice" }));
+    expect(notes).toEqual([{ isAccepted: true }, { isAccepted: false }]);
+  });
+
+  it("n'annonce rien à l'humeur pour le compte de la chaîne ni pour un bot", async () => {
+    const { receive, notes, state, spoken } = setup();
+    state.resume = "Ah, maintenant vous parlez ?";
+    await receive(
+      message("1", "Bienvenue", { viewerId: "owner", viewerLogin: "Fenysk", nickname: "Fenysk" }),
+    );
+    await receive(message("2", "Bonjour", { viewerId: "nightbot", viewerLogin: "nightbot" }));
+    await receive(
+      message("3", "!discord", { viewerId: "nightbot", viewerLogin: "NightBot", isCommand: true }),
+    );
+    expect(spoken.map(({ text }) => text)).toEqual(["Bienvenue"]);
+    expect(notes).toEqual([]);
+  });
+
+  it("annonce à l'humeur les messages même quand « Lire le tchat » est désactivé", async () => {
+    const { receive, notes, spoken } = setup({ ...settings, foxShouldReadChat: false });
+    await receive(message("1", "Bonjour", { viewerId: "alice" }));
+    await receive(message("2", "Bienvenue", { viewerId: "owner", viewerLogin: "Fenysk" }));
+    expect(notes).toEqual([{ isAccepted: false }]);
+    expect(spoken).toEqual([]);
   });
 });

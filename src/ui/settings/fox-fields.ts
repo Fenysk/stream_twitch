@@ -20,6 +20,10 @@ const toDecibels = (value: number): string => `${value} dB`;
 // 30 s, 1 min, 1,5 min, 3 min.
 const toDelay = (ms: number): string =>
   ms < 60_000 ? toSeconds(ms) : `${String(ms / 60_000).replace(".", ",")} min`;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+const toHours = (ms: number): string => `${ms / HOUR_MS} h`;
+const toDays = (ms: number): string => `${ms / DAY_MS} ${ms === DAY_MS ? "jour" : "jours"}`;
 
 // Un groupe de l'onglet : des cases, des curseurs, des heures, puis des listes de phrases (une phrase par ligne).
 export type FoxGroup = {
@@ -167,6 +171,114 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
         fallback: 1000,
       },
     ],
+    lists: [
+      {
+        key: "foxEmoteReactions",
+        label: "Emotes qui changent sa tête",
+        help: "Une emote par ligne : nom = sourire, choc ou clin. Le nom s'écrit exactement, majuscules comprises. Un message qui la contient donne cette réaction avant sa lecture ; un message d'emotes seules la donne sans rien lire, s'il est visible et se tait.",
+        rows: 8,
+      },
+    ],
+  },
+  {
+    title: "Habitués",
+    toggles: [
+      {
+        key: "foxShouldWelcome",
+        label: "Accueillir les habitués",
+        help: "Au premier message d'un viewer dans un live, une phrase d'accueil avant de le lire. Sa venue est retenue dans data/viewers.json, même case décochée.",
+        fallback: true,
+      },
+    ],
+    sliders: [
+      {
+        key: "foxWelcomeLiveGap",
+        label: "Silence entre deux lives",
+        help: "Après ce silence, un live de plus.",
+        steps: toSteps(HOUR_MS, 24 * HOUR_MS, HOUR_MS, toHours),
+        fallback: 6 * HOUR_MS,
+      },
+      {
+        key: "foxWelcomeReturnAfter",
+        label: "Absence avant « sans nouvelles »",
+        help: "À partir de ce nombre de jours.",
+        steps: toSteps(DAY_MS, 90 * DAY_MS, DAY_MS, toDays),
+        fallback: 14 * DAY_MS,
+      },
+    ],
+    lists: [
+      {
+        key: "foxWelcomeLiveCounts",
+        label: "Paliers de lives",
+        help: "Un nombre par ligne : le viewer qui atteint ce nombre de lives est fêté.",
+        rows: 4,
+      },
+      {
+        key: "foxWelcomeMilestone",
+        label: "Palier de lives",
+        help: "Dite au tchat. Liste vide : pas de phrase pour ce cas.",
+        rows: 3,
+      },
+      {
+        key: "foxWelcomeReturn",
+        label: "Retour après une absence",
+        help: "Jamais pendant les 14 premiers jours du fichier : l'absence ne serait pas prouvée.",
+        rows: 3,
+      },
+      {
+        key: "foxWelcomeYesterday",
+        label: "Venu la veille",
+        help: "Sa dernière venue date du jour d'avant, à l'heure de Paris.",
+        rows: 3,
+      },
+      {
+        key: "foxWelcomeFirst",
+        label: "Tout premier message",
+        help: "Jamais pendant les 14 premiers jours du fichier : rien ne prouve qu'il est nouveau.",
+        rows: 3,
+      },
+    ],
+  },
+  {
+    title: "Humeur du tchat",
+    sliders: [
+      {
+        key: "foxCheerfulCount",
+        label: "Messages pour être joyeux",
+        help: "Acceptés dans la période ci-dessous.",
+        steps: toSteps(5, 100, 5, (value) => `${value} messages`),
+        fallback: 15,
+      },
+      {
+        key: "foxCheerfulPeriod",
+        label: "Période de ces messages",
+        help: "Seuls les plus récents comptent.",
+        steps: toSteps(60_000, 900_000, 60_000, toDelay),
+        fallback: 300_000,
+      },
+      {
+        key: "foxSulkAfter",
+        label: "Silence du tchat avant qu'il boude",
+        help: "Il ne regarde plus vers le tchat.",
+        steps: toSteps(30_000, 600_000, 30_000, toDelay),
+        fallback: 90_000,
+      },
+      {
+        key: "foxResumeAfter",
+        label: "Silence du tchat avant la reprise",
+        help: "Le premier message qui suit le surprend.",
+        steps: toSteps(60_000, 1_800_000, 60_000, toDelay),
+        fallback: 300_000,
+      },
+    ],
+    lists: [
+      {
+        key: "foxResumePhrases",
+        label: "Reprise du tchat",
+        help: "Une phrase par ligne, dite au tchat avant de lire le premier message qui suit un long silence, au plus une toutes les 30 min. Elle passe avant l'accueil d'un habitué. Joyeux, il sourit parfois en regardant ailleurs ; boudeur, il ne regarde plus vers le tchat. Liste vide : pas de phrase.",
+        rows: 3,
+      },
+    ],
   },
   {
     title: "Quand il s'ennuie",
@@ -273,6 +385,13 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
         steps: toSteps(200, 2000, 100, toSeconds),
         fallback: 800,
       },
+      {
+        key: "foxTalkativeMessages",
+        label: "Messages d'un viewer très impliqué",
+        help: "Atteints, il le remercie une fois.",
+        steps: toSteps(10, 500, 10, (value) => `${value} messages`),
+        fallback: 50,
+      },
     ],
     lists: [
       {
@@ -322,6 +441,12 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
         label: "Lurk, pseudo refusé",
         help: "Dite quand le pseudo de celui qui lurke est refusé. Sans pseudo.",
         rows: 3,
+      },
+      {
+        key: "foxThanksTalkative",
+        label: "Viewer très impliqué",
+        help: "Un sourire d'1 s, puis la phrase, quand un viewer atteint le nombre de messages réglé depuis le démarrage du serveur. Jamais de classement.",
+        rows: 4,
       },
     ],
   },
@@ -489,6 +614,14 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
   },
   {
     title: "Heure du live",
+    toggles: [
+      {
+        key: "foxShouldReviewAtEnd",
+        label: "Bilan à la fin prévue",
+        help: "Juste après l'annonce de la fin prévue, il dit le bilan du live : messages, personnes, le plus bavard, le premier arrivé. Le bouton « Faire le bilan » le dit à la demande.",
+        fallback: true,
+      },
+    ],
     sliders: [
       {
         key: "foxEndWarning",

@@ -5,8 +5,8 @@ import { refuse } from "./http";
 import { getRuntime } from "./runtime";
 
 // Flux SSE du renard : les règles appliquées à la connexion, puis à chaque changement ; l'adresse du WAV chaque fois qu'il
-// doit parler ; le nombre de pages `/fox` connectées ; ce qu'il montre (mode) et sa présence. Une page qui se reconnecte ne
-// rejoue pas la dernière phrase : seuls les règles, le nombre, le mode et la présence se renvoient. Une page `/fox` qui se
+// doit parler ; le nombre de pages `/fox` connectées ; ce qu'il montre (mode), sa présence et son humeur. Une page qui se
+// reconnecte ne rejoue pas la dernière phrase : seuls les règles, le nombre, le mode, la présence et l'humeur se renvoient. Une page `/fox` qui se
 // connecte le trouve visible, et les 3 min avant son départ repartent. `?place=preview` : l'aperçu de l'onglet Renard ; sans, la page `/fox` (OBS).
 export default defineHandler((event) => {
   const place = FoxPlaceSchema.safeParse(
@@ -23,6 +23,7 @@ export default defineHandler((event) => {
     send({ kind: "mode", mode: fox.getMode() });
     const { kind, elapsed } = fox.getPresence();
     send({ kind: "presence", presence: kind, elapsed });
+    send({ kind: "attitude", attitude: fox.getAttitude() });
     return unsubscribe;
   });
 });

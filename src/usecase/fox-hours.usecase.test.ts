@@ -41,6 +41,7 @@ const setup = (custom: Settings = settings, live: Broadcast | null = { isLive: t
   const flashes: Show[] = [];
   const logs: string[] = [];
   const leaves = { count: 0 };
+  const reviews = { count: 0 };
   const hours = createFoxHours({
     broadcast: {
       subscribe(listener) {
@@ -70,6 +71,11 @@ const setup = (custom: Settings = settings, live: Broadcast | null = { isLive: t
         leaves.count += 1;
       },
     },
+    review: {
+      sayAtEnd() {
+        reviews.count += 1;
+      },
+    },
     settings: custom,
     clock: () => state.now,
     random: () => 0,
@@ -83,7 +89,7 @@ const setup = (custom: Settings = settings, live: Broadcast | null = { isLive: t
     state.tick();
   };
   const texts = () => pushed.map(({ text }) => text);
-  return { hours, state, pushed, flashes, logs, leaves, goTo, texts };
+  return { hours, state, pushed, flashes, logs, leaves, reviews, goTo, texts };
 };
 
 describe("createFoxHours : les heures pleines", () => {
@@ -384,5 +390,73 @@ describe("createFoxHours : le cycle de vie et les réglages", () => {
     });
     goTo(at(14, 21) + HOUR);
     expect(texts()).toEqual(["Bon 1 heure"]);
+  });
+});
+
+describe("createFoxHours : le bilan du live suit l'annonce de la fin prévue", () => {
+  const endItem = (pushed: { text: string }[]) =>
+    pushed.find(({ text }) => text.startsWith("Minuit")) as (typeof pushed)[number] & {
+      onDone?: () => void;
+    };
+
+  it("le lance quand l'annonce de la fin est finie, pas avant", () => {
+    const { goTo, pushed, reviews } = setup(withoutHours);
+    goTo(at(15, 0));
+    expect(reviews.count).toBe(0);
+    endItem(pushed).onDone?.();
+    expect(reviews.count).toBe(1);
+  });
+
+  it("ne le lance ni pour l'avertissement, ni pour les rappels, ni pour le coucher", () => {
+    const { goTo, pushed, reviews } = setup(withoutHours);
+    for (const [day, hours, minutes] of [
+      [14, 23, 30],
+      [15, 0, 10],
+      [15, 0, 20],
+      [15, 0, 30],
+    ] as const) {
+      goTo(at(day, hours, minutes));
+      for (const item of pushed.filter(({ text }) => !text.startsWith("Minuit"))) {
+        (item as { onDone?: () => void }).onDone?.();
+      }
+    }
+    expect(reviews.count).toBe(0);
+  });
+
+  it("le lance tout de suite quand il n'y a aucune phrase de fin à dire", () => {
+    const { goTo, reviews } = setup({ ...withoutHours, foxEndPhrases: [] });
+    goTo(at(15, 0));
+    expect(reviews.count).toBe(1);
+  });
+
+  it("ne le lance qu'une fois par diffusion, même si la fin prévue change et sonne de nouveau", () => {
+    const { hours, goTo, pushed, reviews } = setup(withoutHours);
+    goTo(at(15, 0));
+    endItem(pushed).onDone?.();
+    hours.update({ ...withoutHours, foxEndTime: "01:00" });
+    goTo(at(15, 1));
+    const second = pushed.filter(({ text }) => text.endsWith("Le live est fini."));
+    expect(second).toHaveLength(2);
+    (second[1] as { onDone?: () => void }).onDone?.();
+    expect(reviews.count).toBe(1);
+  });
+
+  it("le relance à la diffusion suivante", () => {
+    const { state, goTo, pushed, reviews } = setup(withoutHours);
+    goTo(at(15, 0));
+    endItem(pushed).onDone?.();
+    state.broadcast({ isLive: false, duration: 0 });
+    state.now = at(15, 21);
+    state.broadcast({ isLive: true, duration: 0 });
+    goTo(at(16, 0));
+    endItem(pushed.slice(1)).onDone?.();
+    expect(reviews.count).toBe(2);
+  });
+
+  it("n'en lance aucun sans fin prévue", () => {
+    const { goTo, pushed, reviews } = setup({ ...withoutHours, foxEndTime: "" });
+    goTo(at(15, 0, 30));
+    for (const item of pushed) (item as { onDone?: () => void }).onDone?.();
+    expect(reviews.count).toBe(0);
   });
 });

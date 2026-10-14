@@ -20,6 +20,12 @@ export const PHRASE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   foxThanksCheer: ["user", "bits"],
   foxThanksLurk: ["user"],
   foxThanksLurkGeneric: [],
+  foxThanksTalkative: ["user", "messages"],
+  foxWelcomeMilestone: ["user", "lives"],
+  foxWelcomeReturn: ["user", "absence"],
+  foxWelcomeYesterday: ["user"],
+  foxWelcomeFirst: ["user"],
+  foxResumePhrases: [],
 };
 
 const VARIABLE = /\{(\w+)\}/g;

@@ -7,13 +7,15 @@ import {
   isFoxMuted,
   MOUTH_IMAGES,
   type MouthImage,
+  SMILE_GAZE,
+  SULK_IMAGES,
   toFoxDisplay,
   toFoxRules,
   toMouthImage,
   toNextFox,
   toRms,
 } from "./fox.rules";
-import type { FoxRules } from "./fox.schema";
+import type { Attitude, FoxRules } from "./fox.schema";
 import type { Settings } from "./settings.schema";
 
 const rules: FoxRules = {
@@ -445,5 +447,139 @@ describe("A : le corps rebondit avec le level", () => {
     const resumed = toNextFox({ previous: talking, now: 600_000, level: LOUD, rules, random: constant(0.5) });
     expect(resumed.bounce).toBeLessThanOrEqual(1);
     expect(resumed.bounce).toBeGreaterThan(0);
+  });
+});
+
+describe("R : son humeur change ses regards au repos", () => {
+  // Un regard prévu à `gazeAt`, dans l'humeur donnée.
+  const planned = (gaze: FoxState["gaze"], gazeAt: number): FoxState => ({ ...FOX_START, gaze, gazeAt });
+  const at = (previous: FoxState, now: number, random: () => number, attitude: Attitude) =>
+    toNextFox({ previous, now, level: null, rules, random, attitude });
+
+  it("ordinaire ou sans précision, ses regards sont les trois d'avant", () => {
+    const previous = planned("left-closed-rest", 1000);
+    expect(at(previous, 1000, constant(0.5), "plain")).toEqual(
+      toNextFox({ previous, now: 1000, level: null, rules, random: constant(0.5) }),
+    );
+  });
+
+  describe("boudeur", () => {
+    it("ne regarde jamais vers le tchat : seulement la droite et la face", () => {
+      expect(SULK_IMAGES).toEqual(["front-closed-rest", "right-closed-rest"]);
+      let state = FOX_START;
+      const seen = new Set<string>();
+      const random = seeded(11);
+      for (let now = 0; now < 1_800_000; now += 50) {
+        state = toNextFox({ previous: state, now, level: null, rules, random, attitude: "sulking" });
+        seen.add(state.gaze);
+      }
+      expect([...seen].sort()).toEqual(["front-closed-rest", "right-closed-rest"]);
+    });
+
+    it("se détourne tout de suite du tchat s'il le regardait, et change de regard à l'intervalle du repos", () => {
+      const looking = planned("left-closed-rest", 9000);
+      const next = at(looking, 2000, constant(0), "sulking");
+      expect(SULK_IMAGES).toContain(next.gaze);
+      expect(next.gazeAt).toBe(2000 + 5000);
+    });
+
+    it("garde un regard permis et son instant prévu", () => {
+      const state = planned("right-closed-rest", 9000);
+      const next = at(state, 2000, constant(0), "sulking");
+      expect(next.gaze).toBe("right-closed-rest");
+      expect(next.gazeAt).toBe(9000);
+    });
+
+    it("alterne la droite et la face au changement, jamais le même deux fois", () => {
+      const state = planned("right-closed-rest", 1000);
+      expect(at(state, 1000, constant(0), "sulking").gaze).toBe("front-closed-rest");
+      expect(at(planned("front-closed-rest", 1000), 1000, constant(0.9), "sulking").gaze).toBe(
+        "right-closed-rest",
+      );
+    });
+
+    it("regarde en face ou à droite aussi quand il écoute, comme avant", () => {
+      const next = toNextFox({
+        previous: FOX_START,
+        now: 0,
+        level: null,
+        rules,
+        random: constant(0),
+        mode: { kind: "listening" },
+        attitude: "sulking",
+      });
+      expect(SULK_IMAGES).toContain(next.gaze);
+      expect(next.gazeAt).toBe(2000);
+    });
+  });
+
+  describe("joyeux", () => {
+    it("ajoute le sourire à la rotation : un tirage sous un tiers donne front-smile-rest", () => {
+      const state = planned("left-closed-rest", 1000);
+      expect(at(state, 1000, constant(0), "cheerful").gaze).toBe("front-smile-rest");
+      expect(at(state, 1000, constant(0.32), "cheerful").gaze).toBe("front-smile-rest");
+      expect(SMILE_GAZE).toBe("front-smile-rest");
+    });
+
+    it("garde les trois regards d'avant le reste du temps", () => {
+      const state = planned("left-closed-rest", 1000);
+      const next = at(state, 1000, constant(0.5), "cheerful");
+      expect(GAZE_IMAGES).toContain(next.gaze);
+      expect(next.gaze).not.toBe("left-closed-rest");
+    });
+
+    it("garde le sourire jusqu'au changement prévu, puis prend un autre regard : jamais deux sourires de suite", () => {
+      const smiling = planned("front-smile-rest", 8000);
+      const before = at(smiling, 7999, constant(0), "cheerful");
+      expect(before.gaze).toBe("front-smile-rest");
+      expect(before.gazeAt).toBe(8000);
+      const after = at(smiling, 8000, constant(0), "cheerful");
+      expect(GAZE_IMAGES).toContain(after.gaze);
+    });
+
+    it("sourit une fois sur trois environ, parmi les regards du repos", () => {
+      let state = FOX_START;
+      const random = seeded(5);
+      let changes = 0;
+      let smiles = 0;
+      for (let now = 0; now < 36_000_000; now += 100) {
+        const next = toNextFox({ previous: state, now, level: null, rules, random, attitude: "cheerful" });
+        if (next.gaze !== state.gaze) {
+          changes += 1;
+          if (next.gaze === SMILE_GAZE) smiles += 1;
+        }
+        state = next;
+      }
+      expect(changes).toBeGreaterThan(2000);
+      // Un sourire ne se répète jamais : 1 changement sur 4 environ, au plus 1 sur 3.
+      expect(smiles / changes).toBeGreaterThan(0.2);
+      expect(smiles / changes).toBeLessThanOrEqual(1 / 3);
+    });
+
+    it("n'affiche pas le sourire quand il écoute Alexis : face ou droite", () => {
+      const next = toNextFox({
+        previous: planned("front-smile-rest", 100_000),
+        now: 0,
+        level: null,
+        rules,
+        random: constant(0),
+        mode: { kind: "listening" },
+        attitude: "cheerful",
+      });
+      expect(next.gaze).toBe("front-closed-rest");
+    });
+
+    it("montre le sourire à l'écran quand c'est son regard, sauf s'il cligne", () => {
+      const smiling: FoxState = { ...planned("front-smile-rest", 8000), at: 0 };
+      expect(imageOf(smiling, 0)).toBe("front-smile-rest");
+      expect(imageOf({ ...smiling, blinkEndsAt: 100 }, 0)).toBe(BLINK_IMAGE);
+    });
+  });
+
+  it("retrouve les trois regards d'avant quand l'humeur redevient ordinaire, le sourire laissant sa place", () => {
+    const smiling = planned("front-smile-rest", 8000);
+    const next = at(smiling, 2000, constant(0), "plain");
+    expect(GAZE_IMAGES).toContain(next.gaze);
+    expect(next.gazeAt).toBe(2000 + 5000);
   });
 });

@@ -5,11 +5,15 @@ import { toFragments } from "./chat-fragments.rules";
 
 export type HiddenKind = "command" | "bot";
 
+// Un bot connu a écrit ce message. `bots` : les noms de compte en minuscules (toChatBots).
+export const isBotMessage = (raw: RawMessage, bots: readonly string[]): boolean =>
+  bots.includes(raw.viewerLogin.toLowerCase());
+
 // Une commande ou un bot : l'affichage le masque, et le renard ne le lit pas. `bots` : les noms de compte en minuscules
 // (toChatBots).
 export const toHiddenKind = (raw: RawMessage, bots: readonly string[]): HiddenKind | null => {
   if (raw.isCommand) return "command";
-  return bots.includes(raw.viewerLogin.toLowerCase()) ? "bot" : null;
+  return isBotMessage(raw, bots) ? "bot" : null;
 };
 
 // Une commande ou un bot est masqué : la page le montre si le réglage le demande.

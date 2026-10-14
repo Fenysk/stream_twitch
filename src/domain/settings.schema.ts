@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ChatAnimationSchema, ChatStyleSchema } from "./chat.schema";
 import { toPronunciation } from "./pronunciation.rules";
+import { toEmoteReaction } from "./reaction.rules";
 
 type ScaleFields = {
   threshold: number;
@@ -81,6 +82,7 @@ const FOX_KEYS: readonly string[] = [
   "foxReadSilence",
   "foxStopAfter",
   "foxReactionDuration",
+  "foxEmoteReactions",
   "foxAwayAfter",
   "foxCrouchDuration",
   "foxJumpDuration",
@@ -134,6 +136,22 @@ const FOX_KEYS: readonly string[] = [
   "foxThanksCheer",
   "foxThanksLurk",
   "foxThanksLurkGeneric",
+  "foxTalkativeMessages",
+  "foxThanksTalkative",
+  "foxShouldReviewAtEnd",
+  "foxShouldWelcome",
+  "foxWelcomeLiveGap",
+  "foxWelcomeLiveCounts",
+  "foxWelcomeReturnAfter",
+  "foxWelcomeMilestone",
+  "foxWelcomeReturn",
+  "foxWelcomeYesterday",
+  "foxWelcomeFirst",
+  "foxCheerfulCount",
+  "foxCheerfulPeriod",
+  "foxSulkAfter",
+  "foxResumeAfter",
+  "foxResumePhrases",
 ];
 
 const hasAllOrNoneOfFox = (fields: Readonly<Record<string, unknown>>): boolean => {
@@ -275,6 +293,18 @@ export const SettingsFieldsSchema = z
     foxReadSilence: positiveWhole().optional(),
     foxStopAfter: positiveWhole().optional(),
     foxReactionDuration: positiveWhole().optional(),
+    // Les emotes qui changent sa tête : une ligne par emote, « nom exact = sourire, choc ou clin ».
+    foxEmoteReactions: z
+      .array(
+        z
+          .string("doit être un texte")
+          .refine(
+            (line) => toEmoteReaction(line) !== null,
+            "doit s'écrire « nom de l'emote = sourire, choc ou clin »",
+          ),
+        "doit être une liste de lignes",
+      )
+      .optional(),
     foxAwayAfter: positiveWhole().optional(),
     foxCrouchDuration: positiveWhole().optional(),
     foxJumpDuration: positiveWhole().optional(),
@@ -331,6 +361,8 @@ export const SettingsFieldsSchema = z
     foxLateAfter: clockTime(false).optional(),
     foxLateYawnMin: positiveWhole().optional(),
     foxLateYawnMax: positiveWhole().optional(),
+    // Le bilan du live : dit tout seul juste après l'annonce de la fin prévue (la case « Bilan à la fin prévue »).
+    foxShouldReviewAtEnd: z.boolean("doit être true ou false").optional(),
     // Les remerciements : la durée du saut de joie d'un sub (ms), la case « Remercier les follows, subs et cheers », le délai
     // (ms) entre deux remerciements nominatifs de follow, et les phrases de chaque sorte d'évènement.
     foxJoyDuration: positiveWhole().optional(),
@@ -344,6 +376,35 @@ export const SettingsFieldsSchema = z
     foxThanksCheer: phraseList(true).optional(),
     foxThanksLurk: phraseList(true).optional(),
     foxThanksLurkGeneric: phraseList(true).optional(),
+    // Un viewer très impliqué : le nombre de messages acceptés depuis le démarrage du serveur qui lui vaut un remerciement (une
+    // fois), et ses phrases.
+    foxTalkativeMessages: positiveWhole().optional(),
+    foxThanksTalkative: phraseList(true).optional(),
+    // Les habitués : la case « Accueillir les habitués », le silence (ms) d'un viewer au-delà duquel il commence un live de plus,
+    // les nombres de lives qui ont un palier (un nombre par ligne), l'absence (ms) à partir de laquelle il « revient », et les
+    // phrases de chaque cas (une liste vide : ce cas ne dit rien).
+    foxShouldWelcome: z.boolean("doit être true ou false").optional(),
+    foxWelcomeLiveGap: positiveWhole().optional(),
+    foxWelcomeLiveCounts: z
+      .array(
+        z
+          .string("doit être un texte")
+          .regex(/^[1-9]\d{0,5}$/, "chaque ligne doit être un nombre entier de lives, 1 ou plus"),
+        "doit être une liste de nombres",
+      )
+      .optional(),
+    foxWelcomeReturnAfter: positiveWhole().optional(),
+    foxWelcomeMilestone: phraseList(false).optional(),
+    foxWelcomeReturn: phraseList(false).optional(),
+    foxWelcomeYesterday: phraseList(false).optional(),
+    foxWelcomeFirst: phraseList(false).optional(),
+    // Son humeur selon le tchat : joyeux à ce nombre de messages acceptés dans cette période (ms) ; boudeur après ce silence du
+    // tchat (ms) ; la reprise (une phrase avant le premier message accepté) après ce silence (ms), et ses phrases.
+    foxCheerfulCount: positiveWhole().optional(),
+    foxCheerfulPeriod: positiveWhole().optional(),
+    foxSulkAfter: positiveWhole().optional(),
+    foxResumeAfter: positiveWhole().optional(),
+    foxResumePhrases: phraseList(false).optional(),
     // La prononciation : une ligne par mot, « abréviation = forme dite », appliquée à tout ce qu'il dit avant la synthèse.
     foxPronunciations: z
       .array(
@@ -469,6 +530,7 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxReadSilence: true,
   foxStopAfter: true,
   foxReactionDuration: true,
+  foxEmoteReactions: true,
   foxAwayAfter: true,
   foxCrouchDuration: true,
   foxJumpDuration: true,
@@ -510,6 +572,7 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxLateAfter: true,
   foxLateYawnMin: true,
   foxLateYawnMax: true,
+  foxShouldReviewAtEnd: true,
   foxPronunciations: true,
   foxJoyDuration: true,
   foxShouldThank: true,
@@ -522,6 +585,21 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxThanksCheer: true,
   foxThanksLurk: true,
   foxThanksLurkGeneric: true,
+  foxTalkativeMessages: true,
+  foxThanksTalkative: true,
+  foxShouldWelcome: true,
+  foxWelcomeLiveGap: true,
+  foxWelcomeLiveCounts: true,
+  foxWelcomeReturnAfter: true,
+  foxWelcomeMilestone: true,
+  foxWelcomeReturn: true,
+  foxWelcomeYesterday: true,
+  foxWelcomeFirst: true,
+  foxCheerfulCount: true,
+  foxCheerfulPeriod: true,
+  foxSulkAfter: true,
+  foxResumeAfter: true,
+  foxResumePhrases: true,
   chatStyle: true,
   chatOpacity: true,
   chatTextSize: true,

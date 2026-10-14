@@ -19,6 +19,7 @@ import type { Settings } from "../domain/settings.schema";
 import { toCapitalized } from "../domain/spoken-time.rules";
 import type { FoxModeController } from "./fox-mode.usecase";
 import type { FoxQueue } from "./fox-queue.usecase";
+import type { FoxReview } from "./fox-review.usecase";
 
 // La diffusion d'OBS vue du usecase : en direct ou non, et depuis combien de ms (0 à son démarrage). Infra l'implémente ; le
 // port rend l'état à la connexion d'OBS (le serveur peut démarrer en plein live), puis à chaque démarrage ou arrêt.
@@ -29,6 +30,8 @@ export type FoxHoursDeps = {
   broadcast: BroadcastPort;
   queue: Pick<FoxQueue, "push">;
   mode: Pick<FoxModeController, "subscribe" | "flash" | "leave">;
+  // V : le bilan du live, dit juste après l'annonce de la fin prévue.
+  review: Pick<FoxReview, "sayAtEnd">;
   settings: Settings;
   clock: () => number;
   random: () => number;
@@ -60,13 +63,15 @@ const toEmptySaid = (): Record<HoursKey, string[]> => ({
 
 // L'heure du live : pendant la diffusion d'OBS seulement, le renard annonce chaque heure pleine au tchat, prévient Fenysk de la
 // fin prévue puis la lui annonce, le relance toutes les 10 min, et se couche au troisième rappel (il part, plus de rappel).
-// Il bâille au repos, sans partir, après la fin prévue (ou après 23 h 30 sans fin prévue). Chaque annonce passe par la file
+// Il bâille au repos, sans partir, après la fin prévue (ou après 23 h 30 sans fin prévue). Le bilan du live suit l'annonce de la
+// fin prévue, une fois par diffusion. Chaque annonce passe par la file
 // comme un remerciement ; caché, il revient pour elle, pas pour un bâillement. Ce qui est déjà passé quand il découvre la
 // diffusion (le serveur démarre en plein live) ou quand un réglage change n'est pas redit.
 export function createFoxHours({
   broadcast,
   queue,
   mode,
+  review,
   settings: initial,
   clock,
   random,
@@ -82,6 +87,7 @@ export function createFoxHours({
   let lateFrom: number | null = null;
   let nextYawnAt: number | null = null;
   let hasSaidBedtime = false;
+  let hasReviewed = false;
   const said = toEmptySaid();
   const unsubscribes: (() => void)[] = [];
 
@@ -127,6 +133,13 @@ export function createFoxHours({
     });
   };
 
+  // V : le bilan suit l'annonce de la fin prévue, une seule fois par diffusion.
+  const sayReview = () => {
+    if (hasReviewed) return;
+    hasReviewed = true;
+    review.sayAtEnd();
+  };
+
   const goToBed = () => {
     log("Renard : il part se coucher, plus de rappel pour ce live.");
     mode.leave();
@@ -141,7 +154,7 @@ export function createFoxHours({
     if (!stage) return;
     const announcement = toStagePlan(stage, { end, now, warning: rules.warning });
     if (stage.kind !== "bedtime") {
-      say(announcement);
+      say(announcement, stage.kind === "end" ? sayReview : undefined);
       return;
     }
     hasSaidBedtime = true;
@@ -175,10 +188,14 @@ export function createFoxHours({
     if (!isLive) {
       startedAt = null;
       hasSaidBedtime = false;
+      hasReviewed = false;
       replan(now);
       return;
     }
-    if (startedAt === null) hasSaidBedtime = false;
+    if (startedAt === null) {
+      hasSaidBedtime = false;
+      hasReviewed = false;
+    }
     startedAt = now - duration;
     hoursDone = toHourCount(startedAt, now);
     replan(now);

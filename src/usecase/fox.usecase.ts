@@ -1,5 +1,5 @@
 import { toFoxRules } from "../domain/fox.rules";
-import type { FoxEvent, FoxMode, FoxPlace, FoxRules, PresenceView } from "../domain/fox.schema";
+import type { Attitude, FoxEvent, FoxMode, FoxPlace, FoxRules, PresenceView } from "../domain/fox.schema";
 import { IDLE_MODE, isSameMode } from "../domain/fox-mode.rules";
 import { toPronunciations, toSpokenText } from "../domain/pronunciation.rules";
 import type { Settings } from "../domain/settings.schema";
@@ -56,6 +56,9 @@ export type Fox = {
   // Sa présence : part aux pages quand sa phase change ; `elapsed` : depuis combien de ms il est dans cette phase.
   getPresence(): { kind: PresenceView; elapsed: number };
   updatePresence(kind: PresenceView): void;
+  // Son humeur : part aux pages quand elle change.
+  getAttitude(): Attitude;
+  updateAttitude(attitude: Attitude): void;
   getSpeech(id: string): Uint8Array | undefined;
 };
 
@@ -75,6 +78,7 @@ export function createFox({ voices, settings: initial, clock, createId, toSpeech
   const listeners = new Set<(event: FoxEvent) => void>();
   let screens = 0;
   let mode: FoxMode = IDLE_MODE;
+  let attitude: Attitude = "plain";
   let presence: { kind: PresenceView; since: number } = { kind: "visible", since: clock() };
   // Map garde l'ordre d'insertion : le premier est le plus ancien.
   const speeches = new Map<string, { bytes: Uint8Array; expiresAt: number }>();
@@ -180,6 +184,12 @@ export function createFox({ voices, settings: initial, clock, createId, toSpeech
       if (presence.kind === kind) return;
       presence = { kind, since: clock() };
       publish({ kind: "presence", presence: kind, elapsed: 0 });
+    },
+    getAttitude: () => attitude,
+    updateAttitude(next) {
+      if (attitude === next) return;
+      attitude = next;
+      publish({ kind: "attitude", attitude });
     },
     getSpeech(id) {
       forgetExpired();

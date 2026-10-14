@@ -20,6 +20,7 @@ export default defineConfig({
         "/api/fox/events": "./src/app/server/fox-events.ts",
         "/api/fox/voices": "./src/app/server/fox-voices.ts",
         "/api/fox/speak": "./src/app/server/fox-speak.ts",
+        "/api/fox/review": "./src/app/server/fox-review.ts",
         "/api/fox/speech/:id": "./src/app/server/fox-speech.ts",
         "/api/twitch/status": "./src/app/server/twitch-status.ts",
         "/api/twitch/disconnect": "./src/app/server/twitch-disconnect.ts",

@@ -1,6 +1,7 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { FOX_START, isFoxMuted, toFoxDisplay, toNextFox } from "../domain/fox.rules";
 import {
+  type Attitude,
   FOX_IMAGES,
   FoxEventSchema,
   type FoxImage,
@@ -45,6 +46,8 @@ const startFox = ({ place, body, onImage, onMuted }: FoxLoopDeps): (() => void) 
   let rules: FoxRules | undefined;
   let state = FOX_START;
   let mode: FoxMode = IDLE_MODE;
+  // Son humeur : le serveur la décide d'après le tchat, la page en tire ses regards au repos.
+  let attitude: Attitude = "plain";
   // Tourné vers Fenysk (modes `address` et `flinch`) : le corps se retourne, toutes les images en miroir.
   let mirror = MIRROR_START;
   // La phase de présence et l'instant de la page où elle a commencé (moins le temps déjà écoulé côté serveur).
@@ -95,6 +98,9 @@ const startFox = ({ place, body, onImage, onMuted }: FoxLoopDeps): (() => void) 
       case "mode":
         mode = foxEvent.mode;
         break;
+      case "attitude":
+        attitude = foxEvent.attitude;
+        break;
       case "presence":
         pose = toNextPose(currentPose(performance.now()), foxEvent, rules ?? NO_CURVES);
         poseAt = performance.now();
@@ -120,6 +126,7 @@ const startFox = ({ place, body, onImage, onMuted }: FoxLoopDeps): (() => void) 
       rules,
       random: Math.random,
       mode,
+      attitude,
     });
     const display = toFoxDisplay(state, now, rules);
     const presence = toPresenceBody(currentPose(now), rules);
