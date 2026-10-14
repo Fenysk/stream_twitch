@@ -7,13 +7,14 @@ export const LISTENING_MODE: FoxMode = { kind: "listening" };
 
 // Ce que le renard montre avant de lire : une réaction à un mot-clé, le coucou à un viewer qu'il lit pour la première fois,
 // le retournement vers Fenysk (qui dure jusqu'à la fin de la phrase), le saut de joie d'un sub, le sursaut d'un cri, ou le
-// bâillement d'un monologue, ou le sursaut du jeu.
+// bâillement d'un monologue, le sursaut du jeu, ou le long coucou d'un raid.
 export type Show = Extract<
   FoxMode,
-  { kind: "reaction" | "wave" | "address" | "joy" | "flinch" | "yawn" | "startle" }
+  { kind: "reaction" | "wave" | "address" | "joy" | "flinch" | "yawn" | "startle" | "raid" }
 >;
 
 export const WAVE_MODE: Show = { kind: "wave" };
+export const RAID_MODE: Show = { kind: "raid" };
 export const ADDRESS_MODE: Show = { kind: "address" };
 export const JOY_MODE: Show = { kind: "joy" };
 export const FLINCH_MODE: Show = { kind: "flinch" };
@@ -22,10 +23,10 @@ export const STARTLE_MODE: Show = { kind: "startle" };
 export const SMILE_MODE: Show = { kind: "reaction", image: "front-smile-rest" };
 
 // Combien de temps il se montre avant que la phrase parte : la durée d'une réaction, du coucou ou du sursaut, du saut de
-// joie ou du bâillement, ou le retournement vers Fenysk.
+// joie, du bâillement ou du long coucou d'un raid, ou le retournement vers Fenysk.
 export const toShowMs = (
   { kind }: Show,
-  { reactionMs, joyMs, yawnMs }: Pick<FoxModeRules, "reactionMs" | "joyMs" | "yawnMs">,
+  { reactionMs, joyMs, yawnMs, raidMs }: Pick<FoxModeRules, "reactionMs" | "joyMs" | "yawnMs" | "raidMs">,
 ): number => {
   switch (kind) {
     case "address":
@@ -34,6 +35,8 @@ export const toShowMs = (
       return joyMs;
     case "yawn":
       return yawnMs;
+    case "raid":
+      return raidMs;
     default:
       return reactionMs;
   }
@@ -74,6 +77,7 @@ export type FoxModeRules = {
   reactionMs: number;
   joyMs: number;
   yawnMs: number;
+  raidMs: number;
   awayAfter: number;
   leaveMs: number;
   returnMs: number;
@@ -87,6 +91,7 @@ export function toFoxModeRules(settings: Settings): FoxModeRules | undefined {
     foxReactionDuration,
     foxJoyDuration,
     foxYawnDuration,
+    foxRaidDuration,
     foxAwayAfter,
     foxCrouchDuration,
     foxJumpDuration,
@@ -99,6 +104,7 @@ export function toFoxModeRules(settings: Settings): FoxModeRules | undefined {
     foxReactionDuration === undefined ||
     foxJoyDuration === undefined ||
     foxYawnDuration === undefined ||
+    foxRaidDuration === undefined ||
     foxAwayAfter === undefined ||
     foxCrouchDuration === undefined ||
     foxJumpDuration === undefined ||
@@ -114,6 +120,7 @@ export function toFoxModeRules(settings: Settings): FoxModeRules | undefined {
     reactionMs: foxReactionDuration,
     joyMs: foxJoyDuration,
     yawnMs: foxYawnDuration,
+    raidMs: foxRaidDuration,
     awayAfter: foxAwayAfter,
     leaveMs: foxCrouchDuration + foxJumpDuration + foxDiveDuration,
     returnMs: foxReturnDuration,

@@ -16,7 +16,7 @@ import { SLIDER_KEYS } from "./head-fields";
 import { isDefaultTab, toChanges, toFieldErrors } from "./settings-changes";
 
 // Les réglages de chaque onglet, comme les onglets les désignent à « Revenir aux valeurs par défaut » : la tête (ses six
-// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses cinquante-huit curseurs, ses vingt-huit listes, ses deux heures, la voix et cinq cases).
+// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses cinquante-neuf curseurs, ses trente-sept listes, ses deux heures, la voix et cinq cases).
 const HEAD_KEYS = [...SLIDER_KEYS, "expression"];
 const CHAT_KEYS = [
   ...CHAT_SLIDERS.map(({ key }) => key),
@@ -36,7 +36,7 @@ const labelsOf = (key: string): string[] => spec(key).steps.map(({ label }) => l
 const valuesOf = (key: string): number[] => spec(key).steps.map(({ value }) => value);
 
 describe("les curseurs de l'onglet Renard", () => {
-  it("sont cinquante-huit : cinquante-trois pour l'animation en seize groupes, cinq pour la lecture du tchat", () => {
+  it("sont cinquante-neuf : cinquante-quatre pour l'animation en seize groupes, cinq pour la lecture du tchat", () => {
     expect(FOX_GROUPS.map(({ title }) => title)).toEqual([
       "Quand il parle",
       "Au repos",
@@ -48,6 +48,7 @@ describe("les curseurs de l'onglet Renard", () => {
       "Quand il s'ennuie",
       "Relance",
       "Remerciements",
+      "Récompenses de points de chaîne",
       "Quand tu cries",
       "Quand tu parles longtemps",
       "Balance du son",
@@ -88,6 +89,7 @@ describe("les curseurs de l'onglet Renard", () => {
       "foxJabGap",
       "foxThankGap",
       "foxJoyDuration",
+      "foxRaidDuration",
       "foxTalkativeMessages",
       "foxShoutThreshold",
       "foxShoutMerge",
@@ -179,6 +181,7 @@ describe("les curseurs de l'onglet Renard", () => {
       "Écart entre deux piques",
       "Un follow nommé toutes les",
       "Durée du saut de joie",
+      "Durée du long coucou d'un raid",
       "Messages d'un viewer très impliqué",
       "Seuil d'un cri",
       "Cris collés : écart maximum",
@@ -303,6 +306,15 @@ describe("les listes de phrases de l'onglet Renard", () => {
       "foxThanksLurk",
       "foxThanksLurkGeneric",
       "foxThanksTalkative",
+      "foxThanksRaid",
+      "foxThanksRaidGeneric",
+      "foxThanksPrediction",
+      "foxThanksPredictionNoLoser",
+      "foxClashRewards",
+      "foxClashIntros",
+      "foxWakeRewards",
+      "foxThanksWakeAsleep",
+      "foxThanksWakeAwake",
       "foxShouts",
       "foxTunnelToFenysk",
       "foxTunnelToChat",
@@ -324,6 +336,10 @@ describe("les listes de phrases de l'onglet Renard", () => {
       "foxThanksLurk",
       "foxThanksLurkGeneric",
       "foxThanksTalkative",
+      "foxThanksRaid",
+      "foxThanksRaidGeneric",
+      "foxThanksPrediction",
+      "foxThanksPredictionNoLoser",
     ]);
     expect(
       FOX_GROUPS.find(({ title }) => title === "Réaction et coucou")?.lists?.map(({ key }) => key),
@@ -338,6 +354,17 @@ describe("les listes de phrases de l'onglet Renard", () => {
     expect(FOX_GROUPS.find(({ title }) => title === "Humeur du tchat")?.lists?.map(({ key }) => key)).toEqual(
       ["foxResumePhrases"],
     );
+    expect(
+      FOX_GROUPS.find(({ title }) => title === "Récompenses de points de chaîne")?.lists?.map(
+        ({ key }) => key,
+      ),
+    ).toEqual([
+      "foxClashRewards",
+      "foxClashIntros",
+      "foxWakeRewards",
+      "foxThanksWakeAsleep",
+      "foxThanksWakeAwake",
+    ]);
     expect(FOX_GROUPS.find(({ title }) => title === "Relance")?.lists?.map(({ key }) => key)).toEqual([
       "foxJabs",
       "foxReminders",
@@ -377,8 +404,15 @@ describe("les listes de phrases de l'onglet Renard", () => {
 });
 
 describe("les clés de chaque onglet", () => {
-  it("sont quatre-vingt-quatorze pour le renard : ses cinquante-huit curseurs, ses vingt-huit listes, ses deux heures, les cases de l'accueil, des remerciements et du bilan, la voix et les deux cases de la lecture du tchat", () => {
-    expect(FOX_KEYS).toHaveLength(94);
+  it("sont cent quatre pour le renard : ses cinquante-neuf curseurs, ses trente-sept listes, ses deux heures, les cases de l'accueil, des remerciements et du bilan, la voix et les deux cases de la lecture du tchat", () => {
+    expect(FOX_KEYS).toHaveLength(104);
+    expect(FOX_KEYS).toContain("foxThanksPrediction");
+    expect(FOX_KEYS).toContain("foxThanksPredictionNoLoser");
+    expect(FOX_KEYS).toContain("foxClashRewards");
+    expect(FOX_KEYS).toContain("foxWakeRewards");
+    expect(FOX_KEYS).toContain("foxRaidDuration");
+    expect(FOX_KEYS).toContain("foxThanksRaid");
+    expect(FOX_KEYS).toContain("foxThanksRaidGeneric");
     expect(FOX_KEYS).toContain("foxResumePhrases");
     expect(FOX_KEYS).toContain("foxSulkAfter");
     expect(FOX_KEYS).toContain("foxEmoteReactions");

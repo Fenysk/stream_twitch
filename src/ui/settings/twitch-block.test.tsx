@@ -35,7 +35,7 @@ describe("le bloc « Connexion à Twitch »", () => {
   });
 
   it("dit « Connecté en tant que … » et propose « Se déconnecter », sans proposer de se connecter", () => {
-    const html = render({ kind: "connected", login: "fenysk" });
+    const html = render({ kind: "connected", login: "fenysk", missing: [] });
     expect(html).toContain("Connecté en tant que fenysk.");
     expect(html).toContain("Se déconnecter");
     expect(html).not.toContain("Se connecter à Twitch");
@@ -43,8 +43,10 @@ describe("le bloc « Connexion à Twitch »", () => {
   });
 
   it("grise « Se déconnecter » pendant la demande", () => {
-    expect(render({ kind: "connected", login: "fenysk" }, { isBusy: true })).toContain("disabled");
-    expect(render({ kind: "connected", login: "fenysk" })).not.toContain("disabled");
+    expect(render({ kind: "connected", login: "fenysk", missing: [] }, { isBusy: true })).toContain(
+      "disabled",
+    );
+    expect(render({ kind: "connected", login: "fenysk", missing: [] })).not.toContain("disabled");
   });
 
   it("écrit la raison du dernier échec de connexion", () => {
@@ -73,9 +75,38 @@ describe("le bloc « Connexion à Twitch »", () => {
     expect(render(null, { error: "le serveur ne répond pas" })).toContain("le serveur ne répond pas");
   });
 
-  it("dit que les follows ont besoin de la connexion, et pas les subs ni les cheers", () => {
-    const html = render({ kind: "connected", login: "fenysk" });
-    expect(html).toContain("Les follows se lisent avec cette connexion");
-    expect(html).toContain("n&#x27;en ont pas besoin");
+  it("dit que les follows, les récompenses de points de chaîne et les prédictions ont besoin de la connexion, et pas les subs, les cheers ni les raids", () => {
+    const html = render({ kind: "connected", login: "fenysk", missing: [] });
+    expect(html).toContain(
+      "Les follows, les récompenses de points de chaîne et les prédictions se lisent avec cette connexion",
+    );
+    expect(html).toContain("les cheers et les raids n&#x27;en ont pas besoin");
+  });
+
+  it("dit de se reconnecter quand le jeton gardé ne couvre pas les récompenses de points de chaîne, avec un bouton qui ouvre l'autorisation", () => {
+    const html = render({ kind: "connected", login: "fenysk", missing: ["reward"] });
+    expect(html).toContain("Connecté en tant que fenysk.");
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Reconnecte-toi");
+    expect(html).toContain("les récompenses de points de chaîne");
+    expect(html).toContain("Se reconnecter à Twitch");
+    expect(html).toContain('href="/auth/twitch/start"');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain("Se déconnecter");
+  });
+
+  it("dit tout ce qui manque au jeton gardé, dans l'ordre : les récompenses, puis les prédictions", () => {
+    const html = render({ kind: "connected", login: "fenysk", missing: ["reward", "prediction"] });
+    expect(html).toContain("ne couvre pas les récompenses de points de chaîne et les prédictions");
+    expect(render({ kind: "connected", login: "fenysk", missing: ["prediction"] })).toContain(
+      "ne couvre pas les prédictions",
+    );
+  });
+
+  it("ne propose pas de se reconnecter quand le jeton couvre tout", () => {
+    const html = render({ kind: "connected", login: "fenysk", missing: [] });
+    expect(html).not.toContain("Se reconnecter");
+    expect(html).not.toContain("Reconnecte-toi");
+    expect(html).not.toContain('role="alert"');
   });
 });

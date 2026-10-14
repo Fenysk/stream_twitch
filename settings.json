@@ -57,6 +57,7 @@
   "foxDiveDuration": 800,
   "foxReturnDuration": 800,
   "foxYawnDuration": 2000,
+  "foxRaidDuration": 3000,
   "foxJabs": [
     "Hé, on s'ennuie là !",
     "Et sinon, c'est quand que tu penses à faire ton boulot de streamer ?",
@@ -302,6 +303,22 @@
     "Merci {user} ! {messages} messages. Fenysk devrait te payer.",
     "{user} a écrit {messages} messages. Je lis tout, hein."
   ],
+  "foxThanksRaid": [
+    "{user} débarque avec {viewers}. Fenysk, range ta chambre !",
+    "Raid de {user} ! {viewers} d'un coup. Faites comme chez vous.",
+    "Bienvenue à la bande de {user} ! Je vous préviens, ici c'est calme."
+  ],
+  "foxThanksRaidGeneric": ["Un raid ! {viewers} d'un coup. Bienvenue !"],
+  "foxClashRewards": ["Clasher Fenysk"],
+  "foxClashIntros": ["{user} m'a payé pour te dire ça :"],
+  "foxWakeRewards": ["Réveiller Jean-Renard"],
+  "foxThanksWakeAsleep": ["Quoi ?! Je dormais, moi !", "Qui m'a réveillé ? C'est toi, {user} ?"],
+  "foxThanksWakeAwake": ["Je dors pas, {user}. Je réfléchis."],
+  "foxThanksPrediction": [
+    "Perdants sur « {issue} » : {perdants}. Courage.",
+    "Prédiction terminée. Points perdus pour {perdants}. J'ai rien vu."
+  ],
+  "foxThanksPredictionNoLoser": ["Tout le monde a gagné. C'est louche."],
   "foxShouldWelcome": true,
   "foxWelcomeLiveGap": 21600000,
   "foxWelcomeLiveCounts": ["10", "25", "50", "100"],

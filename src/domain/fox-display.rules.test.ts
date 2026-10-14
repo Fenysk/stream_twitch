@@ -10,7 +10,7 @@ import {
   YAWN_IMAGE,
 } from "./fox.rules";
 import type { FoxMode, FoxRules } from "./fox.schema";
-import { FLINCH_MODE, LISTENING_MODE, STARTLE_MODE, WAVE_MODE, YAWN_MODE } from "./fox-mode.rules";
+import { FLINCH_MODE, LISTENING_MODE, RAID_MODE, STARTLE_MODE, WAVE_MODE, YAWN_MODE } from "./fox-mode.rules";
 
 const rules: FoxRules = {
   smallThreshold: -38,
@@ -225,6 +225,25 @@ describe("G : le coucou (mode wave)", () => {
     const idle = run(first.state, 600, 700, { kind: "idle" }, constant(0.5));
     const second = run(idle.state, 700, 800, WAVE_MODE, constant(0.5));
     expect(second.frames[0]?.image).toBe("front-smile-wave");
+  });
+});
+
+describe("le long coucou d'un raid (mode raid)", () => {
+  it("alterne les images du coucou toutes les 250 ms, en commençant par front-smile-wave, sans cligner", () => {
+    const { frames } = run(FOX_START, 5000, 8000, RAID_MODE, seeded(4));
+    const at = (ms: number) => frames.find(({ now }) => now >= 5000 + ms)?.image;
+    expect(at(0)).toBe("front-smile-wave");
+    expect(at(WAVE_PERIOD_MS)).toBe("front-small-wave");
+    expect(at(WAVE_PERIOD_MS * 2)).toBe("front-smile-wave");
+    expect(new Set(frames.map(({ image }) => image))).toEqual(
+      new Set(["front-smile-wave", "front-small-wave"]),
+    );
+  });
+
+  it("repart de front-smile-wave quand un raid suit un coucou", () => {
+    const wave = run(FOX_START, 0, 300, WAVE_MODE, constant(0.5));
+    const raid = run(wave.state, 300, 400, RAID_MODE, constant(0.5));
+    expect(raid.frames[0]?.image).toBe("front-smile-wave");
   });
 });
 

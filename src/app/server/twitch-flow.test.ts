@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTwitchAuthClient } from "../../infra/twitch-auth.client";
-import { createFollowFeed } from "../../infra/twitch-follows.client";
+import { createEventFeed } from "../../infra/twitch-events.client";
 import { createTwitchTokenStore } from "../../infra/twitch-token.repository";
 import { createTwitchConnection } from "../../usecase/twitch-connection.usecase";
 import {
@@ -47,6 +47,8 @@ const startStack = () => {
   const timers: { at: number; callback: () => void; isCancelled: boolean }[] = [];
   const logs: string[] = [];
   const follows: string[] = [];
+  const rewards: { user: string; title: string }[] = [];
+  const predictions: { losers: number; outcome: string | null }[] = [];
   const schedule = (callback: () => void, ms: number) => {
     const timer = { at: sim.now + ms, callback, isCancelled: false };
     timers.push(timer);
@@ -62,7 +64,7 @@ const startStack = () => {
         clientSecret: FAKE_SECRET,
         idUrl: fake.httpUrl,
       }),
-      feed: createFollowFeed({
+      feed: createEventFeed({
         clientId: FAKE_CLIENT_ID,
         schedule,
         log: (line) => logs.push(line),
@@ -72,7 +74,11 @@ const startStack = () => {
     },
     store: createTwitchTokenStore(tokenPath, (line) => logs.push(line)),
     broadcasterId: "68710381",
-    onFollow: (nickname) => follows.push(nickname),
+    onEvent: (event) => {
+      if (event.kind === "follow") follows.push(event.user);
+      if (event.kind === "reward") rewards.push({ user: event.user, title: event.title });
+      if (event.kind === "prediction") predictions.push({ losers: event.losers, outcome: event.outcome });
+    },
     clock: () => sim.now,
     schedule,
     createState: () => {
@@ -105,7 +111,7 @@ const startStack = () => {
     const state = new URL(begun.url).searchParams.get("state");
     return { begun, result: await connection.completeLogin({ code, state, error: null }) };
   };
-  return { connection, sim, logs, follows, advance, breakSockets, login };
+  return { connection, sim, logs, follows, rewards, predictions, advance, breakSockets, login };
 };
 
 const getSavedToken = (): Record<string, unknown> => JSON.parse(readFileSync(tokenPath, "utf8"));
@@ -123,9 +129,11 @@ describe("la connexion à Twitch, de bout en bout contre un faux Twitch", () => 
     const authorize = new URL(begun.url);
     expect(authorize.origin + authorize.pathname).toBe("https://id.twitch.tv/oauth2/authorize");
     expect(authorize.searchParams.get("redirect_uri")).toBe("http://localhost:4747/auth/twitch/callback");
-    expect(authorize.searchParams.get("scope")).toBe("moderator:read:followers");
+    expect(authorize.searchParams.get("scope")).toBe(
+      "moderator:read:followers channel:read:redemptions channel:read:predictions",
+    );
     expect(result).toEqual({ ok: true, login: "fenysk" });
-    expect(connection.getStatus()).toEqual({ kind: "connected", login: "fenysk" });
+    expect(connection.getStatus()).toEqual({ kind: "connected", login: "fenysk", missing: [] });
 
     // Le jeton est gardé dans data/twitch-token.json.
     const saved = getSavedToken();
@@ -135,8 +143,15 @@ describe("la connexion à Twitch, de bout en bout contre un faux Twitch", () => 
     expect(saved.userId).toBe("68710381");
 
     // Le flux s'abonne : channel.follow v2, la chaîne et le modérateur, avec le jeton.
-    await waitFor(() => fake.subscriptions() === 1, "l'abonnement EventSub");
-    const [subscription] = fake.requestsTo("/helix/eventsub/subscriptions");
+    await waitFor(() => fake.subscriptions() === 3, "les abonnements EventSub");
+    expect(fake.subscribedTypes()).toEqual([
+      "channel.follow",
+      "channel.channel_points_custom_reward_redemption.add",
+      "channel.prediction.end",
+    ]);
+    const [subscription, rewardSubscription, predictionSubscription] = fake.requestsTo(
+      "/helix/eventsub/subscriptions",
+    );
     expect(subscription?.headers.authorization).toBe("Bearer fake-access-1");
     expect(subscription?.headers["client-id"]).toBe(FAKE_CLIENT_ID);
     const body: Record<string, unknown> = JSON.parse(subscription?.body ?? "{}");
@@ -146,11 +161,117 @@ describe("la connexion à Twitch, de bout en bout contre un faux Twitch", () => 
       JSON.parse('{"broadcaster_user_id":"68710381","moderator_user_id":"68710381"}'),
     );
     expect(body.transport).toEqual(JSON.parse('{"method":"websocket","session_id":"fake-session-1"}'));
+    // Les récompenses : version 1, la chaîne seulement, avec le même jeton.
+    expect(rewardSubscription?.headers.authorization).toBe("Bearer fake-access-1");
+    const rewardBody: Record<string, unknown> = JSON.parse(rewardSubscription?.body ?? "{}");
+    expect(rewardBody.type).toBe("channel.channel_points_custom_reward_redemption.add");
+    expect(rewardBody.version).toBe("1");
+    expect(rewardBody.condition).toEqual(JSON.parse('{"broadcaster_user_id":"68710381"}'));
+    // Les prédictions terminées : version 1, la chaîne seulement, avec le même jeton.
+    expect(predictionSubscription?.headers.authorization).toBe("Bearer fake-access-1");
+    const predictionBody: Record<string, unknown> = JSON.parse(predictionSubscription?.body ?? "{}");
+    expect(predictionBody.type).toBe("channel.prediction.end");
+    expect(predictionBody.version).toBe("1");
+    expect(predictionBody.condition).toEqual(JSON.parse('{"broadcaster_user_id":"68710381"}'));
 
     // Un follow arrive par EventSub.
     fake.sendFollow("Alice");
     await waitFor(() => follows.length === 1, "le follow d'Alice");
     expect(follows).toEqual(["Alice"]);
+    connection.stop();
+  });
+
+  it("reçoit une récompense de points de chaîne : son titre et son pseudo, jamais le texte que le viewer y joint", async () => {
+    const { connection, follows, rewards, logs, login } = startStack();
+    await connection.start();
+    await login();
+    await waitFor(() => fake.subscriptions() === 3, "les abonnements EventSub");
+    fake.sendReward("Alice", "Clasher Fenysk", "un texte qui ne doit pas être lu");
+    fake.sendReward("Bob", "Réveiller Jean-Renard");
+    await waitFor(() => rewards.length === 2, "les deux récompenses");
+    expect(rewards).toEqual([
+      { user: "Alice", title: "Clasher Fenysk" },
+      { user: "Bob", title: "Réveiller Jean-Renard" },
+    ]);
+    expect(follows).toEqual([]);
+    expect(JSON.stringify(rewards)).not.toContain("texte");
+    expect(logs.join("\n")).not.toContain("texte");
+    connection.stop();
+  });
+
+  it("reçoit la fin d'une prédiction : les perdants et l'issue la plus suivie ; une prédiction annulée ne dit rien", async () => {
+    const { connection, predictions, login } = startStack();
+    await connection.start();
+    await login();
+    await waitFor(() => fake.subscriptions() === 3, "les abonnements EventSub");
+    fake.sendPredictionEnd(
+      [
+        { title: "Oui", users: 4 },
+        { title: "Non", users: 9 },
+        { title: "Peut-être", users: 2 },
+      ],
+      0,
+    );
+    fake.sendPredictionEnd(
+      [
+        { title: "Oui", users: 4 },
+        { title: "Non", users: 9 },
+      ],
+      null,
+    );
+    fake.sendPredictionEnd(
+      [
+        { title: "Oui", users: 4 },
+        { title: "Non", users: 0 },
+      ],
+      0,
+    );
+    await waitFor(() => predictions.length === 2, "les deux prédictions résolues");
+    expect(predictions).toEqual([
+      { losers: 11, outcome: "Non" },
+      { losers: 0, outcome: null },
+    ]);
+    connection.stop();
+  });
+
+  it("avec un jeton d'avant les récompenses : les follows marchent, l'état dit de se reconnecter, le journal le dit une fois", async () => {
+    fake.setScopes(["moderator:read:followers"]);
+    const { connection, follows, logs, login } = startStack();
+    await connection.start();
+    await login();
+    await waitFor(() => fake.subscriptions() === 1, "l'abonnement aux follows");
+    expect(fake.subscribedTypes()).toEqual(["channel.follow"]);
+    expect(connection.getStatus()).toEqual({
+      kind: "connected",
+      login: "fenysk",
+      missing: ["reward", "prediction"],
+    });
+    fake.sendFollow("Alice");
+    await waitFor(() => follows.length === 1, "le follow d'Alice");
+    expect(
+      logs.filter((line) =>
+        line.includes(
+          "le jeton n'a pas le droit de voir les récompenses de points de chaîne et les prédictions",
+        ),
+      ),
+    ).toHaveLength(1);
+    connection.stop();
+  });
+
+  it("quand Twitch refuse les récompenses, les follows continuent", async () => {
+    fake.refuseType("channel.channel_points_custom_reward_redemption.add");
+    const { connection, follows, logs, login } = startStack();
+    await connection.start();
+    await login();
+    await waitFor(() => fake.requestsTo("/helix/eventsub/subscriptions").length === 3, "les trois demandes");
+    expect(fake.subscribedTypes()).toEqual(["channel.follow", "channel.prediction.end"]);
+    await waitFor(
+      () => logs.includes("Twitch : abonnement aux récompenses de points de chaîne refusé (HTTP 403)."),
+      "le refus des récompenses dit",
+    );
+    fake.sendFollow("Alice");
+    await waitFor(() => follows.length === 1, "le follow d'Alice");
+    expect(fake.sockets()).toBe(1);
     connection.stop();
   });
 
@@ -172,13 +293,13 @@ describe("la connexion à Twitch, de bout en bout contre un faux Twitch", () => 
     const { connection, follows, sim, advance, breakSockets, login } = startStack();
     await connection.start();
     await login();
-    await waitFor(() => fake.subscriptions() === 1, "le premier abonnement");
+    await waitFor(() => fake.subscriptions() === 3, "les premiers abonnements");
 
     // Le jeton vaut encore 30 s ; la connexion tombe, le flux se rouvre et demande un jeton valable.
     sim.now += 3600 * 1000 - 30_000;
     await breakSockets();
     await advance(5000);
-    await waitFor(() => fake.subscriptions() === 2, "le nouvel abonnement");
+    await waitFor(() => fake.subscriptions() === 6, "les nouveaux abonnements");
 
     expect(fake.accessTokens).toEqual(["fake-access-1", "fake-access-2"]);
     const refresh = new URLSearchParams(fake.requestsTo("/oauth2/token").at(-1)?.body);
@@ -205,14 +326,14 @@ describe("la connexion à Twitch, de bout en bout contre un faux Twitch", () => 
     const first = startStack();
     await first.connection.start();
     await first.login();
-    await waitFor(() => fake.subscriptions() === 1, "le premier abonnement");
+    await waitFor(() => fake.subscriptions() === 3, "les premiers abonnements");
     first.connection.stop();
     await waitFor(() => fake.sockets() === 0, "la fermeture");
 
     const second = startStack();
     await second.connection.start();
-    expect(second.connection.getStatus()).toEqual({ kind: "connected", login: "fenysk" });
-    await waitFor(() => fake.subscriptions() === 2, "l'abonnement après redémarrage");
+    expect(second.connection.getStatus()).toEqual({ kind: "connected", login: "fenysk", missing: [] });
+    await waitFor(() => fake.subscriptions() === 6, "les abonnements après redémarrage");
     fake.sendFollow("Carl");
     await waitFor(() => second.follows.length === 1, "le follow de Carl");
     expect(second.follows).toEqual(["Carl"]);
@@ -225,7 +346,7 @@ describe("la connexion à Twitch, de bout en bout contre un faux Twitch", () => 
     const { connection, logs, sim, advance, breakSockets, login } = startStack();
     await connection.start();
     await login();
-    await waitFor(() => fake.subscriptions() === 1, "le premier abonnement");
+    await waitFor(() => fake.subscriptions() === 3, "les premiers abonnements");
 
     fake.revokeEverything();
     sim.now += 3600 * 1000;
@@ -240,14 +361,14 @@ describe("la connexion à Twitch, de bout en bout contre un faux Twitch", () => 
     });
     expect(logs.some((line) => line.includes("connexion perdue"))).toBe(true);
     await advance(120_000);
-    expect(fake.subscriptions()).toBe(1);
+    expect(fake.subscriptions()).toBe(3);
   });
 
   it("se déconnecte : fichier effacé, jeton révoqué chez Twitch, connexion EventSub fermée", async () => {
     const { connection, login } = startStack();
     await connection.start();
     await login();
-    await waitFor(() => fake.subscriptions() === 1, "le premier abonnement");
+    await waitFor(() => fake.subscriptions() === 3, "les premiers abonnements");
     await connection.disconnect();
     expect(existsSync(tokenPath)).toBe(false);
     expect(connection.getStatus()).toEqual({ kind: "disconnected", lastError: null });
@@ -285,11 +406,11 @@ describe("la connexion à Twitch, de bout en bout contre un faux Twitch", () => 
     await connection.start();
     await login("MAUVAIS-CODE");
     await login();
-    await waitFor(() => fake.subscriptions() === 1, "le premier abonnement");
+    await waitFor(() => fake.subscriptions() === 3, "les premiers abonnements");
     sim.now += 3600 * 1000 - 30_000;
     await breakSockets();
     await advance(5000);
-    await waitFor(() => fake.subscriptions() === 2, "le second abonnement");
+    await waitFor(() => fake.subscriptions() === 6, "les seconds abonnements");
     await connection.disconnect();
     const text = logs.join("\n");
     expect(text.length).toBeGreaterThan(0);
@@ -303,7 +424,7 @@ describe("la connexion à Twitch, de bout en bout contre un faux Twitch", () => 
     await connection.start();
     await login();
     const status = JSON.stringify(connection.getStatus());
-    expect(status).toBe('{"kind":"connected","login":"fenysk"}');
+    expect(status).toBe('{"kind":"connected","login":"fenysk","missing":[]}');
     expect(status).not.toContain("fake-access");
     connection.stop();
   });

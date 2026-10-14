@@ -292,7 +292,8 @@ const isShowing = ({ kind }: FoxMode): boolean =>
   kind === "address" ||
   kind === "joy" ||
   kind === "flinch" ||
-  kind === "startle";
+  kind === "startle" ||
+  kind === "raid";
 
 // Un pas de l'animation : la page l'appelle à chaque image, avec le level de la voix (null : il ne parle pas) et le mode
 // que le serveur lui donne.
@@ -332,7 +333,9 @@ const toModeImage = ({ mode, modeAt }: FoxState, now: number): FoxImage | null =
       return mode.image;
     case "yawn":
       return YAWN_IMAGE;
+    // Le long coucou d'un raid : les mêmes deux images, plus longtemps (le serveur règle la durée).
     case "wave":
+    case "raid":
       return Math.floor((now - (modeAt ?? now)) / WAVE_PERIOD_MS) % 2 === 0 ? WAVE_IMAGES[0] : WAVE_IMAGES[1];
     // Le regard à gauche, qu'on retourne : il regarde Fenysk, à droite.
     case "address":

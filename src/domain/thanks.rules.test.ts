@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RawMessage } from "./chat.types";
 import type { Settings } from "./settings.schema";
-import { isLurk, SOMEONE, toThanksPlan, toThanksRules } from "./thanks.rules";
+import { isLurk, SOMEONE, toRewardKind, toThanksPlan, toThanksRules } from "./thanks.rules";
 
 const message: RawMessage = {
   id: "m",
@@ -161,7 +161,7 @@ describe("toThanksRules", () => {
     delay: 250,
   };
 
-  it("reprend la case, le délai, le nombre de messages d'un viewer très impliqué et les neuf listes de phrases des réglages", () => {
+  it("reprend la case, le délai, le nombre de messages d'un viewer très impliqué, les titres des deux récompenses et les quinze listes de phrases des réglages", () => {
     const rules = toThanksRules({
       ...base,
       foxShouldThank: true,
@@ -176,11 +176,20 @@ describe("toThanksRules", () => {
       foxThanksLurk: ["g"],
       foxThanksLurkGeneric: ["h"],
       foxThanksTalkative: ["i"],
+      foxThanksRaid: ["j"],
+      foxThanksRaidGeneric: ["k"],
+      foxClashRewards: ["Clasher Fenysk"],
+      foxWakeRewards: ["Réveiller Jean-Renard"],
+      foxThanksWakeAsleep: ["l"],
+      foxThanksWakeAwake: ["m"],
+      foxThanksPrediction: ["n"],
+      foxThanksPredictionNoLoser: ["o"],
     });
     expect(rules).toEqual({
       shouldThank: true,
       gap: 10_000,
       talkativeAt: 50,
+      rewards: { clash: ["Clasher Fenysk"], wake: ["Réveiller Jean-Renard"] },
       phrases: {
         foxThanksFollow: ["a"],
         foxThanksFollowGeneric: ["b"],
@@ -191,6 +200,12 @@ describe("toThanksRules", () => {
         foxThanksLurk: ["g"],
         foxThanksLurkGeneric: ["h"],
         foxThanksTalkative: ["i"],
+        foxThanksRaid: ["j"],
+        foxThanksRaidGeneric: ["k"],
+        foxThanksWakeAsleep: ["l"],
+        foxThanksWakeAwake: ["m"],
+        foxThanksPrediction: ["n"],
+        foxThanksPredictionNoLoser: ["o"],
       },
     });
   });
@@ -215,5 +230,128 @@ describe("toThanksPlan : un viewer très impliqué", () => {
       values: { user: SOMEONE, messages: 50 },
       show: "smile",
     });
+  });
+});
+
+describe("toThanksPlan : un raid", () => {
+  it("la liste des raids, le pseudo et le nombre de viewers écrit en toutes lettres, un long coucou", () => {
+    expect(toThanksPlan({ kind: "raid", user: "Alice", viewers: 12 }, open)).toEqual({
+      list: "foxThanksRaid",
+      values: { user: "Alice", viewers: "12 personnes" },
+      show: "raid",
+    });
+  });
+
+  it("écrit « 1 personne » au singulier", () => {
+    expect(toThanksPlan({ kind: "raid", user: "Alice", viewers: 1 }, open).values).toEqual({
+      user: "Alice",
+      viewers: "1 personne",
+    });
+  });
+
+  it("ne prend pas le nombre de viewers du live : celui du raid est celui de l'évènement", () => {
+    expect(
+      toThanksPlan({ kind: "raid", user: "Alice", viewers: 3 }, { ...open, viewers: 99 }).values,
+    ).toEqual({
+      user: "Alice",
+      viewers: "3 personnes",
+    });
+  });
+
+  it("un pseudo refusé : une phrase sans pseudo, avec le nombre de viewers", () => {
+    expect(toThanksPlan({ kind: "raid", user: "c0nn4rd", viewers: 12 }, refuse("c0nn4rd"))).toEqual({
+      list: "foxThanksRaidGeneric",
+      values: { viewers: "12 personnes" },
+      show: "raid",
+    });
+  });
+});
+
+describe("toThanksPlan : réveiller le renard", () => {
+  it("s'il dormait : la liste du réveil, le pseudo, rien de montré avant la phrase", () => {
+    expect(toThanksPlan({ kind: "wake", user: "Alice", isAsleep: true }, open)).toEqual({
+      list: "foxThanksWakeAsleep",
+      values: { user: "Alice" },
+      show: "none",
+    });
+  });
+
+  it("s'il ne dormait pas : l'autre liste, le pseudo, rien de montré", () => {
+    expect(toThanksPlan({ kind: "wake", user: "Alice", isAsleep: false }, open)).toEqual({
+      list: "foxThanksWakeAwake",
+      values: { user: "Alice" },
+      show: "none",
+    });
+  });
+
+  it("un pseudo refusé devient « quelqu'un » dans les deux listes", () => {
+    for (const isAsleep of [true, false]) {
+      expect(toThanksPlan({ kind: "wake", user: "Vilain", isAsleep }, refuse("Vilain")).values).toEqual({
+        user: SOMEONE,
+      });
+    }
+  });
+});
+
+describe("toRewardKind : le titre d'une récompense", () => {
+  const titles = { clash: ["Clasher Fenysk"], wake: ["Réveiller Jean-Renard", "Debout !"] };
+
+  it("reconnaît le clash et le réveil par leur titre", () => {
+    expect(toRewardKind("Clasher Fenysk", titles)).toBe("clash");
+    expect(toRewardKind("Réveiller Jean-Renard", titles)).toBe("wake");
+    expect(toRewardKind("Debout !", titles)).toBe("wake");
+  });
+
+  it("ne tient compte ni des majuscules ni des espaces aux bords", () => {
+    expect(toRewardKind("  clasher fenysk ", titles)).toBe("clash");
+    expect(toRewardKind("RÉVEILLER JEAN-RENARD", titles)).toBe("wake");
+    expect(toRewardKind("Clasher Fenysk", { clash: ["  CLASHER FENYSK"], wake: [] })).toBe("clash");
+  });
+
+  it("ignore tout autre titre, y compris un titre qui contient seulement le bon", () => {
+    expect(toRewardKind("Hydrate-toi", titles)).toBeNull();
+    expect(toRewardKind("Clasher Fenysk deux fois", titles)).toBeNull();
+    expect(toRewardKind("Clasher", titles)).toBeNull();
+    expect(toRewardKind("", titles)).toBeNull();
+  });
+
+  it("n'ignore rien d'autre que ce qui manque : une liste vide ne reconnaît rien", () => {
+    expect(toRewardKind("Clasher Fenysk", { clash: [], wake: [] })).toBeNull();
+    expect(toRewardKind("Clasher Fenysk", { clash: [], wake: ["Clasher Fenysk"] })).toBe("wake");
+  });
+
+  it("donne le clash quand le même titre est dans les deux listes", () => {
+    expect(toRewardKind("Les deux", { clash: ["Les deux"], wake: ["Les deux"] })).toBe("clash");
+  });
+});
+
+describe("toThanksPlan : une prédiction terminée", () => {
+  it("avec des perdants : leur nombre en toutes lettres et l'issue, rien de montré avant la phrase", () => {
+    expect(toThanksPlan({ kind: "prediction", losers: 12, outcome: "Oui" }, open)).toEqual({
+      list: "foxThanksPrediction",
+      values: { perdants: "12 personnes", issue: "Oui" },
+      show: "none",
+    });
+  });
+
+  it("un seul perdant : « 1 personne »", () => {
+    expect(toThanksPlan({ kind: "prediction", losers: 1, outcome: "Non" }, open).values).toEqual({
+      perdants: "1 personne",
+      issue: "Non",
+    });
+  });
+
+  it("sans perdant : l'autre liste, sans variable", () => {
+    expect(toThanksPlan({ kind: "prediction", losers: 0, outcome: null }, open)).toEqual({
+      list: "foxThanksPredictionNoLoser",
+      values: {},
+      show: "none",
+    });
+  });
+
+  it("des perdants sans issue connue sont traités comme sans perdant : jamais « Perdants sur  : »", () => {
+    expect(toThanksPlan({ kind: "prediction", losers: 3, outcome: null }, open).list).toBe(
+      "foxThanksPredictionNoLoser",
+    );
   });
 });

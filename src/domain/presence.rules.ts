@@ -24,6 +24,9 @@ export const toStartPresence = (now: number): PresenceState => ({
 export const toPresenceView = ({ kind }: PresenceState): PresenceView =>
   kind === "yawning" ? "visible" : kind;
 
+// Il n'est pas visible (il s'en va, il est parti, ou il revient) : « dormir », pour la récompense qui le réveille.
+export const isAsleep = (presence: PresenceView): boolean => presence !== "visible";
+
 const wake = (state: PresenceState, now: number): PresenceState => {
   switch (state.kind) {
     case "visible":

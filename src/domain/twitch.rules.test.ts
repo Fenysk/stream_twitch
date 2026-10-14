@@ -5,8 +5,12 @@ import {
   RENEW_BEFORE_MS,
   TWITCH_REDIRECT_URI,
   TWITCH_SCOPE,
+  TWITCH_TOPIC_SPECS,
   toAuthorizeUrl,
+  toGrantedTopics,
+  toMissingTopics,
   toRenewedToken,
+  toTopicsText,
   toTwitchToken,
 } from "./twitch.rules";
 import { TwitchStatusSchema, TwitchTokenSchema } from "./twitch.schema";
@@ -28,9 +32,10 @@ describe("toAuthorizeUrl : l'adresse où Alexis autorise l'application", () => {
     expect(TWITCH_REDIRECT_URI).toBe("http://localhost:4747/auth/twitch/callback");
   });
 
-  it("ne demande que le droit de voir les follows : moderator:read:followers", () => {
-    expect(url.searchParams.get("scope")).toBe("moderator:read:followers");
-    expect(TWITCH_SCOPE).toBe("moderator:read:followers");
+  it("demande un droit par abonnement, séparés par des espaces : les follows, les récompenses de points de chaîne, les prédictions", () => {
+    const scope = "moderator:read:followers channel:read:redemptions channel:read:predictions";
+    expect(url.searchParams.get("scope")).toBe(scope);
+    expect(TWITCH_SCOPE).toBe(scope);
   });
 
   it("porte le state, qui revient tel quel au retour", () => {
@@ -64,6 +69,50 @@ describe("hasTwitchScope", () => {
     expect(hasTwitchScope("chat:read")).toBe(false);
     expect(hasTwitchScope("")).toBe(false);
     expect(hasTwitchScope("moderator:read:followers:extra")).toBe(false);
+  });
+});
+
+describe("les abonnements EventSub du renard", () => {
+  it("ont chacun le type, la version et le droit que Twitch donne à cet abonnement", () => {
+    expect(TWITCH_TOPIC_SPECS.follow).toMatchObject({
+      type: "channel.follow",
+      version: "2",
+      scope: "moderator:read:followers",
+    });
+    expect(TWITCH_TOPIC_SPECS.reward).toMatchObject({
+      type: "channel.channel_points_custom_reward_redemption.add",
+      version: "1",
+      scope: "channel:read:redemptions",
+    });
+    expect(TWITCH_TOPIC_SPECS.prediction).toMatchObject({
+      type: "channel.prediction.end",
+      version: "1",
+      scope: "channel:read:predictions",
+    });
+  });
+
+  it("se déduisent des droits du jeton : ceux qu'il permet, et ceux qui lui manquent", () => {
+    const all = "chat:read moderator:read:followers channel:read:redemptions channel:read:predictions";
+    expect(toGrantedTopics(all)).toEqual(["follow", "reward", "prediction"]);
+    expect(toMissingTopics(all)).toEqual([]);
+    expect(toGrantedTopics("moderator:read:followers")).toEqual(["follow"]);
+    expect(toMissingTopics("moderator:read:followers")).toEqual(["reward", "prediction"]);
+    expect(toMissingTopics("moderator:read:followers channel:read:redemptions")).toEqual(["prediction"]);
+    expect(toGrantedTopics("")).toEqual([]);
+    expect(toMissingTopics("")).toEqual(["follow", "reward", "prediction"]);
+    expect(toMissingTopics("channel:read:redemptions:extra moderator:read:followers")).toEqual([
+      "reward",
+      "prediction",
+    ]);
+  });
+
+  it("s'écrivent en français, reliés par « et »", () => {
+    expect(toTopicsText(["follow"])).toBe("les follows");
+    expect(toTopicsText(["follow", "reward"])).toBe("les follows et les récompenses de points de chaîne");
+    expect(toTopicsText(["follow", "reward", "prediction"])).toBe(
+      "les follows, les récompenses de points de chaîne et les prédictions",
+    );
+    expect(toTopicsText([])).toBe("");
   });
 });
 
@@ -115,12 +164,26 @@ describe("l'état que les pages reçoivent", () => {
   it("dit seulement s'il est disponible, déconnecté (avec la raison du dernier échec) ou connecté (avec le compte)", () => {
     expect(TwitchStatusSchema.safeParse({ kind: "unavailable" }).success).toBe(true);
     expect(TwitchStatusSchema.safeParse({ kind: "disconnected", lastError: null }).success).toBe(true);
-    expect(TwitchStatusSchema.safeParse({ kind: "connected", login: "fenysk" }).success).toBe(true);
+    expect(TwitchStatusSchema.safeParse({ kind: "connected", login: "fenysk", missing: [] }).success).toBe(
+      true,
+    );
+    expect(
+      TwitchStatusSchema.safeParse({ kind: "connected", login: "fenysk", missing: ["reward", "prediction"] })
+        .success,
+    ).toBe(true);
+    expect(
+      TwitchStatusSchema.safeParse({ kind: "connected", login: "fenysk", missing: ["droit"] }).success,
+    ).toBe(false);
     expect(TwitchStatusSchema.safeParse({ kind: "connected" }).success).toBe(false);
   });
 
   it("n'a aucune place pour un jeton : un champ en plus est écarté du schéma lu", () => {
-    const parsed = TwitchStatusSchema.parse({ kind: "connected", login: "fenysk", accessToken: "secret" });
+    const parsed = TwitchStatusSchema.parse({
+      kind: "connected",
+      login: "fenysk",
+      missing: [],
+      accessToken: "secret",
+    });
     expect(JSON.stringify(parsed)).not.toContain("secret");
   });
 });

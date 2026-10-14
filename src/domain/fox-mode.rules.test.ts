@@ -7,6 +7,7 @@ import {
   isSameMode,
   JOY_MODE,
   LISTENING_MODE,
+  RAID_MODE,
   type Show,
   STARTLE_MODE,
   toFoxMode,
@@ -51,18 +52,32 @@ describe("isFacingFenysk : le miroir", () => {
   });
 
   it("le laisse tourné vers le tchat dans tous les autres modes", () => {
-    for (const mode of [IDLE_MODE, LISTENING_MODE, YAWN_MODE, WAVE_MODE, JOY_MODE, STARTLE_MODE, smile])
+    for (const mode of [
+      IDLE_MODE,
+      LISTENING_MODE,
+      YAWN_MODE,
+      WAVE_MODE,
+      RAID_MODE,
+      JOY_MODE,
+      STARTLE_MODE,
+      smile,
+    ])
       expect(isFacingFenysk(mode), mode.kind).toBe(false);
   });
 });
 
 describe("toShowMs", () => {
-  const durations = { reactionMs: 1000, joyMs: 800, yawnMs: 2000 };
+  const durations = { reactionMs: 1000, joyMs: 800, yawnMs: 2000, raidMs: 3000 };
 
   it("montre le sursaut le temps d'une réaction, comme le coucou", () => {
     expect(toShowMs(FLINCH_MODE, durations)).toBe(1000);
     expect(toShowMs(STARTLE_MODE, durations)).toBe(1000);
     expect(toShowMs(WAVE_MODE, durations)).toBe(1000);
+  });
+
+  it("montre le long coucou d'un raid le temps réglé, à part de la réaction", () => {
+    expect(toShowMs(RAID_MODE, durations)).toBe(3000);
+    expect(toShowMs(RAID_MODE, { ...durations, raidMs: 4500 })).toBe(4500);
   });
 
   it("garde le saut de joie et le retournement vers Fenysk", () => {
@@ -105,6 +120,7 @@ describe("toFoxModeRules", () => {
       foxReactionDuration: 1000,
       foxJoyDuration: 800,
       foxYawnDuration: 2000,
+      foxRaidDuration: 3000,
       foxAwayAfter: 180_000,
       foxCrouchDuration: 300,
       foxJumpDuration: 400,
@@ -119,6 +135,7 @@ describe("toFoxModeRules", () => {
       reactionMs: 1000,
       joyMs: 800,
       yawnMs: 2000,
+      raidMs: 3000,
       awayAfter: 180_000,
       leaveMs: 1500,
       returnMs: 800,

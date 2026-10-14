@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { FollowFeedTarget } from "../usecase/twitch-connection.usecase";
-import { createFollowFeed, type FeedSocket } from "./twitch-follows.client";
+import type { LiveEvent } from "../domain/live.types";
+import type { TwitchTopic } from "../domain/twitch.schema";
+import type { EventFeedTarget } from "../usecase/twitch-connection.usecase";
+import { createEventFeed, type FeedSocket } from "./twitch-events.client";
 
 const NOW = Date.parse("2026-10-13T12:00:00.000Z");
 const iso = (at: number): string => new Date(at).toISOString();
@@ -14,6 +16,42 @@ const reconnectMessage = (url: string): string =>
 const revocationMessage = `{"metadata":{"message_id":"rv","message_type":"revocation","message_timestamp":"${iso(NOW)}","subscription_type":"channel.follow"},"payload":{"subscription":{"id":"s1","status":"authorization_revoked","type":"channel.follow"}}}`;
 const follow = (id: string, user: string, at = NOW, type = "channel.follow"): string =>
   `{"metadata":{"message_id":"${id}","message_type":"notification","message_timestamp":"${iso(at)}","subscription_type":"${type}"},"payload":{"event":{"user_id":"1","user_login":"${user.toLowerCase()}","user_name":"${user}","broadcaster_user_id":"68710381"}}}`;
+// Une prédiction qui se termine : `winning` (`null` : annulée), les issues (identifiant, titre, viewers) et le statut.
+type OutcomeLine = readonly [id: string, title: string, users: number];
+const prediction = (
+  id: string,
+  {
+    status = "resolved",
+    winning = "o1",
+    outcomes = [
+      ["o1", "Oui", 3],
+      ["o2", "Non", 7],
+    ],
+  }: { status?: string; winning?: string | null; outcomes?: readonly OutcomeLine[] } = {},
+): string => {
+  const lines = outcomes.map(
+    ([outcomeId, title, users]) =>
+      `{"id":"${outcomeId}","title":"${title}","color":"blue","users":${users},"channel_points":${users * 100},"top_predictors":[]}`,
+  );
+  return `{"metadata":{"message_id":"${id}","message_type":"notification","message_timestamp":"${iso(NOW)}","subscription_type":"channel.prediction.end"},"payload":{"event":{"id":"p1","broadcaster_user_id":"68710381","title":"Un titre","winning_outcome_id":${winning === null ? "null" : `"${winning}"`},"outcomes":[${lines.join(",")}],"status":"${status}"}}}`;
+};
+
+// `omitted` : les morceaux que Twitch n'aurait pas donnés (le nom affiché, le login, la récompense).
+type RewardPart = "name" | "login" | "reward";
+const reward = (
+  id: string,
+  user: string,
+  title: string,
+  userInput = "",
+  at = NOW,
+  omitted: readonly RewardPart[] = [],
+): string => {
+  const keep = (part: RewardPart, text: string): string => (omitted.includes(part) ? "" : text);
+  const login = keep("login", `"user_login":"${user.toLowerCase()}",`);
+  const name = keep("name", `"user_name":"${user}",`);
+  const details = keep("reward", `,"reward":{"id":"w1","title":"${title}","cost":100,"prompt":""}`);
+  return `{"metadata":{"message_id":"${id}","message_type":"notification","message_timestamp":"${iso(at)}","subscription_type":"channel.channel_points_custom_reward_redemption.add"},"payload":{"event":{"id":"r1","user_id":"1",${login}${name}"broadcaster_user_id":"68710381","user_input":"${userInput}","status":"unfulfilled"${details}}}}`;
+};
 const followLoginOnly = `{"metadata":{"message_id":"n-login","message_type":"notification","message_timestamp":"${iso(NOW)}","subscription_type":"channel.follow"},"payload":{"event":{"user_login":"bob"}}}`;
 
 type FakeSocket = FeedSocket & {
@@ -23,18 +61,23 @@ type FakeSocket = FeedSocket & {
   drop(): void;
 };
 
+// `respond` reçoit le corps de la demande d'abonnement (son type, sa condition…) ; `topics` : les abonnements demandés.
 const setup = (
-  respond: () => Response | Promise<Response> = () => new Response(null, { status: 202 }),
+  respond: (body: Record<string, unknown>) => Response | Promise<Response> = () =>
+    new Response(null, { status: 202 }),
   tokenFor: (isForced: boolean) => string | null = () => "ACCESS-X",
+  topics: readonly TwitchTopic[] = ["follow"],
 ) => {
   const state = { now: NOW };
   const sockets: FakeSocket[] = [];
   const timers: { at: number; callback: () => void; isCancelled: boolean }[] = [];
   const logs: string[] = [];
+  const events: LiveEvent[] = [];
+  // Les pseudos des follows reçus.
   const follows: string[] = [];
   const requests: { url: string; init: RequestInit | undefined }[] = [];
   const wasForced: boolean[] = [];
-  const feed = createFollowFeed({
+  const feed = createEventFeed({
     clientId: "mon-client",
     schedule(callback, ms) {
       const timer = { at: state.now + ms, callback, isCancelled: false };
@@ -47,7 +90,7 @@ const setup = (
     clock: () => state.now,
     fetcher: (async (url: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: String(url), init });
-      return respond();
+      return respond(JSON.parse(String(init?.body ?? "{}")));
     }) as typeof fetch,
     createSocket(url) {
       let listener: Parameters<FeedSocket["listen"]>[0] | undefined;
@@ -67,14 +110,18 @@ const setup = (
       return socket;
     },
   });
-  const target: FollowFeedTarget = {
+  const target: EventFeedTarget = {
     broadcasterId: "68710381",
     moderatorId: "68710381",
+    topics,
     getAccessToken: async (isForced) => {
       wasForced.push(isForced);
       return tokenFor(isForced);
     },
-    onFollow: (nickname) => follows.push(nickname),
+    onEvent: (event) => {
+      events.push(event);
+      if (event.kind === "follow") follows.push(event.user);
+    },
   };
   const flush = async () => {
     for (let turn = 0; turn < 12; turn += 1) await Promise.resolve();
@@ -98,6 +145,7 @@ const setup = (
     state,
     sockets,
     logs,
+    events,
     follows,
     requests,
     wasForced,
@@ -315,7 +363,7 @@ describe("quand la connexion tombe", () => {
     const { sockets, logs, subscribed } = setup();
     await subscribed();
     sockets[0]?.drop();
-    expect(logs.at(-1)).toBe("Twitch : flux des follows interrompu (connexion coupée), nouvel essai.");
+    expect(logs.at(-1)).toBe("Twitch : flux des évènements interrompu (connexion coupée), nouvel essai.");
   });
 
   it("repart de 5 s après un abonnement réussi", async () => {
@@ -411,6 +459,239 @@ describe("la demande de Twitch de changer d'adresse (session_reconnect)", () => 
     expect(sockets).toHaveLength(2);
     expect(sockets[1]?.isClosed).toBe(false);
     expect(logs.some((line) => line.includes("interrompu"))).toBe(false);
+  });
+});
+
+describe("les récompenses de points de chaîne", () => {
+  const both: readonly TwitchTopic[] = ["follow", "reward"];
+  const toBody = (request: { init: RequestInit | undefined } | undefined): Record<string, unknown> =>
+    JSON.parse(String(request?.init?.body));
+
+  it("s'abonne aux follows puis aux récompenses (version 1, pour la chaîne seulement), avec le même jeton", async () => {
+    const { requests, wasForced, subscribed } = setup(undefined, undefined, both);
+    await subscribed();
+    expect(requests).toHaveLength(2);
+    expect(toBody(requests[0]).type).toBe("channel.follow");
+    const second = toBody(requests[1]);
+    expect(second.type).toBe("channel.channel_points_custom_reward_redemption.add");
+    expect(second.version).toBe("1");
+    expect(second.condition).toEqual(JSON.parse('{"broadcaster_user_id":"68710381"}'));
+    expect(second.transport).toEqual(JSON.parse('{"method":"websocket","session_id":"session-1"}'));
+    expect(new Headers(requests[1]?.init?.headers).get("authorization")).toBe("Bearer ACCESS-X");
+    expect(wasForced).toEqual([false]);
+  });
+
+  it("ne s'abonne qu'aux abonnements demandés : sans récompenses, une seule demande", async () => {
+    const { requests, subscribed } = setup(undefined, undefined, ["follow"]);
+    await subscribed();
+    expect(requests.map((request) => toBody(request).type)).toEqual(["channel.follow"]);
+  });
+
+  it("dit chaque abonnement obtenu", async () => {
+    const { logs, subscribed } = setup(undefined, undefined, both);
+    await subscribed();
+    expect(logs).toEqual([
+      "Twitch : abonné aux follows (EventSub).",
+      "Twitch : abonné aux récompenses de points de chaîne (EventSub).",
+    ]);
+  });
+
+  it("donne le pseudo et le titre de chaque récompense, jamais le texte que le viewer y joint", async () => {
+    const { last, events, flush, subscribed } = setup(undefined, undefined, both);
+    await subscribed();
+    last().emit(reward("r1", "Alice", "Clasher Fenysk", "un texte qui ne doit pas être lu"));
+    last().emit(reward("r2", "Bob", "Réveiller Jean-Renard"));
+    await flush();
+    expect(events).toEqual([
+      { kind: "reward", user: "Alice", title: "Clasher Fenysk" },
+      { kind: "reward", user: "Bob", title: "Réveiller Jean-Renard" },
+    ]);
+    expect(JSON.stringify(events)).not.toContain("texte");
+  });
+
+  it("prend le login quand le nom affiché manque, et ignore une récompense sans titre ou sans pseudo", async () => {
+    const { last, events, subscribed } = setup(undefined, undefined, both);
+    await subscribed();
+    last().emit(reward("r1", "Alice", "Clasher Fenysk", "", NOW, ["name"]));
+    last().emit(reward("r2", "Alice", "Clasher Fenysk", "", NOW, ["reward"]));
+    last().emit(reward("r3", "Alice", "Clasher Fenysk", "", NOW, ["name", "login"]));
+    expect(events).toEqual([{ kind: "reward", user: "alice", title: "Clasher Fenysk" }]);
+  });
+
+  it("ne donne qu'une fois une récompense que Twitch répète, et ignore une rediffusion de plus de 10 min", async () => {
+    const { last, events, subscribed } = setup(undefined, undefined, both);
+    await subscribed();
+    last().emit(reward("r1", "Alice", "Clasher Fenysk"));
+    last().emit(reward("r1", "Alice", "Clasher Fenysk"));
+    last().emit(reward("old", "Vieux", "Clasher Fenysk", undefined, NOW - 10 * 60_000 - 1));
+    expect(events.map((event) => (event.kind === "reward" ? event.user : null))).toEqual(["Alice"]);
+  });
+
+  it("un abonnement refusé n'abat pas les autres : les follows continuent, et le refus est dit", async () => {
+    const { logs, sockets, events, last, pending, subscribed } = setup(
+      (body) => new Response(null, { status: body.type === "channel.follow" ? 202 : 403 }),
+      undefined,
+      both,
+    );
+    await subscribed();
+    expect(logs).toEqual([
+      "Twitch : abonné aux follows (EventSub).",
+      "Twitch : abonnement aux récompenses de points de chaîne refusé (HTTP 403).",
+    ]);
+    expect(sockets[0]?.isClosed).toBe(false);
+    expect(pending()).toBe(1);
+    last().emit(follow("n1", "Alice"));
+    expect(events).toEqual([{ kind: "follow", user: "Alice" }]);
+  });
+
+  it("ferme et réessaie quand aucun abonnement n'a réussi, même avec deux demandes", async () => {
+    const { logs, sockets, advance, subscribed } = setup(
+      () => new Response(null, { status: 403 }),
+      undefined,
+      both,
+    );
+    await subscribed();
+    expect(logs.filter((line) => line.startsWith("Twitch : abonnement aux"))).toHaveLength(2);
+    expect(sockets[0]?.isClosed).toBe(true);
+    await advance(5000);
+    expect(sockets).toHaveLength(2);
+  });
+
+  it("redemande un jeton forcé après un 401, et s'abonne aux deux avec lui", async () => {
+    let calls = 0;
+    const { requests, wasForced, logs, feed, target, last, flush } = setup(
+      () => {
+        calls += 1;
+        return new Response(null, { status: calls === 1 ? 401 : 202 });
+      },
+      (isForced) => (isForced ? "ACCESS-FRESH" : "ACCESS-OLD"),
+      both,
+    );
+    feed.open(target);
+    last().emit(welcome("session-1"));
+    await flush();
+    expect(wasForced).toEqual([false, true]);
+    expect(requests.map((request) => new Headers(request.init?.headers).get("authorization"))).toEqual([
+      "Bearer ACCESS-OLD",
+      "Bearer ACCESS-FRESH",
+      "Bearer ACCESS-FRESH",
+    ]);
+    expect(logs).toHaveLength(2);
+  });
+
+  it("dit quel abonnement Twitch retire", async () => {
+    const { last, logs, subscribed } = setup(undefined, undefined, both);
+    await subscribed();
+    last().emit(
+      `{"metadata":{"message_id":"rv","message_type":"revocation","message_timestamp":"${iso(NOW)}","subscription_type":"channel.channel_points_custom_reward_redemption.add"},"payload":{"subscription":{"id":"s2","status":"authorization_revoked","type":"channel.channel_points_custom_reward_redemption.add"}}}`,
+    );
+    expect(logs).toContain(
+      "Twitch : l'abonnement aux récompenses de points de chaîne a été retiré par Twitch (authorization_revoked).",
+    );
+  });
+
+  it("se réabonne aux deux à chaque nouvelle connexion", async () => {
+    const { sockets, last, requests, flush, advance, subscribed } = setup(undefined, undefined, both);
+    await subscribed();
+    sockets[0]?.drop();
+    await advance(5000);
+    last().emit(welcome("session-2"));
+    await flush();
+    expect(requests).toHaveLength(4);
+    expect(requests.slice(2).map((request) => toBody(request).type)).toEqual([
+      "channel.follow",
+      "channel.channel_points_custom_reward_redemption.add",
+    ]);
+  });
+});
+
+describe("les prédictions terminées", () => {
+  const all: readonly TwitchTopic[] = ["follow", "reward", "prediction"];
+
+  it("s'abonne à la fin des prédictions (version 1, pour la chaîne seulement), après les follows et les récompenses", async () => {
+    const { requests, logs, subscribed } = setup(undefined, undefined, all);
+    await subscribed();
+    expect(requests).toHaveLength(3);
+    const body: Record<string, unknown> = JSON.parse(String(requests[2]?.init?.body));
+    expect(body.type).toBe("channel.prediction.end");
+    expect(body.version).toBe("1");
+    expect(body.condition).toEqual(JSON.parse('{"broadcaster_user_id":"68710381"}'));
+    expect(logs.at(-1)).toBe("Twitch : abonné aux prédictions (EventSub).");
+  });
+
+  it("donne les perdants (les viewers des issues perdantes) et l'issue perdante la plus suivie", async () => {
+    const { last, events, subscribed } = setup(undefined, undefined, all);
+    await subscribed();
+    last().emit(
+      prediction("p1", {
+        winning: "o2",
+        outcomes: [
+          ["o1", "Oui", 3],
+          ["o2", "Non", 7],
+          ["o3", "Peut-être", 5],
+        ],
+      }),
+    );
+    expect(events).toEqual([{ kind: "prediction", losers: 8, outcome: "Peut-être" }]);
+  });
+
+  it("donne zéro perdant quand tout le monde a gagné", async () => {
+    const { last, events, subscribed } = setup(undefined, undefined, all);
+    await subscribed();
+    last().emit(
+      prediction("p1", {
+        outcomes: [
+          ["o1", "Oui", 4],
+          ["o2", "Non", 0],
+        ],
+      }),
+    );
+    expect(events).toEqual([{ kind: "prediction", losers: 0, outcome: null }]);
+  });
+
+  it("ignore une prédiction annulée, même avec des viewers sur les issues", async () => {
+    const { last, events, subscribed } = setup(undefined, undefined, all);
+    await subscribed();
+    last().emit(prediction("p1", { status: "canceled", winning: null }));
+    last().emit(prediction("p2", { status: "canceled" }));
+    expect(events).toEqual([]);
+  });
+
+  it("ignore une prédiction dont le résultat est illisible : issue gagnante inconnue, issues absentes", async () => {
+    const { last, events, subscribed } = setup(undefined, undefined, all);
+    await subscribed();
+    last().emit(prediction("p1", { winning: "inconnue" }));
+    last().emit(prediction("p2", { winning: null }));
+    last().emit(prediction("p3", { outcomes: [] }));
+    last().emit(
+      '{"metadata":{"message_id":"p4","message_type":"notification","message_timestamp":"2026-10-13T12:00:00.000Z","subscription_type":"channel.prediction.end"},"payload":{"event":{"status":"resolved","winning_outcome_id":"o1"}}}',
+    );
+    expect(events).toEqual([]);
+  });
+
+  it("ne donne qu'une fois une prédiction que Twitch répète", async () => {
+    const { last, events, subscribed } = setup(undefined, undefined, all);
+    await subscribed();
+    last().emit(prediction("p1"));
+    last().emit(prediction("p1"));
+    expect(events).toHaveLength(1);
+  });
+
+  it("un abonnement aux prédictions refusé n'abat ni les follows ni les récompenses", async () => {
+    const { logs, sockets, events, last, subscribed } = setup(
+      (body) => new Response(null, { status: body.type === "channel.prediction.end" ? 403 : 202 }),
+      undefined,
+      all,
+    );
+    await subscribed();
+    expect(logs).toEqual([
+      "Twitch : abonné aux follows (EventSub).",
+      "Twitch : abonné aux récompenses de points de chaîne (EventSub).",
+      "Twitch : abonnement aux prédictions refusé (HTTP 403).",
+    ]);
+    expect(sockets[0]?.isClosed).toBe(false);
+    last().emit(follow("n1", "Alice"));
+    expect(events).toEqual([{ kind: "follow", user: "Alice" }]);
   });
 });
 

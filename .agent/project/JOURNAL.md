@@ -11,6 +11,30 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-14 — Une prédiction résolue donne une phrase aux perdants : `channel.prediction.end` rejoint le flux EventSub, le droit `channel:read:predictions` s'ajoute ; `prediction` entre au lexique
+
+**Contexte.** Alexis veut que le renard commente la fin d'une prédiction (les points perdus par une partie du chat) ; EventSub `channel.prediction.end` est le seul moyen de la voir, avec le jeton d'Alexis, comme les follows et les récompenses.
+**Décision.** `prediction` est un `TwitchTopic` de plus (type, version 1, droit `channel:read:predictions`, condition : la chaîne seule) : le flux s'y abonne si le jeton le permet, sinon le journal dit une fois de se reconnecter et l'état des pages porte `missing`, comme pour les récompenses. Seul le statut `resolved` compte (`canceled` est ignoré). Les perdants sont la somme des `users` des issues autres que la gagnante, l'issue citée la plus suivie d'entre elles ; c'est un `LiveEvent` (`prediction`, avec `losers` et `outcome`) remercié sous la case des remerciements, par une phrase de `foxThanksPrediction` (`{perdants}` écrit « 1 personne », « 12 personnes », et `{issue}`), ou de `foxThanksPredictionNoLoser` quand personne n'a perdu. Aucune animation avant la phrase. `lexique.json` : `prediction`.
+**Renoncement.** Annoncer le gagnant ou les points : Alexis ne veut que le coup de griffe sur les perdants, et un chiffre de points dit à voix haute se trompe vite. Écouter `channel.prediction.lock` ou `.progress` : ils tombent avant le résultat, et une prédiction annulée y aurait déjà parlé.
+
+---
+
+## 2026-10-14 — Deux récompenses de points de chaîne agissent sur le renard : le flux EventSub n'est plus celui des follows seuls, le droit `channel:read:redemptions` s'ajoute ; `reward`, `clash` et `wake` entrent au lexique
+
+**Contexte.** Alexis veut que ses viewers dépensent des points pour faire piquer Fenysk (« Clasher Fenysk ») ou réveiller le renard (« Réveiller Jean-Renard ») ; EventSub `channel.channel_points_custom_reward_redemption.add` est le seul moyen de les voir, avec le jeton d'Alexis.
+**Décision.** `twitch-follows.client.ts` devient `twitch-events.client.ts` (`createEventFeed`, `EventFeedPort`) : une table de `TwitchTopic` (`follow`, `reward`) donne le type, la version et le droit de chaque abonnement, et le flux s'abonne à ceux que le jeton permet ; il ne perd la connexion que si AUCUN abonnement n'a réussi (un refus de la récompense ne coupe pas les follows). Il rend des `LiveEvent` (`onEvent`). `TWITCH_SCOPE` demande les deux droits ; un jeton gardé sans `channel:read:redemptions` écoute les follows, le journal dit une fois de se reconnecter, et l'état des pages porte `missing` (les `TwitchTopic` sans droit), que le bloc « Connexion à Twitch » lit. Le titre de la récompense (`foxClashRewards`, `foxWakeRewards`, une liste, sans casse) choisit ; les autres sont ignorées, le texte joint n'est jamais lu. `clash` : une pique de `foxJabs` (même tirage), tournée vers Fenysk, précédée d'une phrase de `foxClashIntros` (`{user}`), tout de suite, coupée comme la pique, hors de l'écart et du compte de la relance. `wake` : une phrase tournée vers le chat, de `foxThanksWakeAsleep` s'il n'était pas visible (il revient en sautant), sinon de `foxThanksWakeAwake`. Les deux suivent la case des remerciements et leurs règles (pseudo refusé : « quelqu'un »). `lexique.json` : `reward` (banni : redemption), `clash`, `wake`.
+**Renoncement.** Un second flux EventSub pour les récompenses : deux WebSocket, deux reconnexions et deux migrations pour le même jeton. Une récompense par réglage (un seul titre) : une liste se règle avec le même champ que les phrases, et permet plusieurs titres. Perdre la connexion dès qu'un abonnement est refusé : une récompense refusée couperait les follows en boucle.
+
+---
+
+## 2026-10-14 — Un raid fait un long coucou puis une phrase au tchat : il vient du tchat (ComfyJS `onRaid`), `raid` entre au lexique
+
+**Contexte.** Un raid entrant est un évènement du live qu'aucun remerciement ne couvre ; Alexis veut que le renard fasse un long coucou puis accueille la bande, avec le nombre de viewers.
+**Décision.** Le raid arrive par le tchat : le message `USERNOTICE` `raid` de l'IRC, que ComfyJS donne à `onRaid(user, viewers)` même sans jeton, comme les subs et les cheers. C'est un `LiveEvent` de plus (`raid`, avec `viewers`), remercié sous la case « Remercier les follows, subs et cheers », par une phrase de `foxThanksRaid` (`{user}`, `{viewers}` écrit « 1 personne », « 12 personnes »), ou de `foxThanksRaidGeneric` (`{viewers}`) quand le pseudo est refusé. Avant la phrase : le mode `raid`, les deux images du coucou qui alternent `foxRaidDuration` (3 s), à la place du sourire. `toCount` (pluriel d'un compte) passe de `review.rules.ts` à `phrase.rules.ts` : le bilan, le raid et la prédiction l'écrivent. `lexique.json` : `raid`.
+**Renoncement.** EventSub `channel.raid` : il demande la connexion d'Alexis et un abonnement de plus, alors que l'IRC donne le même raid sans jeton et même déconnecté. Réutiliser `wave` avec une durée : sa durée est celle de `foxReactionDuration`, que les réactions et le sursaut partagent.
+
+---
+
 ## 2026-10-14 — Son humeur suit le tchat : `attitude` (ordinaire, joyeux, boudeur) change ses regards au repos, la `resume` ouvre le premier message après un long silence ; `attitude` et `resume` entrent au lexique
 
 **Contexte.** Le renard est le même que le chat soit en feu ou mort ; Alexis veut qu'il le montre, sans que cela change autre chose que ses regards et une phrase.

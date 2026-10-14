@@ -182,7 +182,7 @@ describe("createChatClient : les suppressions", () => {
   });
 });
 
-// Les subs, les subs offerts et les cheers arrivent par le tchat (IRC), sans jeton : ComfyJS les donne tels quels.
+// Les subs, les subs offerts, les cheers et les raids arrivent par le tchat (IRC), sans jeton : ComfyJS les donne tels quels.
 describe("createChatClient : les évènements du live", () => {
   const TIER = { prime: false, plan: "1000", planName: null };
 
@@ -288,6 +288,22 @@ describe("createChatClient : les évènements du live", () => {
       { kind: "live", event: { kind: "cheer", user: "Alice", bits: 100, message: null } },
       { kind: "live", event: { kind: "cheer", user: "Bob", bits: 50, message: null } },
     ]);
+  });
+
+  it("donne un raid : le streamer qui arrive et le nombre de viewers qu'il amène", () => {
+    const { comfy, events } = setup();
+    comfy.onRaid("Alice", 12, { channel: "fenysk" });
+    expect(events).toEqual([{ kind: "live", event: { kind: "raid", user: "Alice", viewers: 12 } }]);
+  });
+
+  it("ignore un raid sans nombre de viewers lisible (texte, zéro, négatif), et le dit sans rien donner", () => {
+    const { comfy, events, messages } = setup();
+    comfy.onRaid("Alice", Number.NaN, { channel: "fenysk" });
+    comfy.onRaid("Bob", 0, { channel: "fenysk" });
+    comfy.onRaid("Carl", -3, { channel: "fenysk" });
+    expect(events).toEqual([]);
+    expect(messages).toHaveLength(3);
+    expect(messages.every((line) => line.includes("raid"))).toBe(true);
   });
 
   it("marque comme commande le message d'un sub qui commence par « ! »", () => {

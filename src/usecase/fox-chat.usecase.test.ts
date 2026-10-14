@@ -41,6 +41,7 @@ const settings: Settings = {
   foxDiveDuration: 800,
   foxReturnDuration: 800,
   foxYawnDuration: 2000,
+  foxRaidDuration: 3000,
   foxShouldReadChat: true,
   foxShouldReadOwn: true,
   foxReadMaxLength: 150,

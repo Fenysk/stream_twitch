@@ -15,11 +15,18 @@ export const TwitchTokenSchema = z.object({
 });
 export type TwitchToken = z.infer<typeof TwitchTokenSchema>;
 
+// Ce que le renard écoute par EventSub : les follows, les récompenses de points de chaîne et les prédictions terminées. Chacun
+// demande un droit du jeton (twitch.rules.ts).
+export const TWITCH_TOPICS = ["follow", "reward", "prediction"] as const;
+export const TwitchTopicSchema = z.enum(TWITCH_TOPICS);
+export type TwitchTopic = z.infer<typeof TwitchTopicSchema>;
+
 // Ce que les pages savent de la connexion à Twitch : jamais le jeton. `unavailable` : les identifiants de l'application
-// manquent dans .env. `lastError` : pourquoi la dernière tentative de connexion a échoué, ou `null`.
+// manquent dans .env. `lastError` : pourquoi la dernière tentative de connexion a échoué, ou `null`. `missing` : ce que le
+// jeton gardé ne permet pas d'écouter (il faut se reconnecter).
 export const TwitchStatusSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("unavailable") }),
   z.object({ kind: z.literal("disconnected"), lastError: z.string().nullable() }),
-  z.object({ kind: z.literal("connected"), login: z.string().min(1) }),
+  z.object({ kind: z.literal("connected"), login: z.string().min(1), missing: z.array(TwitchTopicSchema) }),
 ]);
 export type TwitchStatus = z.infer<typeof TwitchStatusSchema>;

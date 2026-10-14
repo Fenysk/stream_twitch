@@ -8,20 +8,25 @@ import {
   toBurstAfterGap,
   toGroupDueIn,
 } from "../domain/follow-burst.rules";
-import { JOY_MODE, SMILE_MODE } from "../domain/fox-mode.rules";
+import { JOY_MODE, RAID_MODE, type Show, SMILE_MODE } from "../domain/fox-mode.rules";
 import type { LiveEvent } from "../domain/live.types";
 import { isFillable, toFilledPhrase } from "../domain/phrase.rules";
 import { toNextPick } from "../domain/pick.rules";
+import { isAsleep } from "../domain/presence.rules";
 import type { Settings } from "../domain/settings.schema";
 import {
   isLurk,
+  SOMEONE,
   type ThanksKey,
   type ThanksRules,
+  type ThanksShow,
   type ThanksSubject,
+  toRewardKind,
   toThanksPlan,
   toThanksRules,
 } from "../domain/thanks.rules";
 import type { Chat } from "./chat.usecase";
+import type { Fox } from "./fox.usecase";
 import type { FoxChat } from "./fox-chat.usecase";
 import type { FoxJab } from "./fox-jab.usecase";
 import type { FoxQueue } from "./fox-queue.usecase";
@@ -35,8 +40,10 @@ export type FoxThanksDeps = {
   viewers: Pick<Viewers, "getCount">;
   // U : le compte des messages acceptés de chaque viewer.
   tally: Pick<FoxTally, "subscribe">;
-  // Un remerciement est quelque chose qui se passe dans le live : le silence de la relance repart.
-  jab: Pick<FoxJab, "noteActivity">;
+  // Où il est quand on le réveille : visible, ou pas.
+  fox: Pick<Fox, "getPresence">;
+  // Un remerciement est quelque chose qui se passe dans le live : le silence de la relance repart. Un clash est sa pique.
+  jab: Pick<FoxJab, "noteActivity" | "clash">;
   settings: Settings;
   insults: InsultList;
   clock: () => number;
@@ -47,11 +54,11 @@ export type FoxThanksDeps = {
 };
 
 export type FoxThanks = {
-  // Le renard écoute les subs, resubs, subs offerts, cheers et lurks du tchat, et le compte des messages de chaque viewer.
+  // Le renard écoute les subs, resubs, subs offerts, cheers, raids et lurks du tchat, et le compte des messages de chaque viewer.
   start(): void;
   stop(): void;
   update(settings: Settings): void;
-  // Un évènement du live, d'où qu'il vienne (le tchat, ou EventSub pour les follows) : le renard le remercie.
+  // Un évènement du live, d'où qu'il vienne (le tchat, ou EventSub pour les follows et les récompenses) : le renard réagit.
   receive(event: LiveEvent): void;
 };
 
@@ -63,8 +70,19 @@ const SUBJECT_TEXTS: Record<ThanksSubject["kind"], string> = {
   gift: "sub offert",
   "mystery-gift": "série de subs offerts",
   cheer: "cheer",
+  raid: "raid",
   lurk: "lurk",
   talkative: "viewer très impliqué",
+  wake: "réveil",
+  prediction: "prédiction",
+};
+
+// Ce qu'il montre avant la phrase, pour chaque animation du plan.
+const SHOWS: Readonly<Record<ThanksShow, Show | null>> = {
+  smile: SMILE_MODE,
+  joy: JOY_MODE,
+  raid: RAID_MODE,
+  none: null,
 };
 
 const toEmptySaid = (): Record<ThanksKey, string[]> => ({
@@ -77,6 +95,12 @@ const toEmptySaid = (): Record<ThanksKey, string[]> => ({
   foxThanksLurk: [],
   foxThanksLurkGeneric: [],
   foxThanksTalkative: [],
+  foxThanksRaid: [],
+  foxThanksRaidGeneric: [],
+  foxThanksWakeAsleep: [],
+  foxThanksWakeAwake: [],
+  foxThanksPrediction: [],
+  foxThanksPredictionNoLoser: [],
 });
 
 // Le message qui accompagne l'évènement, prêt à passer le filtre : un cheer n'y garde pas ses cheermotes (« Cheer100 »).
@@ -89,7 +113,7 @@ const toAttachedMessage = (event: LiveEvent): RawMessage | null => {
   return text.trim() === "" ? null : { ...message, text };
 };
 
-// Les remerciements : un évènement du live (follow, sub, resub, sub offert, cheer) donne une phrase tirée au hasard dans la
+// Les remerciements : un évènement du live (follow, sub, resub, sub offert, cheer, raid) donne une phrase tirée au hasard dans la
 // liste de son espèce, qui passe devant les messages de la file. Elle attend le silence de Fenysk mais sa voix ne la coupe
 // pas. Les follows en rafale ne sont remerciés nominativement qu'un par délai, les autres sont regroupés en une phrase. Un
 // message du tchat dont le premier mot est « !lurk » est remercié de même, une fois par viewer depuis le démarrage du serveur,
@@ -100,6 +124,7 @@ export function createFoxThanks({
   foxChat,
   viewers,
   tally,
+  fox,
   jab,
   settings: initial,
   insults,
@@ -150,7 +175,7 @@ export function createFoxThanks({
       text,
       isCuttable: false,
       isUrgent: true,
-      toShow: () => (plan.show === "joy" ? JOY_MODE : SMILE_MODE),
+      toShow: () => SHOWS[plan.show],
     });
     // Le message joint se lit juste après le remerciement, s'il passe le filtre.
     if (attached) foxChat.speakAttached(attached);
@@ -189,9 +214,27 @@ export function createFoxThanks({
     if (!cancelGroup && dueIn !== null) cancelGroup = schedule(flushGroup, dueIn);
   };
 
+  // Une récompense reconnue par son titre : « Clasher Fenysk » est une pique de la relance, « Réveiller Jean-Renard » une phrase
+  // au tchat selon qu'il dormait ou non. Une autre est ignorée.
+  const receiveReward = (
+    { user, title }: Extract<LiveEvent, { kind: "reward" }>,
+    { rewards }: ThanksRules,
+  ) => {
+    const kind = toRewardKind(title, rewards);
+    if (kind === null) return;
+    if (kind === "wake") {
+      thank({ kind: "wake", user, isAsleep: isAsleep(fox.getPresence().kind) }, null);
+      return;
+    }
+    const isRefused = toInsultMatch(user, insults) !== null;
+    if (isRefused) log(`Renard : pseudo refusé par le filtre d'insultes (clash), il n'est pas dit.`);
+    jab.clash(isRefused ? SOMEONE : user);
+  };
+
   const receive = (event: LiveEvent) => {
     if (!rules?.shouldThank) return;
     if (event.kind === "follow") receiveFollow(event, rules);
+    else if (event.kind === "reward") receiveReward(event, rules);
     else thank(event, toAttachedMessage(event));
   };
 

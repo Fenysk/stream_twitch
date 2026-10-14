@@ -26,6 +26,13 @@ export const PHRASE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   foxWelcomeYesterday: ["user"],
   foxWelcomeFirst: ["user"],
   foxResumePhrases: [],
+  foxThanksRaid: ["user", "viewers"],
+  foxThanksRaidGeneric: ["viewers"],
+  foxClashIntros: ["user"],
+  foxThanksWakeAsleep: ["user"],
+  foxThanksWakeAwake: ["user"],
+  foxThanksPrediction: ["perdants", "issue"],
+  foxThanksPredictionNoLoser: [],
 };
 
 const VARIABLE = /\{(\w+)\}/g;
@@ -52,3 +59,6 @@ export const toFilledPhrase = (phrase: string, values: Readonly<Record<string, s
 // Toutes les variables de la phrase ont une valeur : sans, on ne la dit pas (« On est . » n'a pas de sens).
 export const isFillable = (phrase: string, values: Readonly<Record<string, string | number>>): boolean =>
   toVariablesIn(phrase).every((name) => Object.hasOwn(values, name));
+
+// Un compte et son unité au pluriel quand il dépasse 1 : « 1 personne », « 12 personnes », « 0 personne ».
+export const toCount = (count: number, unit: string): string => `${count} ${unit}${count > 1 ? "s" : ""}`;

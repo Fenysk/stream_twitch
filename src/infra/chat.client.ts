@@ -33,6 +33,7 @@ export type ComfyEvents = {
   ): void;
   onSubMysteryGift(gifter: string, count: number, senderCount: number, tier: unknown, extra: unknown): void;
   onCheer(user: string, message: string, bits: number, flags: unknown, extra: unknown): void;
+  onRaid(user: string, viewers: number, extra: unknown): void;
   onBan(username: string, extra: unknown): void;
   onTimeout(username: string, seconds: number, extra: unknown): void;
   onJoin(user: string, self: boolean, extra: unknown): void;
@@ -152,6 +153,11 @@ export function createChatClient(
         onSubMysteryGift: (gifter, count) => live({ kind: "mystery-gift", user: gifter, count }),
         onCheer: (user, text, bits, _flags, extra) =>
           live({ kind: "cheer", user, bits, message: toAttachedMessage(user, text, extra) }),
+        // ComfyJS lit le nombre dans le message de l'IRC (`+tag`) : un texte illisible donne NaN.
+        onRaid: (user, viewers) => {
+          if (Number.isInteger(viewers) && viewers > 0) live({ kind: "raid", user, viewers });
+          else log("Tchat : raid sans nombre de viewers lisible, ignoré.");
+        },
         onBan: (_username, extra) => receiveViewerDeleted(BanExtraSchema, extra),
         onTimeout: (_username, _seconds, extra) => receiveViewerDeleted(SuspensionExtraSchema, extra),
         onJoin: (_user, self) => {

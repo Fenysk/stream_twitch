@@ -89,6 +89,7 @@ const FOX_KEYS: readonly string[] = [
   "foxDiveDuration",
   "foxReturnDuration",
   "foxYawnDuration",
+  "foxRaidDuration",
   "foxJabAfter",
   "foxJabGap",
   "foxJabs",
@@ -138,6 +139,15 @@ const FOX_KEYS: readonly string[] = [
   "foxThanksLurkGeneric",
   "foxTalkativeMessages",
   "foxThanksTalkative",
+  "foxThanksRaid",
+  "foxThanksRaidGeneric",
+  "foxClashRewards",
+  "foxClashIntros",
+  "foxWakeRewards",
+  "foxThanksWakeAsleep",
+  "foxThanksWakeAwake",
+  "foxThanksPrediction",
+  "foxThanksPredictionNoLoser",
   "foxShouldReviewAtEnd",
   "foxShouldWelcome",
   "foxWelcomeLiveGap",
@@ -311,6 +321,8 @@ export const SettingsFieldsSchema = z
     foxDiveDuration: positiveWhole().optional(),
     foxReturnDuration: positiveWhole().optional(),
     foxYawnDuration: positiveWhole().optional(),
+    // Le long coucou d'un raid (ms) : les deux images du coucou alternent pendant ce temps avant la phrase.
+    foxRaidDuration: positiveWhole().optional(),
     // La relance : le silence total (ms) après lequel le renard caché revient piquer Fenysk, l'écart (ms) entre deux piques, et
     // les piques, une phrase par entrée.
     foxJabAfter: positiveWhole().optional(),
@@ -380,6 +392,19 @@ export const SettingsFieldsSchema = z
     // fois), et ses phrases.
     foxTalkativeMessages: positiveWhole().optional(),
     foxThanksTalkative: phraseList(true).optional(),
+    // Un raid : la phrase dite au tchat avec le nombre de viewers, et celle d'un pseudo refusé.
+    foxThanksRaid: phraseList(true).optional(),
+    foxThanksRaidGeneric: phraseList(true).optional(),
+    // Les récompenses de points de chaîne, reconnues par leur titre (une liste vide : ignorées) : « Clasher Fenysk » (une pique
+    // tout de suite, précédée d'une phrase d'intro) et « Réveiller Jean-Renard » (une phrase selon qu'il dormait ou non).
+    foxClashRewards: phraseList(false).optional(),
+    foxClashIntros: phraseList(true).optional(),
+    foxWakeRewards: phraseList(false).optional(),
+    foxThanksWakeAsleep: phraseList(true).optional(),
+    foxThanksWakeAwake: phraseList(true).optional(),
+    // Une prédiction terminée : la phrase dite au tchat avec les perdants et l'issue qu'ils ont choisie, et celle de personne.
+    foxThanksPrediction: phraseList(true).optional(),
+    foxThanksPredictionNoLoser: phraseList(true).optional(),
     // Les habitués : la case « Accueillir les habitués », le silence (ms) d'un viewer au-delà duquel il commence un live de plus,
     // les nombres de lives qui ont un palier (un nombre par ligne), l'absence (ms) à partir de laquelle il « revient », et les
     // phrases de chaque cas (une liste vide : ce cas ne dit rien).
@@ -537,6 +562,7 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxDiveDuration: true,
   foxReturnDuration: true,
   foxYawnDuration: true,
+  foxRaidDuration: true,
   foxJabAfter: true,
   foxJabGap: true,
   foxJabs: true,
@@ -587,6 +613,15 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxThanksLurkGeneric: true,
   foxTalkativeMessages: true,
   foxThanksTalkative: true,
+  foxThanksRaid: true,
+  foxThanksRaidGeneric: true,
+  foxClashRewards: true,
+  foxClashIntros: true,
+  foxWakeRewards: true,
+  foxThanksWakeAsleep: true,
+  foxThanksWakeAwake: true,
+  foxThanksPrediction: true,
+  foxThanksPredictionNoLoser: true,
   foxShouldWelcome: true,
   foxWelcomeLiveGap: true,
   foxWelcomeLiveCounts: true,

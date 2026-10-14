@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isFillable,
   PHRASE_VARIABLES,
+  toCount,
   toFilledPhrase,
   toPhraseLines,
   toPhraseText,
@@ -86,5 +87,14 @@ describe("toVariablesIn et toFilledPhrase", () => {
     expect(isFillable("On est {viewers}.", { viewers: 12 })).toBe(true);
     expect(isFillable("Aucune variable.", {})).toBe(true);
     expect(isFillable("{user} et {viewers}", { user: "Alice" })).toBe(false);
+  });
+});
+
+describe("toCount : un compte et son unité", () => {
+  it("écrit l'unité au singulier jusqu'à 1, au pluriel au-delà", () => {
+    expect(toCount(0, "personne")).toBe("0 personne");
+    expect(toCount(1, "personne")).toBe("1 personne");
+    expect(toCount(2, "personne")).toBe("2 personnes");
+    expect(toCount(12, "message")).toBe("12 messages");
   });
 });

@@ -30,6 +30,7 @@ const fox = {
   foxDiveDuration: 800,
   foxReturnDuration: 800,
   foxYawnDuration: 2000,
+  foxRaidDuration: 3000,
   foxJabAfter: 180_000,
   foxJabGap: 600_000,
   foxJabs: ["Hé, on s'ennuie là !", "Courage au tchat."],
@@ -79,6 +80,15 @@ const fox = {
   foxThanksLurkGeneric: ["Merci pour le lurk !"],
   foxTalkativeMessages: 50,
   foxThanksTalkative: ["{user}, {messages} messages !"],
+  foxThanksRaid: ["{user} débarque avec {viewers}."],
+  foxThanksRaidGeneric: ["Un raid ! {viewers} d'un coup."],
+  foxClashRewards: ["Clasher Fenysk"],
+  foxClashIntros: ["{user} m'a payé pour te dire ça :"],
+  foxWakeRewards: ["Réveiller Jean-Renard"],
+  foxThanksWakeAsleep: ["Quoi ?! Je dormais, moi !"],
+  foxThanksWakeAwake: ["Je dors pas, {user}. Je réfléchis."],
+  foxThanksPrediction: ["Perdants sur « {issue} » : {perdants}. Courage."],
+  foxThanksPredictionNoLoser: ["Tout le monde a gagné. C'est louche."],
   foxShouldWelcome: true,
   foxWelcomeLiveGap: 21_600_000,
   foxWelcomeLiveCounts: ["10", "25", "50", "100"],
@@ -157,6 +167,7 @@ describe("les réglages fox*", () => {
       "foxReactionDuration",
       "foxAwayAfter",
       "foxYawnDuration",
+      "foxRaidDuration",
       "foxCrouchDuration",
       "foxJumpDuration",
       "foxDiveDuration",
@@ -362,6 +373,34 @@ describe("les réglages fox*", () => {
       "foxThanksTalkative",
     );
     expect(toEffectiveSettings(defaults, { foxTalkativeMessages: 100 }).ok).toBe(true);
+  });
+
+  it("règlent les prédictions : au moins une phrase dans chacune des deux listes", () => {
+    for (const key of ["foxThanksPrediction", "foxThanksPredictionNoLoser"] as const) {
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: [] }))[0]?.path, key).toBe(key);
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: [""] }))[0]?.path, key).toBe(`${key}.0`);
+    }
+    expect(toEffectiveSettings(defaults, { foxThanksPrediction: ["{perdants} sur {issue}."] }).ok).toBe(true);
+  });
+
+  it("règlent les raids : au moins une phrase dans chacune des deux listes", () => {
+    for (const key of ["foxThanksRaid", "foxThanksRaidGeneric"] as const) {
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: [] }))[0]?.path, key).toBe(key);
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: [""] }))[0]?.path, key).toBe(`${key}.0`);
+    }
+    expect(toEffectiveSettings(defaults, { foxThanksRaid: ["Bienvenue {user} !"] }).ok).toBe(true);
+  });
+
+  it("règlent les récompenses de points de chaîne : des titres qui peuvent manquer, au moins une phrase d'intro et de réveil", () => {
+    for (const key of ["foxClashIntros", "foxThanksWakeAsleep", "foxThanksWakeAwake"] as const) {
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: [] }))[0]?.path, key).toBe(key);
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: [""] }))[0]?.path, key).toBe(`${key}.0`);
+    }
+    for (const key of ["foxClashRewards", "foxWakeRewards"] as const) {
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: [""] }))[0]?.path, key).toBe(`${key}.0`);
+      expect(toEffectiveSettings(defaults, { [key]: [] }).ok, key).toBe(true);
+      expect(toEffectiveSettings(defaults, { [key]: ["Un titre", "Un autre"] }).ok, key).toBe(true);
+    }
   });
 
   it("règlent l'accueil des habitués : un silence et une absence strictement positifs, des nombres de lives entiers, des phrases qui peuvent manquer", () => {

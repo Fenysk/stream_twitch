@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RawMessage } from "../domain/chat.types";
 import { toInsultList } from "../domain/chat-insults.rules";
-import { JOY_MODE, SMILE_MODE } from "../domain/fox-mode.rules";
+import { JOY_MODE, RAID_MODE, SMILE_MODE } from "../domain/fox-mode.rules";
 import type { LiveEvent } from "../domain/live.types";
 import type { Settings } from "../domain/settings.schema";
 import type { ChatSourceEvent } from "./chat.usecase";
@@ -27,6 +27,14 @@ const base: Settings = {
   foxThanksLurkGeneric: ["Merci pour le lurk."],
   foxTalkativeMessages: 50,
   foxThanksTalkative: ["{user} a écrit {messages} messages."],
+  foxThanksRaid: ["{user} débarque avec {viewers}."],
+  foxThanksRaidGeneric: ["Un raid de {viewers} !"],
+  foxClashRewards: ["Clasher Fenysk"],
+  foxWakeRewards: ["Réveiller Jean-Renard"],
+  foxThanksWakeAsleep: ["Quoi ?! Je dormais, moi !", "Qui m'a réveillé ? C'est toi, {user} ?"],
+  foxThanksWakeAwake: ["Je dors pas, {user}. Je réfléchis."],
+  foxThanksPrediction: ["Perdants sur « {issue} » : {perdants}. Courage."],
+  foxThanksPredictionNoLoser: ["Tout le monde a gagné. C'est louche."],
 };
 
 const insults = toInsultList("connard\nsalope");
@@ -44,7 +52,14 @@ const message = (text: string): RawMessage => ({
 
 // Le usecase seul, avec une file, un lecteur de message joint et un temps à la main : ce qu'il pousse, et quand.
 const setup = (overrides: Partial<Settings> = {}, options: { viewers?: number | null } = {}) => {
-  const state = { now: 1_000_000, viewers: options.viewers ?? null, activity: 0 };
+  const state = {
+    now: 1_000_000,
+    viewers: options.viewers ?? null,
+    activity: 0,
+    // Où est le renard au moment du réveil, et les clashs envoyés à la relance.
+    presence: "visible" as "visible" | "leaving" | "away" | "returning",
+    clashes: [] as string[],
+  };
   const timers: { at: number; callback: () => void; isCancelled: boolean }[] = [];
   const pushed: QueueItem[] = [];
   const attached: RawMessage[] = [];
@@ -82,9 +97,13 @@ const setup = (overrides: Partial<Settings> = {}, options: { viewers?: number | 
         };
       },
     },
+    fox: { getPresence: () => ({ kind: state.presence, elapsed: 0 }) },
     jab: {
       noteActivity() {
         state.activity += 1;
+      },
+      clash(user) {
+        state.clashes.push(user);
       },
     },
     settings: { ...base, ...overrides },
@@ -176,6 +195,22 @@ describe("un évènement du live donne une phrase de sa liste, avec ses variable
     expect(pushed[0]?.toShow()).toEqual(SMILE_MODE);
   });
 
+  it("remercie un raid par un long coucou (mode raid), puis la phrase avec le nombre de viewers", () => {
+    const { thanks, pushed } = setup();
+    thanks.receive({ kind: "raid", user: "Alice", viewers: 12 });
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0]?.text).toBe("Alice débarque avec 12 personnes.");
+    expect(pushed[0]?.toShow()).toEqual(RAID_MODE);
+    expect(RAID_MODE).toEqual({ kind: "raid" });
+    expect(pushed[0]).toMatchObject({ kind: "thanks", isUrgent: true, isCuttable: false });
+  });
+
+  it("écrit « 1 personne » pour un raid d'un seul viewer, sans lire le nombre de viewers du live", () => {
+    const { thanks, texts } = setup({}, { viewers: 99 });
+    thanks.receive({ kind: "raid", user: "Alice", viewers: 1 });
+    expect(texts()).toEqual(["Alice débarque avec 1 personne."]);
+  });
+
   it("passe devant les messages, attend le silence mais n'est jamais coupé par la voix", () => {
     const { thanks, pushed } = setup();
     thanks.receive({ kind: "sub", user: "Alice", message: null });
@@ -192,6 +227,158 @@ describe("un évènement du live donne une phrase de sa liste, avec ses variable
     const { thanks, logs } = setup();
     thanks.receive({ kind: "sub", user: "Alice", message: null });
     expect(logs).toContain("Renard : remerciement (sub) : « Merci Alice pour le sub. »");
+  });
+});
+
+describe("les récompenses de points de chaîne", () => {
+  const reward = (user: string, title: string): LiveEvent => ({ kind: "reward", user, title });
+
+  it("« Clasher Fenysk » : une pique tout de suite, donnée à la relance avec le pseudo ; aucune phrase de remerciement", () => {
+    const { thanks, state, pushed } = setup();
+    thanks.receive(reward("Alice", "Clasher Fenysk"));
+    expect(state.clashes).toEqual(["Alice"]);
+    expect(pushed).toEqual([]);
+  });
+
+  it("reconnaît un titre sans tenir compte des majuscules ni des espaces aux bords", () => {
+    const { thanks, state } = setup();
+    thanks.receive(reward("Alice", "  clasher fenysk "));
+    thanks.receive(reward("Bob", "CLASHER FENYSK"));
+    expect(state.clashes).toEqual(["Alice", "Bob"]);
+  });
+
+  it("ignore toute autre récompense, sans rien dire ni rien écrire au journal", () => {
+    const { thanks, state, pushed, logs } = setup();
+    thanks.receive(reward("Alice", "Hydrate-toi"));
+    thanks.receive(reward("Alice", "Clasher Fenysk et Bob"));
+    expect(state.clashes).toEqual([]);
+    expect(pushed).toEqual([]);
+    expect(logs).toEqual([]);
+    expect(state.activity).toBe(0);
+  });
+
+  it("un pseudo refusé par le filtre d'insultes devient « quelqu'un » pour le clash, et n'est pas écrit au journal", () => {
+    const { thanks, state, logs } = setup();
+    thanks.receive(reward("connard42", "Clasher Fenysk"));
+    expect(state.clashes).toEqual(["quelqu'un"]);
+    expect(logs).toEqual(["Renard : pseudo refusé par le filtre d'insultes (clash), il n'est pas dit."]);
+    expect(logs.join("\n")).not.toContain("connard42");
+  });
+
+  it("« Réveiller Jean-Renard » alors qu'il est visible : « Je dors pas », sans rien montrer avant", () => {
+    const { thanks, pushed } = setup();
+    thanks.receive(reward("Alice", "Réveiller Jean-Renard"));
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0]?.text).toBe("Je dors pas, Alice. Je réfléchis.");
+    expect(pushed[0]?.toShow()).toBeNull();
+    expect(pushed[0]).toMatchObject({ kind: "thanks", isUrgent: true, isCuttable: false });
+  });
+
+  it("« Réveiller Jean-Renard » alors qu'il n'est pas visible (il part, il est parti, il revient) : l'autre liste", () => {
+    for (const presence of ["leaving", "away", "returning"] as const) {
+      const { thanks, state, texts } = setup();
+      state.presence = presence;
+      thanks.receive(reward("Alice", "Réveiller Jean-Renard"));
+      expect(texts(), presence).toEqual(["Quoi ?! Je dormais, moi !"]);
+    }
+  });
+
+  it("tire la phrase du réveil sans répéter avant d'avoir tout dit, et y écrit le pseudo", () => {
+    const { thanks, state, texts } = setup();
+    state.presence = "away";
+    thanks.receive(reward("Alice", "Réveiller Jean-Renard"));
+    thanks.receive(reward("Bob", "Réveiller Jean-Renard"));
+    expect(texts()).toEqual(["Quoi ?! Je dormais, moi !", "Qui m'a réveillé ? C'est toi, Bob ?"]);
+  });
+
+  it("un pseudo refusé devient « quelqu'un » dans la phrase du réveil", () => {
+    const { thanks, texts, logs } = setup();
+    thanks.receive(reward("connard42", "Réveiller Jean-Renard"));
+    expect(texts()).toEqual(["Je dors pas, quelqu'un. Je réfléchis."]);
+    expect(logs.join("\n")).not.toContain("connard42");
+  });
+
+  it("le réveil compte pour de l'activité dans le live, et l'écrit dans le journal", () => {
+    const { thanks, state, logs } = setup();
+    thanks.receive(reward("Alice", "Réveiller Jean-Renard"));
+    expect(state.activity).toBe(1);
+    expect(logs).toContain("Renard : remerciement (réveil) : « Je dors pas, Alice. Je réfléchis. »");
+  });
+
+  it("ne fait rien case décochée, et reprend quand elle est recochée", () => {
+    const { thanks, state, texts } = setup({ foxShouldThank: false });
+    thanks.receive(reward("Alice", "Clasher Fenysk"));
+    thanks.receive(reward("Alice", "Réveiller Jean-Renard"));
+    expect(state.clashes).toEqual([]);
+    expect(texts()).toEqual([]);
+    thanks.update({ ...base, foxShouldThank: true });
+    thanks.receive(reward("Bob", "Clasher Fenysk"));
+    expect(state.clashes).toEqual(["Bob"]);
+  });
+
+  it("suit les titres changés en direct, et une liste vide ne reconnaît rien", () => {
+    const { thanks, state, texts } = setup();
+    thanks.update({ ...base, foxClashRewards: ["Piquer Fenysk"], foxWakeRewards: [] });
+    thanks.receive(reward("Alice", "Clasher Fenysk"));
+    thanks.receive(reward("Alice", "Réveiller Jean-Renard"));
+    expect(state.clashes).toEqual([]);
+    expect(texts()).toEqual([]);
+    thanks.receive(reward("Alice", "piquer fenysk"));
+    expect(state.clashes).toEqual(["Alice"]);
+  });
+
+  it("arrive par le tchat comme par EventSub : une fois démarré, le renard écoute les récompenses du flux", () => {
+    const { thanks, listeners, state } = setup();
+    thanks.start();
+    for (const listener of listeners) listener({ kind: "live", event: reward("Alice", "Clasher Fenysk") });
+    expect(state.clashes).toEqual(["Alice"]);
+  });
+});
+
+describe("les prédictions terminées", () => {
+  it("dit les perdants et l'issue au tchat, sans rien montrer avant, devant les messages, sans être coupé", () => {
+    const { thanks, pushed } = setup();
+    thanks.receive({ kind: "prediction", losers: 12, outcome: "Victoire" });
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0]?.text).toBe("Perdants sur « Victoire » : 12 personnes. Courage.");
+    expect(pushed[0]?.toShow()).toBeNull();
+    expect(pushed[0]).toMatchObject({ kind: "thanks", isUrgent: true, isCuttable: false });
+  });
+
+  it("écrit « 1 personne » pour un seul perdant", () => {
+    const { thanks, texts } = setup();
+    thanks.receive({ kind: "prediction", losers: 1, outcome: "Défaite" });
+    expect(texts()).toEqual(["Perdants sur « Défaite » : 1 personne. Courage."]);
+  });
+
+  it("sans perdant : tout le monde a gagné", () => {
+    const { thanks, texts } = setup();
+    thanks.receive({ kind: "prediction", losers: 0, outcome: null });
+    expect(texts()).toEqual(["Tout le monde a gagné. C'est louche."]);
+  });
+
+  it("tire la phrase sans répéter avant d'avoir tout dit", () => {
+    const { thanks, texts } = setup({
+      foxThanksPrediction: ["Un {perdants} {issue}.", "Deux {perdants} {issue}."],
+    });
+    thanks.receive({ kind: "prediction", losers: 2, outcome: "A" });
+    thanks.receive({ kind: "prediction", losers: 2, outcome: "A" });
+    expect(new Set(texts()).size).toBe(2);
+  });
+
+  it("compte pour de l'activité dans le live, et l'écrit dans le journal", () => {
+    const { thanks, state, logs } = setup();
+    thanks.receive({ kind: "prediction", losers: 3, outcome: "Oui" });
+    expect(state.activity).toBe(1);
+    expect(logs).toContain(
+      "Renard : remerciement (prédiction) : « Perdants sur « Oui » : 3 personnes. Courage. »",
+    );
+  });
+
+  it("ne dit rien case décochée", () => {
+    const { thanks, texts } = setup({ foxShouldThank: false });
+    thanks.receive({ kind: "prediction", losers: 3, outcome: "Oui" });
+    expect(texts()).toEqual([]);
   });
 });
 
@@ -259,6 +446,14 @@ describe("un pseudo refusé par le filtre d'insultes n'est jamais dit", () => {
       "quelqu'un offre 3 subs.",
       "Merci quelqu'un pour 50 bits.",
     ]);
+  });
+
+  it("un raid prend une phrase sans pseudo, avec le nombre de viewers", () => {
+    const { thanks, texts, logs } = setup();
+    thanks.receive({ kind: "raid", user: "connard42", viewers: 30 });
+    expect(texts()).toEqual(["Un raid de 30 personnes !"]);
+    expect(logs.some((line) => line.includes("pseudo refusé"))).toBe(true);
+    expect(logs.join("\n")).not.toContain("connard42");
   });
 
   it("dit un pseudo propre tel quel", () => {

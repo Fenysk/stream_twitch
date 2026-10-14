@@ -64,6 +64,7 @@ const settings: Settings = {
   foxDiveDuration: 800,
   foxReturnDuration: 800,
   foxYawnDuration: 2000,
+  foxRaidDuration: 3000,
   foxJabAfter: 180_000,
   foxJabGap: 600_000,
   foxShoutThreshold: -5,
@@ -208,6 +209,15 @@ const build = (
     foxThanksLurkGeneric: ["Merci pour le lurk."],
     foxTalkativeMessages: 50,
     foxThanksTalkative: ["{user} a écrit {messages} messages."],
+    foxThanksRaid: ["{user} débarque avec {viewers}."],
+    foxThanksRaidGeneric: ["Un raid de {viewers} !"],
+    foxClashRewards: ["Clasher Fenysk"],
+    foxClashIntros: ["{user} m'a payé pour te dire ça :"],
+    foxWakeRewards: ["Réveiller Jean-Renard"],
+    foxThanksWakeAsleep: ["Quoi ?! Je dormais, moi !", "Qui m'a réveillé ? C'est toi, {user} ?"],
+    foxThanksWakeAwake: ["Je dors pas, {user}. Je réfléchis."],
+    foxThanksPrediction: ["Perdants sur « {issue} » : {perdants}. Courage."],
+    foxThanksPredictionNoLoser: ["Tout le monde a gagné. C'est louche."],
     // L'humeur ne bouge pas, sauf pour un test qui la règle : pas de joie à 1 000 messages, pas de bouderie ni de reprise avant 24 h.
     foxCheerfulCount: 1000,
     foxCheerfulPeriod: 300_000,
@@ -417,6 +427,7 @@ const build = (
     foxChat,
     viewers: { getCount: () => options.viewers ?? null },
     tally,
+    fox,
     jab,
     settings: serverSettings,
     insults,
@@ -1260,6 +1271,21 @@ describe("Les remerciements, de bout en bout", () => {
     expect(harness.synthesized).toEqual(["Merci Alice pour 100 bits."]);
   });
 
+  it("remercie un raid : 3 s de long coucou (les deux images du coucou), puis la phrase au tchat", async () => {
+    const harness = build();
+    await harness.live({ kind: "raid", user: "Alice", viewers: 12 });
+    await harness.run(5000);
+    expect(harness.timeline()).toEqual([
+      { at: 0, label: "mode:raid" },
+      { at: 3000, label: "mode:idle" },
+      { at: 3000, label: "speech" },
+    ]);
+    expect(harness.synthesized).toEqual(["Alice débarque avec 12 personnes."]);
+    expect(new Set(harness.toImages(harness.start + 50, harness.start + 2950))).toEqual(
+      new Set(["front-smile-wave", "front-small-wave"]),
+    );
+  });
+
   it("remercie un sub par un saut de joie de 800 ms (il saute puis retombe à sa taille), puis la phrase", async () => {
     const harness = build();
     await harness.live({ kind: "sub", user: "Alice", message: null });
@@ -1305,6 +1331,27 @@ describe("Les remerciements, de bout en bout", () => {
     expect(timeline).toContainEqual({ at: 800, label: "mode:joy" });
     expect(timeline).toContainEqual({ at: 1600, label: "speech" });
     expect(harness.synthesized).toEqual(["Merci Alice pour le sub."]);
+  });
+
+  it("réveiller le renard caché : il revient en sautant, puis dit « Quoi ?! Je dormais » au tchat, sans rien montrer d'autre", async () => {
+    const harness = build({ overrides: { foxThanksWakeAsleep: ["Quoi ?! Je dormais, moi !"] } });
+    await harness.run(AWAY_AT);
+    const since = harness.events.length;
+    await harness.live({ kind: "reward", user: "Alice", title: "Réveiller Jean-Renard" });
+    await harness.run(4000);
+    const timeline = harness.timeline(since).map((entry) => ({ ...entry, at: entry.at - AWAY_AT }));
+    expect(timeline).toContainEqual({ at: 0, label: "presence:returning" });
+    expect(timeline).toContainEqual({ at: 800, label: "speech" });
+    expect(timeline.filter(({ label: name }) => name.startsWith("mode:"))).toEqual([]);
+    expect(harness.synthesized).toEqual(["Quoi ?! Je dormais, moi !"]);
+  });
+
+  it("réveiller le renard visible : il dit « Je dors pas » tout de suite", async () => {
+    const harness = build();
+    await harness.live({ kind: "reward", user: "Alice", title: "Réveiller Jean-Renard" });
+    await harness.run(3000);
+    expect(harness.timeline().map(({ label: name }) => name)).toEqual(["speech"]);
+    expect(harness.synthesized).toEqual(["Je dors pas, Alice. Je réfléchis."]);
   });
 
   it("n'est pas coupé quand Fenysk parle plus d'1 s : le remerciement va au bout", async () => {
@@ -1459,6 +1506,80 @@ const SHOUTS = ["Doucement ! J'ai des oreilles de renard, moi."];
 
 const shoutLines = (harness: ReturnType<typeof build>): string[] =>
   harness.logs.filter((line) => line.startsWith("Renard : Fenysk crie"));
+
+describe("Y : les prédictions", () => {
+  it("dit au tchat les perdants et l'issue, sans rien montrer avant", async () => {
+    const harness = build();
+    await harness.live({ kind: "prediction", losers: 12, outcome: "Victoire" });
+    await harness.run(3000);
+    expect(harness.timeline().map(({ label: name }) => name)).toEqual(["speech"]);
+    expect(harness.synthesized).toEqual(["Perdants sur « Victoire » : 12 personnes. Courage."]);
+  });
+
+  it("revient en sautant s'il était parti, puis dit que tout le monde a gagné", async () => {
+    const harness = build();
+    await harness.run(AWAY_AT);
+    const since = harness.events.length;
+    await harness.live({ kind: "prediction", losers: 0, outcome: null });
+    await harness.run(4000);
+    const timeline = harness.timeline(since).map((entry) => ({ ...entry, at: entry.at - AWAY_AT }));
+    expect(timeline).toContainEqual({ at: 0, label: "presence:returning" });
+    expect(timeline).toContainEqual({ at: 800, label: "speech" });
+    expect(harness.synthesized).toEqual(["Tout le monde a gagné. C'est louche."]);
+  });
+});
+
+describe("X : « Clasher Fenysk »", () => {
+  it("caché, il revient en sautant, se tourne vers Fenysk et dit l'intro puis une pique", async () => {
+    const harness = build({ jabs: ["Une seule pique."], seconds: 2 });
+    await harness.run(AWAY_AT);
+    const since = harness.events.length;
+    await harness.live({ kind: "reward", user: "Alice", title: "Clasher Fenysk" });
+    await harness.run(6000);
+    const timeline = harness.timeline(since).map((entry) => ({ ...entry, at: entry.at - AWAY_AT }));
+    expect(timeline).toContainEqual({ at: 0, label: "presence:returning" });
+    expect(timeline).toContainEqual({ at: 800, label: "mode:address" });
+    expect(timeline).toContainEqual({ at: 950, label: "speech" });
+    expect(harness.synthesized).toEqual(["Alice m'a payé pour te dire ça : Une seule pique."]);
+  });
+
+  it("attend le silence de Fenysk : rien tant qu'il parle, la pique 1 s après", async () => {
+    const harness = build({ jabs: ["Une seule pique."], seconds: 2 });
+    await harness.talk(1000);
+    await harness.live({ kind: "reward", user: "Alice", title: "Clasher Fenysk" });
+    await harness.talk(2000);
+    expect(harness.speeches()).toHaveLength(0);
+    expect(harness.logs.some((line) => line.includes("lecture abandonnée"))).toBe(false);
+    await harness.run(3000);
+    expect(harness.speeches()).toHaveLength(1);
+  });
+
+  it("s'arrête, pour ne pas reprendre, si Fenysk parle plus d'1 s pendant la pique", async () => {
+    const harness = build({ jabs: ["Une seule pique."], seconds: 5 });
+    await harness.live({ kind: "reward", user: "Alice", title: "Clasher Fenysk" });
+    await harness.run(1000);
+    await harness.talk(2500);
+    await harness.run(8000);
+    expect(harness.logs).toContain("Renard : lecture abandonnée, Alexis parle (pique (récompense)).");
+    expect(harness.events.some(({ event }) => event.kind === "stop")).toBe(true);
+    expect(harness.speeches()).toHaveLength(1);
+  });
+
+  it("ne dit pas le pseudo d'un viewer insultant : « quelqu'un m'a payé pour te dire ça »", async () => {
+    const harness = build({ jabs: ["Une seule pique."] });
+    await harness.live({ kind: "reward", user: "connard42", title: "Clasher Fenysk" });
+    await harness.run(4000);
+    expect(harness.synthesized).toEqual(["quelqu'un m'a payé pour te dire ça : Une seule pique."]);
+  });
+
+  it("ignore une autre récompense : rien ne bouge, rien ne se dit", async () => {
+    const harness = build({ jabs: ["Une seule pique."] });
+    await harness.live({ kind: "reward", user: "Alice", title: "Hydrate-toi" });
+    await harness.run(4000);
+    expect(harness.speeches()).toHaveLength(0);
+    expect(harness.timeline()).toEqual([]);
+  });
+});
 
 describe("K : il sursaute quand Fenysk crie", () => {
   it("se tourne vers Fenysk, la tête choquée, pendant 1 s, sans rien dire", async () => {

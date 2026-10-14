@@ -1,7 +1,27 @@
-import type { TwitchToken } from "./twitch.schema";
+import { TWITCH_TOPICS, type TwitchToken, type TwitchTopic } from "./twitch.schema";
 
-// Le droit que le renard demande : voir qui suit la chaîne (EventSub `channel.follow`).
-export const TWITCH_SCOPE = "moderator:read:followers";
+// Chaque abonnement EventSub du renard : son type et sa version chez Twitch, le droit du jeton qu'il demande, et son nom au
+// pluriel pour le journal et l'onglet Renard (« aux follows », « les follows »).
+export const TWITCH_TOPIC_SPECS: Readonly<
+  Record<TwitchTopic, { type: string; version: string; scope: string; text: string }>
+> = {
+  follow: { type: "channel.follow", version: "2", scope: "moderator:read:followers", text: "follows" },
+  reward: {
+    type: "channel.channel_points_custom_reward_redemption.add",
+    version: "1",
+    scope: "channel:read:redemptions",
+    text: "récompenses de points de chaîne",
+  },
+  prediction: {
+    type: "channel.prediction.end",
+    version: "1",
+    scope: "channel:read:predictions",
+    text: "prédictions",
+  },
+};
+
+// Les droits que le renard demande à Alexis, séparés par des espaces : un par abonnement.
+export const TWITCH_SCOPE = TWITCH_TOPICS.map((topic) => TWITCH_TOPIC_SPECS[topic].scope).join(" ");
 
 // Où Twitch renvoie le navigateur après l'autorisation. Twitch le compare à la lettre à l'adresse enregistrée dans l'application :
 // il est écrit ici en entier, port compris.
@@ -26,8 +46,23 @@ export function toAuthorizeUrl({ clientId, state }: { clientId: string; state: s
 export const isTokenFresh = ({ expiresAt }: Pick<TwitchToken, "expiresAt">, now: number): boolean =>
   now < expiresAt - RENEW_BEFORE_MS;
 
-// Le droit demandé fait partie de ceux que Twitch a donnés.
-export const hasTwitchScope = (scope: string): boolean => scope.split(/\s+/).includes(TWITCH_SCOPE);
+const hasScope = (granted: string, scope: string): boolean => granted.split(/\s+/).includes(scope);
+
+// Le droit de voir les follows fait partie de ceux que Twitch a donnés : sans lui, la connexion ne sert à rien.
+export const hasTwitchScope = (scope: string): boolean => hasScope(scope, TWITCH_TOPIC_SPECS.follow.scope);
+
+// Les abonnements que les droits du jeton permettent, dans l'ordre de TWITCH_TOPICS, et ceux qu'ils ne permettent pas.
+export const toGrantedTopics = (scope: string): TwitchTopic[] =>
+  TWITCH_TOPICS.filter((topic) => hasScope(scope, TWITCH_TOPIC_SPECS[topic].scope));
+export const toMissingTopics = (scope: string): TwitchTopic[] =>
+  TWITCH_TOPICS.filter((topic) => !hasScope(scope, TWITCH_TOPIC_SPECS[topic].scope));
+
+// « les follows », « les follows et les récompenses de points de chaîne », « les follows, les récompenses et les prédictions ».
+export const toTopicsText = (topics: readonly TwitchTopic[]): string => {
+  const texts = topics.map((topic) => `les ${TWITCH_TOPIC_SPECS[topic].text}`);
+  const last = texts.pop();
+  return texts.length === 0 ? (last ?? "") : `${texts.join(", ")} et ${last}`;
+};
 
 // Ce que Twitch donne à un échange de code ou à un renouvellement : un jeton d'accès valable `expiresIn` secondes, et le jeton
 // pour en demander un autre.

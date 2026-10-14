@@ -18,7 +18,7 @@ import { createObsClient, createObsSocket, type ObsClient } from "../../infra/ob
 import { createRegularsStore } from "../../infra/regulars.repository";
 import { getSettings } from "../../infra/settings.repository";
 import { createTwitchAuthClient } from "../../infra/twitch-auth.client";
-import { createFollowFeed } from "../../infra/twitch-follows.client";
+import { createEventFeed } from "../../infra/twitch-events.client";
 import { createTimetableClient } from "../../infra/twitch-timetable.client";
 import { createTwitchTokenStore } from "../../infra/twitch-token.repository";
 import { createViewersClient } from "../../infra/twitch-viewers.client";
@@ -58,9 +58,9 @@ export type Runtime = {
   // D, E, G, H : l'écoute d'Alexis, ses entrées en scène, sa présence, et « Faire parler ».
   mode: FoxModeController;
   chat: Chat;
-  // Les remerciements : le tchat leur donne les subs et les cheers, EventSub les follows.
+  // Les remerciements : le tchat leur donne les subs, les cheers et les raids, EventSub les follows et les récompenses.
   thanks: FoxThanks;
-  // La connexion d'Alexis à Twitch : son jeton, et l'écoute des follows (EventSub).
+  // La connexion d'Alexis à Twitch : son jeton, et l'écoute des follows et des récompenses (EventSub).
   twitch: TwitchConnection;
   // Le bilan du live : « Faire le bilan », et la fin prévue.
   review: FoxReview;
@@ -334,13 +334,15 @@ export function startRuntime(): Runtime {
     ? createViewersClient({ ...twitchApp, channelId: initial.chatChannelId })
     : { get: async () => null };
   const viewers = createViewers({ port: viewersPort, schedule, log });
-  // Les remerciements : un follow, un sub, un resub, un sub offert ou des bits donnent une phrase, devant les messages.
+  // Les remerciements : un follow, un sub, un resub, un sub offert, des bits ou un raid donnent une phrase, devant les messages ;
+  // une récompense de points de chaîne fait piquer Fenysk (par la relance) ou réveille le renard.
   const thanks = createFoxThanks({
     chat,
     queue,
     foxChat,
     viewers,
     tally,
+    fox,
     jab,
     settings: initial,
     insults,
@@ -349,17 +351,17 @@ export function startRuntime(): Runtime {
     random: Math.random,
     log,
   });
-  // La connexion d'Alexis : le jeton vit dans data/twitch-token.json (hors de git), les follows arrivent par EventSub et
-  // vont aux remerciements comme ceux du tchat.
+  // La connexion d'Alexis : le jeton vit dans data/twitch-token.json (hors de git), les follows et les récompenses arrivent par
+  // EventSub et vont aux remerciements comme les évènements du tchat.
   const twitch = createTwitchConnection({
     app: twitchApp && {
       clientId: twitchApp.clientId,
       auth: createTwitchAuthClient(twitchApp),
-      feed: createFollowFeed({ clientId: twitchApp.clientId, schedule, log }),
+      feed: createEventFeed({ clientId: twitchApp.clientId, schedule, log }),
     },
     store: createTwitchTokenStore(join(root, "data", "twitch-token.json"), log),
     broadcasterId: initial.chatChannelId,
-    onFollow: (nickname) => thanks.receive({ kind: "follow", user: nickname }),
+    onEvent: (event) => thanks.receive(event),
     clock: Date.now,
     schedule,
     createState: () => randomBytes(16).toString("hex"),

@@ -1,13 +1,17 @@
+import type { LiveEvent } from "../domain/live.types";
 import {
   hasTwitchScope,
   isTokenFresh,
   type TokenGrant,
   type TwitchIdentity,
   toAuthorizeUrl,
+  toGrantedTopics,
+  toMissingTopics,
   toRenewedToken,
+  toTopicsText,
   toTwitchToken,
 } from "../domain/twitch.rules";
-import type { TwitchStatus, TwitchToken } from "../domain/twitch.schema";
+import type { TwitchStatus, TwitchToken, TwitchTopic } from "../domain/twitch.schema";
 
 // Le résultat d'une demande à Twitch : sa valeur, ou pourquoi elle a échoué. `isRefused` : Twitch a répondu non (code périmé,
 // jeton retiré), pas de nouvel essai possible ; sinon il n'a pas répondu, ou pas comme il faut. Le message ne porte jamais un jeton.
@@ -32,28 +36,31 @@ export type TokenStorePort = {
   delete(): void;
 };
 
-export type FollowFeedTarget = {
-  // La chaîne dont on veut les follows, et le modérateur qui les voit (le compte connecté).
+export type EventFeedTarget = {
+  // La chaîne dont on veut les évènements, et le modérateur qui les voit (le compte connecté).
   broadcasterId: string;
   moderatorId: string;
+  // Les abonnements à ouvrir à chaque (re)connexion : ceux que les droits du jeton permettent.
+  topics: readonly TwitchTopic[];
   // Un jeton d'accès valable à chaque (re)connexion ; `isForced` : Twitch vient de refuser le précédent, il faut un autre.
   getAccessToken: (isForced: boolean) => Promise<string | null>;
-  onFollow: (nickname: string) => void;
+  onEvent: (event: LiveEvent) => void;
 };
 
-// Le flux des follows : il se reconnecte seul tant qu'il n'est pas fermé.
-export type FollowFeedPort = {
-  open(options: FollowFeedTarget): void;
+// Le flux des évènements EventSub (follows, récompenses) : il se reconnecte seul tant qu'il n'est pas fermé.
+export type EventFeedPort = {
+  open(options: EventFeedTarget): void;
   close(): void;
 };
 
 export type TwitchConnectionDeps = {
   // L'application Twitch (son identifiant, son client et son flux) ; `undefined` : ses identifiants manquent dans .env.
-  app: { clientId: string; auth: TwitchAuthPort; feed: FollowFeedPort } | undefined;
+  app: { clientId: string; auth: TwitchAuthPort; feed: EventFeedPort } | undefined;
   store: TokenStorePort;
   // L'identifiant Twitch de la chaîne (`chatChannelId`).
   broadcasterId: string | undefined;
-  onFollow: (nickname: string) => void;
+  // Un évènement du flux EventSub (un follow, une récompense) : il va aux remerciements.
+  onEvent: (event: LiveEvent) => void;
   clock: () => number;
   // Programme `callback` dans `ms` ; rend de quoi l'annuler.
   schedule: (callback: () => void, ms: number) => () => void;
@@ -67,15 +74,15 @@ export type LoginQuery = { code: string | null; state: string | null; error: str
 export type LoginResult = { ok: true; login: string } | { ok: false; message: string };
 
 export type TwitchConnection = {
-  // Relit le jeton gardé et écoute les follows ; sans jeton, le journal dit une fois que les follows attendent.
+  // Relit le jeton gardé et écoute les évènements ; sans jeton, le journal dit une fois que les follows attendent.
   start(): Promise<void>;
   stop(): void;
   getStatus(): TwitchStatus;
   // L'adresse où Alexis autorise l'application, avec un state neuf.
   beginLogin(): { ok: true; url: string } | { ok: false; message: string };
-  // Le retour de Twitch : vérifie le state, échange le code, garde le jeton, écoute les follows.
+  // Le retour de Twitch : vérifie le state, échange le code, garde le jeton, écoute les évènements.
   completeLogin(query: LoginQuery): Promise<LoginResult>;
-  // Retire le jeton (du fichier et chez Twitch) et n'écoute plus les follows.
+  // Retire le jeton (du fichier et chez Twitch) et n'écoute plus rien.
   disconnect(): Promise<void>;
 };
 
@@ -97,7 +104,7 @@ export function createTwitchConnection({
   app,
   store,
   broadcasterId,
-  onFollow,
+  onEvent,
   clock,
   schedule,
   createState,
@@ -174,8 +181,16 @@ export function createTwitchConnection({
       );
       return;
     }
+    const topics = toGrantedTopics(token.scope);
+    const missing = toMissingTopics(token.scope);
+    if (missing.length > 0) {
+      log(
+        `Twitch : le jeton n'a pas le droit de voir ${toTopicsText(missing)} : reconnecte-toi depuis l'onglet Renard.`,
+      );
+    }
+    if (topics.length === 0) return;
     app.feed.close();
-    app.feed.open({ broadcasterId, moderatorId: token.userId, getAccessToken, onFollow });
+    app.feed.open({ broadcasterId, moderatorId: token.userId, topics, getAccessToken, onEvent });
     keepConfirming();
   };
 
@@ -229,7 +244,9 @@ export function createTwitchConnection({
         );
         return;
       }
-      log(`Twitch : connecté en tant que ${token.login}, les follows sont écoutés.`);
+      log(
+        `Twitch : connecté en tant que ${token.login}, ${toTopicsText(toGrantedTopics(token.scope))} sont écoutés.`,
+      );
       listen();
     },
     stop() {
@@ -239,7 +256,9 @@ export function createTwitchConnection({
     },
     getStatus() {
       if (!app) return { kind: "unavailable" };
-      return token ? { kind: "connected", login: token.login } : { kind: "disconnected", lastError };
+      return token
+        ? { kind: "connected", login: token.login, missing: toMissingTopics(token.scope) }
+        : { kind: "disconnected", lastError };
     },
     beginLogin() {
       if (!app) return { ok: false, message: MISSING_APP_MESSAGE };

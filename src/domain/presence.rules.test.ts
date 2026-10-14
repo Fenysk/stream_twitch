@@ -4,6 +4,7 @@ import {
   DEPARTURE_JUMP_HEIGHT,
   DIVE_ANGLE,
   HIDDEN_OFFSET,
+  isAsleep,
   type PresenceCurves,
   type PresenceEvent,
   type PresenceRules,
@@ -174,6 +175,16 @@ describe("toPresenceView", () => {
     expect(toPresenceView({ kind: "leaving", since: 0, spokeAt: 0 })).toBe("leaving");
     expect(toPresenceView({ kind: "away", since: 0, spokeAt: 0 })).toBe("away");
     expect(toPresenceView({ kind: "returning", since: 0, spokeAt: 0 })).toBe("returning");
+  });
+});
+
+describe("isAsleep : il n'est pas visible", () => {
+  it("dort quand il s'en va, qu'il est parti ou qu'il revient, pas quand il est visible (même en bâillant)", () => {
+    expect(isAsleep(toPresenceView({ kind: "visible", since: 0, spokeAt: 0 }))).toBe(false);
+    expect(isAsleep(toPresenceView({ kind: "yawning", since: 0, spokeAt: 0 }))).toBe(false);
+    expect(isAsleep("leaving")).toBe(true);
+    expect(isAsleep("away")).toBe(true);
+    expect(isAsleep("returning")).toBe(true);
   });
 });
 

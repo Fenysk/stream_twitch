@@ -327,3 +327,111 @@ describe("createFoxJab : les rappels", () => {
     expect(harness.pushed.map(({ text }) => text)).toEqual(["A", "Z"]);
   });
 });
+
+describe("createFoxJab : la récompense « Clasher Fenysk »", () => {
+  const withIntros: Settings = {
+    ...settings,
+    foxReminders: ["R1"],
+    foxClashIntros: ["{user} m'a payé pour te dire ça :", "{user} insiste :"],
+  };
+
+  it("met tout de suite en file une intro puis une pique, tournée vers Fenysk, coupée comme la pique, devant les messages", () => {
+    const { jab, pushed } = setup(withIntros);
+    jab.clash("Alice");
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0]?.text).toBe("Alice m'a payé pour te dire ça : A");
+    expect(pushed[0]).toMatchObject({ kind: "jab", isCuttable: true, isUrgent: true });
+    expect(pushed[0]?.toShow()).toEqual(ADDRESS_MODE);
+  });
+
+  it("n'attend ni le silence ni l'absence du renard : visible, au milieu d'un échange, il pique quand même", () => {
+    const { jab, state, pushed } = setup(withIntros);
+    state.presence = { kind: "visible", elapsed: 0 };
+    state.silentFor = 0;
+    jab.clash("Alice");
+    expect(pushed).toHaveLength(1);
+  });
+
+  it("tire la pique dans la liste de la relance, sans répéter : la relance reprend à la suivante", () => {
+    const { jab, state, pushed } = setup(withIntros);
+    jab.clash("Alice");
+    state.now += 180_000;
+    state.tick();
+    expect(pushed.map(({ text }) => text.split(" ").at(-1))).toEqual(["A", "B"]);
+  });
+
+  it("ne compte pas dans l'écart de la relance : la relance pique à l'heure, et le clash ne l'attend pas", () => {
+    const { jab, state, pushed } = setup(withIntros);
+    state.now += 180_000;
+    state.tick();
+    expect(pushed).toHaveLength(1);
+    jab.clash("Alice");
+    jab.clash("Bob");
+    expect(pushed).toHaveLength(3);
+    // La relance suivante reste à 10 min de la sienne, et son alternance (pique puis rappel) n'a pas bougé.
+    state.now += 599_999;
+    state.tick();
+    expect(pushed).toHaveLength(3);
+    state.now += 1;
+    state.tick();
+    expect(pushed).toHaveLength(4);
+    expect(pushed[3]?.kind).toBe("reminder");
+  });
+
+  it("dit l'intro de chaque clash sans répéter avant d'avoir tout dit, avec le pseudo", () => {
+    const { jab, pushed } = setup(withIntros);
+    jab.clash("Alice");
+    jab.clash("Bob");
+    jab.clash("Carl");
+    expect(pushed.map(({ text }) => text)).toEqual([
+      "Alice m'a payé pour te dire ça : A",
+      "Bob insiste : B",
+      "Carl m'a payé pour te dire ça : C",
+    ]);
+  });
+
+  it("l'écrit au journal", () => {
+    const { jab, logs } = setup(withIntros);
+    jab.clash("Alice");
+    expect(logs).toEqual([
+      "Renard : récompense, il pique Fenysk tout de suite : « Alice m'a payé pour te dire ça : A »",
+    ]);
+  });
+
+  it("compte pour de l'activité dans le live : le silence de la relance repart", () => {
+    const { jab, state, pushed } = setup(withIntros);
+    state.now += 150_000;
+    jab.clash("Alice");
+    pushed.length = 0;
+    state.now += 100_000;
+    state.tick();
+    expect(pushed).toEqual([]);
+    state.now += 80_000;
+    state.tick();
+    expect(pushed).toHaveLength(1);
+  });
+
+  it("ne dit rien, et le dit, sans pique ou sans intro", () => {
+    const noJab = setup({ ...withIntros, foxJabs: [] });
+    noJab.jab.clash("Alice");
+    expect(noJab.pushed).toEqual([]);
+    expect(noJab.logs).toEqual(["Renard : récompense, aucune pique à dire, rien n'est dit."]);
+    const noIntro = setup({ ...withIntros, foxClashIntros: [] });
+    noIntro.jab.clash("Alice");
+    expect(noIntro.pushed).toEqual([]);
+    expect(noIntro.logs).toEqual(["Renard : récompense, aucune phrase d'intro, rien n'est dit."]);
+  });
+
+  it("ne dit rien sans les réglages du renard", () => {
+    const none = setup({ obsAddress: settings.obsAddress, micName: "x", threshold: -40, delay: 250 });
+    none.jab.clash("Alice");
+    expect(none.pushed).toEqual([]);
+  });
+
+  it("suit les intros et les piques changées en direct", () => {
+    const { jab, pushed } = setup(withIntros);
+    jab.update({ ...withIntros, foxJabs: ["Z"], foxClashIntros: ["{user} paie :"] });
+    jab.clash("Alice");
+    expect(pushed.map(({ text }) => text)).toEqual(["Alice paie : Z"]);
+  });
+});

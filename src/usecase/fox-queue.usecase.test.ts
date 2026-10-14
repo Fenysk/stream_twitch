@@ -15,6 +15,7 @@ const settings: Settings = {
   foxReactionDuration: 1000,
   foxJoyDuration: 800,
   foxYawnDuration: 2000,
+  foxRaidDuration: 3000,
   foxAwayAfter: 180_000,
   foxCrouchDuration: 300,
   foxJumpDuration: 400,

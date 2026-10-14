@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { TokenGrant, TwitchIdentity } from "../domain/twitch.rules";
+import type { LiveEvent } from "../domain/live.types";
+import { type TokenGrant, TWITCH_SCOPE, type TwitchIdentity } from "../domain/twitch.rules";
 import type { TwitchToken } from "../domain/twitch.schema";
 import {
   type AuthResult,
   createTwitchConnection,
-  type FollowFeedTarget,
+  type EventFeedTarget,
   type LoginQuery,
 } from "./twitch-connection.usecase";
 
 const START = 1_000_000;
-const SCOPE = "moderator:read:followers";
+// Les droits que le renard demande : un jeton neuf les a tous. Un jeton d'avant les récompenses n'a que les follows, un jeton
+// d'avant les prédictions n'a pas le dernier.
+const SCOPE = TWITCH_SCOPE;
+const FOLLOWS_ONLY = "moderator:read:followers";
+const WITHOUT_PREDICTIONS = "moderator:read:followers channel:read:redemptions";
 
 const storedToken: TwitchToken = {
   accessToken: "ACCESS-STORED",
@@ -49,9 +54,9 @@ const setup = (
     revoke: [] as string[],
     updates: [] as TwitchToken[],
     deletes: 0,
-    opens: [] as FollowFeedTarget[],
+    opens: [] as EventFeedTarget[],
     closes: 0,
-    follows: [] as string[],
+    events: [] as LiveEvent[],
   };
   const logs: string[] = [];
   const timers: { at: number; callback: () => void; isCancelled: boolean }[] = [];
@@ -108,7 +113,7 @@ const setup = (
       },
     },
     broadcasterId: "broadcasterId" in options ? options.broadcasterId : "68710381",
-    onFollow: (nickname) => calls.follows.push(nickname),
+    onEvent: (event) => calls.events.push(event),
     clock: () => state.now,
     schedule(callback, ms) {
       const timer = { at: state.now + ms, callback, isCancelled: false };
@@ -188,17 +193,73 @@ describe("au démarrage", () => {
   it("avec un jeton gardé : connecté en tant que son compte, le flux des follows s'ouvre pour la chaîne et ce modérateur", async () => {
     const { connection, logs, feed } = setup({ token: storedToken });
     await connection.start();
-    expect(connection.getStatus()).toEqual({ kind: "connected", login: "fenysk" });
-    expect(logs).toEqual(["Twitch : connecté en tant que fenysk, les follows sont écoutés."]);
+    expect(connection.getStatus()).toEqual({ kind: "connected", login: "fenysk", missing: [] });
+    expect(logs).toEqual([
+      "Twitch : connecté en tant que fenysk, les follows, les récompenses de points de chaîne et les prédictions sont écoutés.",
+    ]);
     expect(feed().broadcasterId).toBe("68710381");
     expect(feed().moderatorId).toBe("68710381");
+    expect(feed().topics).toEqual(["follow", "reward", "prediction"]);
   });
 
-  it("transmet chaque follow du flux à la suite", async () => {
+  it("transmet chaque évènement du flux (un follow, une récompense) à la suite", async () => {
     const { connection, feed, calls } = setup({ token: storedToken });
     await connection.start();
-    feed().onFollow("Alice");
-    expect(calls.follows).toEqual(["Alice"]);
+    feed().onEvent({ kind: "follow", user: "Alice" });
+    feed().onEvent({ kind: "reward", user: "Bob", title: "Clasher Fenysk" });
+    feed().onEvent({ kind: "prediction", losers: 3, outcome: "Oui" });
+    expect(calls.events).toEqual([
+      { kind: "follow", user: "Alice" },
+      { kind: "reward", user: "Bob", title: "Clasher Fenysk" },
+      { kind: "prediction", losers: 3, outcome: "Oui" },
+    ]);
+  });
+
+  it("avec un jeton d'avant les récompenses : les follows seuls sont écoutés, et le journal dit une fois de se reconnecter", async () => {
+    const { connection, logs, feed } = setup({ token: { ...storedToken, scope: FOLLOWS_ONLY } });
+    await connection.start();
+    expect(feed().topics).toEqual(["follow"]);
+    expect(connection.getStatus()).toEqual({
+      kind: "connected",
+      login: "fenysk",
+      missing: ["reward", "prediction"],
+    });
+    expect(logs).toEqual([
+      "Twitch : connecté en tant que fenysk, les follows sont écoutés.",
+      "Twitch : le jeton n'a pas le droit de voir les récompenses de points de chaîne et les prédictions : reconnecte-toi depuis l'onglet Renard.",
+    ]);
+  });
+
+  it("avec un jeton d'avant les prédictions : les follows et les récompenses sont écoutés, et le journal dit de se reconnecter", async () => {
+    const { connection, logs, feed } = setup({ token: { ...storedToken, scope: WITHOUT_PREDICTIONS } });
+    await connection.start();
+    expect(feed().topics).toEqual(["follow", "reward"]);
+    expect(connection.getStatus()).toEqual({ kind: "connected", login: "fenysk", missing: ["prediction"] });
+    expect(logs).toEqual([
+      "Twitch : connecté en tant que fenysk, les follows et les récompenses de points de chaîne sont écoutés.",
+      "Twitch : le jeton n'a pas le droit de voir les prédictions : reconnecte-toi depuis l'onglet Renard.",
+    ]);
+  });
+
+  it("ne répète pas le manque de droit à chaque lecture de l'état", async () => {
+    const { connection, logs } = setup({ token: { ...storedToken, scope: FOLLOWS_ONLY } });
+    await connection.start();
+    const before = logs.length;
+    connection.getStatus();
+    connection.getStatus();
+    expect(logs).toHaveLength(before);
+  });
+
+  it("n'ouvre pas le flux d'un jeton sans aucun droit utile, et le dit", async () => {
+    const { connection, logs, calls } = setup({ token: { ...storedToken, scope: "chat:read" } });
+    await connection.start();
+    expect(calls.opens).toEqual([]);
+    expect(connection.getStatus()).toEqual({
+      kind: "connected",
+      login: "fenysk",
+      missing: ["follow", "reward", "prediction"],
+    });
+    expect(logs.some((line) => line.includes("reconnecte-toi"))).toBe(true);
   });
 
   it("n'ouvre pas le flux sans identifiant de chaîne, et le dit", async () => {
@@ -210,7 +271,7 @@ describe("au démarrage", () => {
 });
 
 describe("beginLogin : l'adresse d'autorisation", () => {
-  it("demande le droit des follows pour cette application, avec le retour exact et un state neuf", () => {
+  it("demande les droits des follows, des récompenses et des prédictions pour cette application, avec le retour exact et un state neuf", () => {
     const { connection } = setup();
     const result = connection.beginLogin();
     if (!result.ok) throw new Error("beginLogin a échoué");
@@ -250,8 +311,9 @@ describe("completeLogin : le retour de Twitch", () => {
       userId: "68710381",
       scope: SCOPE,
     });
-    expect(connection.getStatus()).toEqual({ kind: "connected", login: "fenysk" });
+    expect(connection.getStatus()).toEqual({ kind: "connected", login: "fenysk", missing: [] });
     expect(feed().moderatorId).toBe("68710381");
+    expect(feed().topics).toEqual(["follow", "reward", "prediction"]);
     expect(logs).toContain("Twitch : connecté en tant que fenysk.");
   });
 

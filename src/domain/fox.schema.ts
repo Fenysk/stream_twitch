@@ -56,7 +56,7 @@ export type ReactionImage = z.infer<typeof ReactionImageSchema>;
 // Ce que le renard montre en plus de sa bouche (le serveur le décide, la page l'affiche) : rien de particulier, il écoute
 // Alexis, il réagit à un message, il fait coucou à un viewer, il bâille, il s'adresse à Fenysk (tourné vers la droite, en
 // miroir), il saute de joie (un sub), il sursaute (Fenysk crie : tourné vers lui, la tête choquée), il sursaute avec le jeu
-// (un pic du son du PC : la tête choquée, tourné vers le tchat).
+// (un pic du son du PC : la tête choquée, tourné vers le tchat), il fait un long coucou (un raid : les images du coucou).
 export const FoxModeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("idle") }),
   z.object({ kind: z.literal("listening") }),
@@ -67,6 +67,7 @@ export const FoxModeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("joy") }),
   z.object({ kind: z.literal("flinch") }),
   z.object({ kind: z.literal("startle") }),
+  z.object({ kind: z.literal("raid") }),
 ]);
 export type FoxMode = z.infer<typeof FoxModeSchema>;
 

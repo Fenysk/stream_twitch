@@ -1,3 +1,4 @@
+import { toCount } from "./phrase.rules";
 import type { Settings } from "./settings.schema";
 
 // Les réglages du bilan : le dire tout seul juste après l'annonce de la fin prévue.
@@ -10,8 +11,6 @@ export function toReviewRules({ foxShouldReviewAtEnd }: Settings): ReviewRules |
 
 // Un viewer et ses messages acceptés depuis le démarrage du serveur.
 export type ReviewViewer = { nickname: string; messages: number };
-
-const toCount = (count: number, unit: string): string => `${count} ${unit}${count > 1 ? "s" : ""}`;
 
 // Le bilan du live, dit au tchat : le total, le plus bavard, le premier arrivé. `viewers` est dans l'ordre d'arrivée ; à égalité,
 // le plus bavard est celui qui est arrivé le premier. Une partie qui n'a rien à dire est sautée, comme celle d'un pseudo que le

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { Duplex } from "node:stream";
 
-// Un faux Twitch pour les tests : un serveur HTTP (jeton, renouvellement, compte, révocation, abonnement EventSub) et un
+// Un faux Twitch pour les tests : un serveur HTTP (jeton, renouvellement, compte, révocation, abonnements EventSub) et un
 // WebSocket EventSub minimal, sur 127.0.0.1. Il joue le rôle de id.twitch.tv, api.twitch.tv et eventsub.wss.twitch.tv.
 export const FAKE_CODE = "FAKE-CODE";
 export const FAKE_SECRET = "le-secret-de-l-app";
@@ -21,10 +21,18 @@ export type FakeTwitch = {
   accessTokens: string[];
   refreshTokens: string[];
   sockets(): number;
-  // Le nombre d'abonnements EventSub acceptés.
+  // Le nombre d'abonnements EventSub acceptés, et leurs types dans l'ordre où ils sont arrivés.
   subscriptions(): number;
-  // Envoie un follow à toutes les connexions EventSub.
+  subscribedTypes(): string[];
+  // Envoie un follow, ou une récompense de points de chaîne (avec le texte que le viewer y joint), à toutes les connexions EventSub.
   sendFollow(user: string): void;
+  sendReward(user: string, title: string, userInput?: string): void;
+  // Une prédiction qui se termine : ses issues (titre, viewers), laquelle gagne (son rang, `null` : annulée).
+  sendPredictionEnd(outcomes: readonly { title: string; users: number }[], winner: number | null): void;
+  // Les droits que Twitch donne aux prochains jetons et dit à /validate (un jeton d'avant les récompenses n'a que les follows).
+  setScopes(scopes: readonly string[]): void;
+  // Twitch refuse les abonnements de ce type (403).
+  refuseType(type: string): void;
   // Coupe toutes les connexions EventSub (une panne).
   breakSockets(): void;
   // Twitch ne reconnaît plus aucun jeton donné jusque-là (l'utilisateur a retiré l'accès).
@@ -41,8 +49,10 @@ const INVALID_CODE = '{ "status": 400, "message": "Invalid authorization code" }
 const INVALID_REFRESH = '{ "status": 400, "message": "Invalid refresh token" }';
 const INVALID_SECRET = '{ "status": 403, "message": "invalid client secret" }';
 const INVALID_ACCESS = '{ "status": 401, "message": "invalid access token" }';
-const IDENTITY =
-  '{ "client_id": "mon-client", "login": "fenysk", "scopes": ["moderator:read:followers"], "user_id": "68710381", "expires_in": 14000 }';
+const DEFAULT_SCOPES = ["moderator:read:followers", "channel:read:redemptions", "channel:read:predictions"];
+const FOLLOW_TYPE = "channel.follow";
+const REWARD_TYPE = "channel.channel_points_custom_reward_redemption.add";
+const PREDICTION_TYPE = "channel.prediction.end";
 
 // Une trame texte du serveur vers le client (non masquée, moins de 64 Ko).
 const toPacket = (text: string): Buffer => {
@@ -75,10 +85,14 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
   const refreshTokens: string[] = [];
   const revoked = new Set<string>();
   const sockets = new Set<Duplex>();
-  let subscriptions = 0;
+  const subscribed: string[] = [];
+  const refusedTypes = new Set<string>();
+  let scopes: readonly string[] = DEFAULT_SCOPES;
   let lifetime = 14_400;
   let sessionCount = 0;
   let followCount = 0;
+  let rewardCount = 0;
+  let predictionCount = 0;
 
   // Un jeton valable est le dernier donné et pas retiré.
   const isCurrent = (token: string | undefined, list: string[]): boolean =>
@@ -91,7 +105,7 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
     refreshTokens.push(`fake-refresh-${index}`);
     return {
       status: 200,
-      body: `{ "access_token": "fake-access-${index}", "refresh_token": "fake-refresh-${index}", "expires_in": ${lifetime}, "scope": ["moderator:read:followers"], "token_type": "bearer" }`,
+      body: `{ "access_token": "fake-access-${index}", "refresh_token": "fake-refresh-${index}", "expires_in": ${lifetime}, "scope": ${JSON.stringify(scopes)}, "token_type": "bearer" }`,
     };
   };
 
@@ -115,12 +129,19 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
     return grant === "refresh_token" ? answerRefresh(form) : { status: 400, body: INVALID_REFRESH };
   };
 
-  const answerSubscription = (headers: Record<string, string>): Reply => {
+  const answerSubscription = ({ headers, body }: FakeRequest): Reply => {
     const token = headers.authorization?.replace(/^Bearer /, "");
     if (!isCurrent(token, accessTokens) || headers["client-id"] !== FAKE_CLIENT_ID) {
       return { status: 401, body: '{ "status": 401, "message": "Invalid OAuth token" }' };
     }
-    subscriptions += 1;
+    const type: unknown = JSON.parse(body || "{}").type;
+    if (typeof type !== "string" || refusedTypes.has(type)) {
+      return {
+        status: 403,
+        body: '{ "status": 403, "message": "subscription missing proper authorization" }',
+      };
+    }
+    subscribed.push(type);
     return { status: 202, body: '{ "data": [], "total": 1 }' };
   };
 
@@ -129,13 +150,14 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
     if (route === "POST /oauth2/token") return answerToken(request.body);
     if (route === "GET /oauth2/validate") {
       const isValid = isCurrent(request.headers.authorization?.replace(/^OAuth /, ""), accessTokens);
-      return isValid ? { status: 200, body: IDENTITY } : { status: 401, body: INVALID_ACCESS };
+      const identity = `{ "client_id": "mon-client", "login": "fenysk", "scopes": ${JSON.stringify(scopes)}, "user_id": "68710381", "expires_in": 14000 }`;
+      return isValid ? { status: 200, body: identity } : { status: 401, body: INVALID_ACCESS };
     }
     if (route === "POST /oauth2/revoke") {
       revoked.add(new URLSearchParams(request.body).get("token") ?? "");
       return { status: 200, body: "" };
     }
-    if (route === "POST /helix/eventsub/subscriptions") return answerSubscription(request.headers);
+    if (route === "POST /helix/eventsub/subscriptions") return answerSubscription(request);
     return { status: 404, body: '{ "message": "inconnu" }' };
   };
 
@@ -198,11 +220,34 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
     accessTokens,
     refreshTokens,
     sockets: () => sockets.size,
-    subscriptions: () => subscriptions,
+    subscriptions: () => subscribed.length,
+    subscribedTypes: () => [...subscribed],
     sendFollow(user) {
       followCount += 1;
-      const message = `{"metadata":{"message_id":"follow-${followCount}","message_type":"notification","message_timestamp":"${new Date().toISOString()}","subscription_type":"channel.follow"},"payload":{"event":{"user_id":"${followCount}","user_login":"${user.toLowerCase()}","user_name":"${user}","broadcaster_user_id":"68710381"}}}`;
+      const message = `{"metadata":{"message_id":"follow-${followCount}","message_type":"notification","message_timestamp":"${new Date().toISOString()}","subscription_type":"${FOLLOW_TYPE}"},"payload":{"event":{"user_id":"${followCount}","user_login":"${user.toLowerCase()}","user_name":"${user}","broadcaster_user_id":"68710381"}}}`;
       for (const socket of sockets) socket.write(toPacket(message));
+    },
+    sendReward(user, title, userInput = "") {
+      rewardCount += 1;
+      const message = `{"metadata":{"message_id":"reward-${rewardCount}","message_type":"notification","message_timestamp":"${new Date().toISOString()}","subscription_type":"${REWARD_TYPE}"},"payload":{"event":{"id":"redemption-${rewardCount}","user_id":"${rewardCount}","user_login":"${user.toLowerCase()}","user_name":"${user}","broadcaster_user_id":"68710381","user_input":"${userInput}","status":"unfulfilled","reward":{"id":"reward-id","title":"${title}","cost":100,"prompt":""}}}}`;
+      for (const socket of sockets) socket.write(toPacket(message));
+    },
+    sendPredictionEnd(outcomes, winner) {
+      predictionCount += 1;
+      const lines = outcomes.map(
+        ({ title, users }, index) =>
+          `{"id":"outcome-${index}","title":"${title}","color":"blue","users":${users},"channel_points":${users * 100},"top_predictors":[]}`,
+      );
+      const winning = winner === null ? "null" : `"outcome-${winner}"`;
+      const status = winner === null ? "canceled" : "resolved";
+      const message = `{"metadata":{"message_id":"prediction-${predictionCount}","message_type":"notification","message_timestamp":"${new Date().toISOString()}","subscription_type":"${PREDICTION_TYPE}"},"payload":{"event":{"id":"prediction-id","broadcaster_user_id":"68710381","title":"Un titre","winning_outcome_id":${winning},"outcomes":[${lines.join(",")}],"status":"${status}"}}}`;
+      for (const socket of sockets) socket.write(toPacket(message));
+    },
+    setScopes(next) {
+      scopes = next;
+    },
+    refuseType(type) {
+      refusedTypes.add(type);
     },
     breakSockets() {
       for (const socket of sockets) socket.destroy();
