@@ -53,8 +53,6 @@ export type FoxModeController = {
   wake(): number;
   // H : une phrase vient de finir, le délai avant le départ repart de zéro.
   noteSpoke(): void;
-  // H : une page `/fox` vient de se connecter, il est visible.
-  reset(): void;
   // H : il part maintenant, s'il est là (le coucher de l'heure du live) : il bâille, puis s'en va.
   leave(): void;
   // E, G et H : il revient s'il était parti, puis montre `show` pendant la durée d'une réaction (sans `show`, rien).
@@ -231,10 +229,6 @@ export function createFoxMode({
     wake,
     noteSpoke() {
       step("spoke");
-    },
-    reset() {
-      step("reset");
-      publish();
     },
     leave() {
       step("leave");

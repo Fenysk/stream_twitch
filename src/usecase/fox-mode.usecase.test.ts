@@ -178,6 +178,8 @@ const build = (
     startAt?: number;
     // Les réglages de l'heure du live : toutes les listes de phrases sont vides tant qu'un test ne les donne pas.
     hours?: Partial<Settings>;
+    // Le serveur vient de démarrer : le renard est caché. Sans cela, le test part d'un renard déjà revenu et posé (visible).
+    isHidden?: boolean;
   } = {},
 ) => {
   // Les réglages de ce serveur : les piques sont celles du test, aucune par défaut (le renard ne revient pas de lui-même).
@@ -226,8 +228,10 @@ const build = (
     foxResumePhrases: ["Ah, maintenant vous parlez ?"],
     ...options.overrides,
   };
-  const sim = { now: options.startAt ?? 1_000_000, order: 0, ids: 0 };
-  const start = sim.now;
+  // Un renard visible a d'abord dû revenir : le temps simulé part de ce saut en arrière, et `start` est l'instant où il s'est posé.
+  const start = options.startAt ?? 1_000_000;
+  const settleMs = options.isHidden ? 0 : (serverSettings.foxReturnDuration ?? 0);
+  const sim = { now: start - settleMs, order: 0, ids: 0 };
   let timers: Timer[] = [];
   const events: Timed[] = [];
   const logs: string[] = [];
@@ -304,6 +308,15 @@ const build = (
     schedule,
     log: (line) => logs.push(line),
   });
+  if (!options.isHidden) {
+    // Il revient puis se pose à `start`, ses 3 min repartent de là ; ni évènement ni ligne de journal n'en reste.
+    mode.wake();
+    sim.now += settleMs;
+    mode.noteSpoke();
+    mode.update(serverSettings);
+    events.length = 0;
+    logs.length = 0;
+  }
   const listeners = new Set<(event: ChatSourceEvent) => void>();
   const chat = {
     subscribeSource(listener: (event: ChatSourceEvent) => void) {
@@ -954,18 +967,65 @@ describe("H : il revient en sautant", () => {
     expect(names).not.toContain("presence:leaving");
   });
 
-  it("est visible et repart de zéro quand une page /fox se connecte", async () => {
+  it("garde sa présence quand une page /fox se connecte : visible, il reste visible et ses 3 min ne repartent pas", async () => {
+    const harness = build();
+    await harness.run(100_000);
+    harness.fox.subscribe("screen", () => undefined);
+    expect(harness.fox.getPresence()).toEqual({ kind: "visible", elapsed: 100_000 });
+    await harness.run(80_000);
+    expect(harness.timeline()).toEqual([{ at: 180_000, label: "mode:yawn" }]);
+  });
+
+  it("garde sa présence quand une page /fox se connecte : parti, il reste parti", async () => {
     const harness = build();
     await harness.run(AWAY_AT);
     const since = harness.events.length;
-    harness.mode.reset();
-    expect(harness.timeline(since).map(({ label: name }) => name)).toEqual(["presence:visible"]);
-    const resetAt = harness.sim.now;
-    await harness.run(179_900);
-    expect(harness.timeline(since).some(({ label: name }) => name === "mode:yawn")).toBe(false);
+    harness.fox.subscribe("screen", () => undefined);
+    expect(harness.fox.getPresence().kind).toBe("away");
+    await harness.run(10_000);
+    expect(harness.timeline(since)).toEqual([]);
+  });
+});
+
+describe("H : il démarre caché", () => {
+  it("est caché au démarrage, sans bâiller ni plonger, et le reste tant que rien ne le réveille", async () => {
+    const harness = build({ isHidden: true });
+    expect(harness.fox.getPresence()).toEqual({ kind: "away", elapsed: 0 });
+    await harness.run(20 * 60_000);
+    expect(harness.timeline()).toEqual([]);
+    expect(harness.fox.getPresence().kind).toBe("away");
+    expect(harness.logs).toEqual([]);
+  });
+
+  it("garde sa présence quand une page /fox se connecte : caché, il reste caché et rien n'est publié", async () => {
+    const harness = build({ isHidden: true });
+    await harness.run(60_000);
+    const since = harness.events.length;
+    harness.fox.subscribe("screen", () => undefined);
+    expect(harness.fox.getPresence()).toEqual({ kind: "away", elapsed: 60_000 });
+    await harness.run(10_000);
+    expect(harness.timeline(since)).toEqual([]);
+  });
+
+  it("revient en sautant au premier message accepté, puis fait coucou et lit", async () => {
+    const harness = build({ isHidden: true });
+    await harness.receive(message("1", "Bonjour", { viewerId: "alice" }));
+    await harness.run(3000);
+    const timeline = harness.timeline();
+    expect(timeline).toContainEqual({ at: 0, label: "presence:returning" });
+    expect(timeline).toContainEqual({ at: 800, label: "mode:wave" });
+    expect(timeline).toContainEqual({ at: 1800, label: "speech" });
+  });
+
+  it("revient sur « Faire parler » et dit la phrase une fois revenu", async () => {
+    const harness = build({ isHidden: true });
+    const pending = harness.mode.say("Une phrase d'Alexis");
+    await harness.run(700);
+    expect(harness.speeches()).toHaveLength(0);
     await harness.run(200);
-    const yawn = harness.timeline(since).find(({ label: name }) => name === "mode:yawn");
-    expect((yawn?.at ?? 0) + harness.start - resetAt).toBe(180_000);
+    expect((await pending).ok).toBe(true);
+    expect(harness.timeline()).toContainEqual({ at: 0, label: "presence:returning" });
+    expect(harness.timeline()).toContainEqual({ at: 800, label: "speech" });
   });
 });
 
@@ -1051,6 +1111,8 @@ const toScaleAt = (harness: ReturnType<typeof build>, at: number): number => {
 const JABS = ["Pique A", "Pique B", "Pique C"];
 // 3 min sans parler, le bâillement (2 s) et le départ (1,5 s) : il est parti depuis 183,5 s, la pique est due 3 min plus tard.
 const JAB_AT = 363_500;
+// Démarré caché, il est « parti » depuis le démarrage : la pique est due 3 min plus tard.
+const JAB_FROM_START_AT = 180_000;
 
 const jabLines = (harness: ReturnType<typeof build>): string[] =>
   harness.logs.filter((line) => line.startsWith("Renard : il revient piquer Fenysk"));
@@ -1067,6 +1129,16 @@ describe("La relance : caché, il revient piquer Fenysk après 3 min de silence 
       .timeline()
       .find(({ at, label: name }) => name === "presence:returning" && at === JAB_AT);
     expect(returning).toBeDefined();
+  });
+
+  it("compte son silence depuis le démarrage quand il démarre caché : il revient en sautant à 3 min pile", async () => {
+    const harness = build({ isHidden: true, jabs: JABS });
+    await harness.run(JAB_FROM_START_AT - 100);
+    expect(jabLines(harness)).toEqual([]);
+    expect(harness.speeches()).toHaveLength(0);
+    await harness.run(100);
+    expect(jabLines(harness)).toHaveLength(1);
+    expect(harness.timeline()).toContainEqual({ at: JAB_FROM_START_AT, label: "presence:returning" });
   });
 
   it("revient en sautant, se tourne vers Fenysk (150 ms), dit la pique, puis se retourne", async () => {

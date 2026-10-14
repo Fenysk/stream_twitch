@@ -1,8 +1,9 @@
 import type { PresenceView } from "./fox.schema";
 
-// H : il s'en va et revient. Visible, il bâille quand il n'a pas parlé depuis `awayAfter` ms, puis il glisse vers le bas
-// jusqu'à sortir de la source, et reste caché jusqu'à ce qu'un message du tchat soit accepté ou qu'on le fasse parler : il
-// remonte alors en sautant. « Parler » : lire un message ou « Faire parler » ; le temps repart de zéro à la fin de chaque phrase.
+// H : il s'en va et revient. Au démarrage du serveur il est caché. Visible, il bâille quand il n'a pas parlé depuis `awayAfter` ms,
+// puis il glisse vers le bas jusqu'à sortir de la source, et reste caché jusqu'à ce qu'un message du tchat soit accepté ou qu'on
+// le fasse parler : il remonte alors en sautant. « Parler » : lire un message ou « Faire parler » ; le temps repart de zéro à la
+// fin de chaque phrase.
 export type PresenceKind = "visible" | "yawning" | "leaving" | "away" | "returning";
 
 // `since` : depuis quand il est dans cette phase ; `spokeAt` : la fin de sa dernière phrase (ou son réveil, ou le départ).
@@ -10,12 +11,13 @@ export type PresenceState = { kind: PresenceKind; since: number; spokeAt: number
 
 export type PresenceRules = { awayAfter: number; yawnMs: number; leaveMs: number; returnMs: number };
 
-// `wake` : un message est accepté, ou « Faire parler ». `spoke` : une phrase vient de finir. `reset` : une page `/fox` vient de
-// se connecter, il est visible et le délai repart. `leave` : il part maintenant (il bâille puis s'en va), sans attendre le délai.
-export type PresenceEvent = "wake" | "spoke" | "reset" | "leave";
+// `wake` : un message est accepté, ou « Faire parler ». `spoke` : une phrase vient de finir. `leave` : il part maintenant (il
+// bâille puis s'en va), sans attendre le délai.
+export type PresenceEvent = "wake" | "spoke" | "leave";
 
+// Le démarrage vaut un départ : caché, hors de l'écran, sans animation (la relance compte son silence depuis `since`).
 export const toStartPresence = (now: number): PresenceState => ({
-  kind: "visible",
+  kind: "away",
   since: now,
   spokeAt: now,
 });
@@ -82,7 +84,6 @@ export function toNextPresence(
   { now, event }: { now: number; event?: PresenceEvent | undefined },
   rules: PresenceRules,
 ): PresenceState {
-  if (event === "reset") return toStartPresence(now);
   let state = previous;
   if (event === "spoke") state = { ...state, spokeAt: now };
   if (event === "wake") state = wake(state, now);

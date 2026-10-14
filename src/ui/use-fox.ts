@@ -13,7 +13,13 @@ import { IDLE_MODE, isFacingFenysk } from "../domain/fox-mode.rules";
 import { toFoxTransform } from "../domain/fox-transform.rules";
 import { NO_JOY, toJoyBody } from "../domain/joy.rules";
 import { MIRROR_START, toMirrorScale, toNextMirror } from "../domain/mirror.rules";
-import { type PresencePose, toNextPose, toPresenceBody } from "../domain/presence.rules";
+import {
+  type PresencePose,
+  toNextPose,
+  toPresenceBody,
+  toPresenceView,
+  toStartPresence,
+} from "../domain/presence.rules";
 import { getSoundOutput, unlockSound } from "./fox-audio";
 import { createFoxPlayer } from "./fox-player";
 import { toFoxEventsUrl, toFoxImageUrl } from "./fox-urls";
@@ -50,8 +56,13 @@ const startFox = ({ place, body, onImage, onMuted }: FoxLoopDeps): (() => void) 
   let attitude: Attitude = "plain";
   // Tourné vers Fenysk (modes `address` et `flinch`) : le corps se retourne, toutes les images en miroir.
   let mirror = MIRROR_START;
-  // La phase de présence et l'instant de la page où elle a commencé (moins le temps déjà écoulé côté serveur).
-  let pose: PresencePose = { kind: "visible", elapsed: 0, from: { offset: 0, angle: 0 } };
+  // La phase de présence et l'instant de la page où elle a commencé (moins le temps déjà écoulé côté serveur). Caché tant que
+  // le serveur n'a rien dit : une page qui se connecte ne montre pas un renard parti.
+  let pose: PresencePose = {
+    kind: toPresenceView(toStartPresence(0)),
+    elapsed: 0,
+    from: { offset: 0, angle: 0 },
+  };
   let poseAt = 0;
   let shown: FoxImage | undefined;
   const output = getSoundOutput();

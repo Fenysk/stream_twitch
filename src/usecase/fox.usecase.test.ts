@@ -370,10 +370,10 @@ describe("createFox : la durée, l'annulation et l'arrêt d'une phrase", () => {
 });
 
 describe("createFox : le mode et la présence", () => {
-  it("commence au repos et visible", () => {
+  it("commence au repos et caché", () => {
     const { fox } = setup();
     expect(fox.getMode()).toEqual({ kind: "idle" });
-    expect(fox.getPresence()).toEqual({ kind: "visible", elapsed: 0 });
+    expect(fox.getPresence()).toEqual({ kind: "away", elapsed: 0 });
   });
 
   it("publie le mode quand il change, et seulement alors", () => {
@@ -407,6 +407,18 @@ describe("createFox : le mode et la présence", () => {
     fox.updatePresence("leaving");
     state.now += 600;
     expect(fox.getPresence()).toEqual({ kind: "leaving", elapsed: 600 });
+  });
+
+  it("ne change pas sa présence quand une page /fox se connecte : caché ou visible, il le reste, et le temps continue", () => {
+    const { fox, state, events } = setup();
+    state.now += 4000;
+    fox.subscribe("screen", () => undefined);
+    expect(fox.getPresence()).toEqual({ kind: "away", elapsed: 4000 });
+    expect(events.filter(({ kind }) => kind === "presence")).toEqual([]);
+    fox.updatePresence("visible");
+    state.now += 600;
+    fox.subscribe("screen", () => undefined);
+    expect(fox.getPresence()).toEqual({ kind: "visible", elapsed: 600 });
   });
 });
 

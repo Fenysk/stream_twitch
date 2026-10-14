@@ -1,6 +1,7 @@
 import { toFoxRules } from "../domain/fox.rules";
 import type { Attitude, FoxEvent, FoxMode, FoxPlace, FoxRules, PresenceView } from "../domain/fox.schema";
 import { IDLE_MODE, isSameMode } from "../domain/fox-mode.rules";
+import { toPresenceView, toStartPresence } from "../domain/presence.rules";
 import { toPronunciations, toSpokenText } from "../domain/pronunciation.rules";
 import type { Settings } from "../domain/settings.schema";
 import { toFrenchVoices, toSpeechText, toWavDuration } from "../domain/voice.rules";
@@ -79,7 +80,8 @@ export function createFox({ voices, settings: initial, clock, createId, toSpeech
   let screens = 0;
   let mode: FoxMode = IDLE_MODE;
   let attitude: Attitude = "plain";
-  let presence: { kind: PresenceView; since: number } = { kind: "visible", since: clock() };
+  const start = toStartPresence(clock());
+  let presence: { kind: PresenceView; since: number } = { kind: toPresenceView(start), since: start.since };
   // Map garde l'ordre d'insertion : le premier est le plus ancien.
   const speeches = new Map<string, { bytes: Uint8Array; expiresAt: number }>();
   let installed: Promise<Voice[]> | undefined;

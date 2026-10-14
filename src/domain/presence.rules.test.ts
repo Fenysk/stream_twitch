@@ -23,6 +23,8 @@ const rules: PresenceRules = { awayAfter: 180_000, yawnMs: 2000, leaveMs: 1500, 
 const curves: PresenceCurves = { crouchMs: 300, jumpMs: 400, diveMs: 800, returnMs: 800 };
 const IDLE_PLACE = { offset: 0, angle: 0 };
 const THREE_MINUTES = 180_000;
+// Un renard revenu et posé à 0 : le serveur, lui, démarre avec `toStartPresence` (caché).
+const VISIBLE: PresenceState = { kind: "visible", since: 0, spokeAt: 0 };
 
 // Fait avancer le temps par pas de 100 ms, comme la boucle du serveur, avec des évènements à des dates précises.
 const run = (
@@ -43,14 +45,43 @@ const run = (
 const kindsOf = (trail: { state: PresenceState }[]): string[] =>
   trail.map(({ state }) => state.kind).filter((kind, index, all) => index === 0 || kind !== all[index - 1]);
 
+describe("H : il démarre caché", () => {
+  it("est parti au démarrage, hors de l'écran, sans phase de départ", () => {
+    const start = toStartPresence(5000);
+    expect(start).toEqual({ kind: "away", since: 5000, spokeAt: 5000 });
+    expect(toPresenceView(start)).toBe("away");
+    expect(toPresenceBody({ kind: toPresenceView(start), elapsed: 0, from: IDLE_PLACE }, curves)).toEqual({
+      offset: HIDDEN_OFFSET,
+      angle: 0,
+      squashX: 1,
+      squashY: 1,
+    });
+  });
+
+  it("reste caché sans bâiller ni revenir tant que rien ne le réveille", () => {
+    const { state, trail } = run(toStartPresence(0), 0, 20 * 60_000);
+    expect(state).toEqual(toStartPresence(0));
+    expect(kindsOf(trail)).toEqual(["away"]);
+  });
+
+  it("revient en sautant dès qu'on le réveille, puis part 3 min après ce réveil", () => {
+    const { trail } = run(toStartPresence(0), 0, 10_000 + THREE_MINUTES + 100, { 10000: "wake" });
+    expect(kindsOf(trail)).toEqual(["away", "returning", "visible", "yawning"]);
+    const at = (kind: string) => trail.find(({ state }) => state.kind === kind)?.now;
+    expect(at("returning")).toBe(10_000);
+    expect(at("visible")).toBe(10_800);
+    expect(at("yawning")).toBe(10_000 + THREE_MINUTES);
+  });
+});
+
 describe("H : il s'en va après 3 min sans parler", () => {
   it("est visible au départ, et le reste avant 3 min", () => {
-    const { state } = run(toStartPresence(0), 0, THREE_MINUTES - 100);
+    const { state } = run(VISIBLE, 0, THREE_MINUTES - 100);
     expect(state.kind).toBe("visible");
   });
 
   it("bâille à 3 min pile, puis glisse vers le bas, puis est parti", () => {
-    const { trail } = run(toStartPresence(0), 0, THREE_MINUTES + 10_000);
+    const { trail } = run(VISIBLE, 0, THREE_MINUTES + 10_000);
     expect(kindsOf(trail)).toEqual(["visible", "yawning", "leaving", "away"]);
     const at = (kind: string) => trail.find(({ state }) => state.kind === kind)?.now;
     expect(at("yawning")).toBe(THREE_MINUTES);
@@ -59,14 +90,14 @@ describe("H : il s'en va après 3 min sans parler", () => {
   });
 
   it("n'enchaîne ni deuxième bâillement ni retour tant que rien ne le réveille", () => {
-    const { state, trail } = run(toStartPresence(0), 0, 20 * 60_000);
+    const { state, trail } = run(VISIBLE, 0, 20 * 60_000);
     expect(state.kind).toBe("away");
     expect(trail.filter(({ state: s }) => s.kind === "yawning").length).toBeLessThanOrEqual(25);
     expect(kindsOf(trail)).toEqual(["visible", "yawning", "leaving", "away"]);
   });
 
   it("repart de zéro à la fin de chaque phrase : il bâille 3 min après la dernière, pas 3 min après le départ", () => {
-    const before = run(toStartPresence(0), 0, 349_900, { 170000: "spoke" });
+    const before = run(VISIBLE, 0, 349_900, { 170000: "spoke" });
     expect(before.state.kind).toBe("visible");
     const after = run(before.state, 350_000, 351_000);
     expect(after.trail[0]?.state).toEqual({ kind: "yawning", since: 350_000, spokeAt: 170_000 });
@@ -74,7 +105,7 @@ describe("H : il s'en va après 3 min sans parler", () => {
 
   it("suit le délai réglé", () => {
     const short: PresenceRules = { ...rules, awayAfter: 60_000 };
-    let state = toStartPresence(0);
+    let state = VISIBLE;
     state = toNextPresence(state, { now: 59_900 }, short);
     expect(state.kind).toBe("visible");
     state = toNextPresence(state, { now: 60_000 }, short);
@@ -82,7 +113,7 @@ describe("H : il s'en va après 3 min sans parler", () => {
   });
 
   it("enchaîne les phases sans les décaler quand un pas arrive très en retard", () => {
-    const state = toNextPresence(toStartPresence(0), { now: THREE_MINUTES + 10_000 }, rules);
+    const state = toNextPresence(VISIBLE, { now: THREE_MINUTES + 10_000 }, rules);
     expect(state).toEqual({ kind: "away", since: THREE_MINUTES + 2000 + 1500, spokeAt: 0 });
   });
 });
@@ -115,7 +146,7 @@ describe("H : il revient en sautant", () => {
   });
 
   it("ne change rien quand on le réveille alors qu'il est visible ou qu'il revient déjà, sauf le délai", () => {
-    const visible = toStartPresence(0);
+    const visible = VISIBLE;
     expect(toNextPresence(visible, { now: 5000, event: "wake" }, rules)).toEqual({
       ...visible,
       spokeAt: 5000,
@@ -126,16 +157,11 @@ describe("H : il revient en sautant", () => {
       spokeAt: 1200,
     });
   });
-
-  it("revient quand une page /fox se connecte : il est visible et le délai repart (reset)", () => {
-    const state = toNextPresence(away, { now: 400_000, event: "reset" }, rules);
-    expect(state).toEqual({ kind: "visible", since: 400_000, spokeAt: 400_000 });
-  });
 });
 
 describe("M : il part tout de suite au coucher (évènement leave)", () => {
   it("bâille 2 s, glisse vers le bas, puis est parti, sans attendre les 3 min", () => {
-    const { trail } = run(toStartPresence(0), 0, 10_000, { 1000: "leave" });
+    const { trail } = run(VISIBLE, 0, 10_000, { 1000: "leave" });
     expect(kindsOf(trail)).toEqual(["visible", "yawning", "leaving", "away"]);
     const at = (kind: string) => trail.find(({ state }) => state.kind === kind)?.now;
     expect(at("yawning")).toBe(1000);
@@ -144,7 +170,7 @@ describe("M : il part tout de suite au coucher (évènement leave)", () => {
   });
 
   it("ne repart pas s'il bâille déjà, glisse déjà ou est déjà parti", () => {
-    const yawning = toNextPresence(toStartPresence(0), { now: THREE_MINUTES }, rules);
+    const yawning = toNextPresence(VISIBLE, { now: THREE_MINUTES }, rules);
     expect(yawning.kind).toBe("yawning");
     expect(toNextPresence(yawning, { now: THREE_MINUTES + 500, event: "leave" }, rules)).toEqual(yawning);
     const leaving: PresenceState = { kind: "leaving", since: 100, spokeAt: 0 };
@@ -159,12 +185,12 @@ describe("M : il part tout de suite au coucher (évènement leave)", () => {
   });
 
   it("revient comme d'habitude quand un message l'appelle après son départ", () => {
-    const { trail } = run(toStartPresence(0), 0, 12_000, { 1000: "leave", 8000: "wake" });
+    const { trail } = run(VISIBLE, 0, 12_000, { 1000: "leave", 8000: "wake" });
     expect(kindsOf(trail)).toEqual(["visible", "yawning", "leaving", "away", "returning", "visible"]);
   });
 
   it("se réveille pendant son bâillement de départ s'il est appelé : il reste là", () => {
-    const { trail } = run(toStartPresence(0), 0, 10_000, { 1000: "leave", 2000: "wake" });
+    const { trail } = run(VISIBLE, 0, 10_000, { 1000: "leave", 2000: "wake" });
     expect(kindsOf(trail)).toEqual(["visible", "yawning", "visible"]);
   });
 });
@@ -190,7 +216,7 @@ describe("isAsleep : il n'est pas visible", () => {
 
 describe("toVisibleIn : dans combien de ms il est entièrement visible", () => {
   it("tout de suite quand il est visible ou qu'il bâille", () => {
-    expect(toVisibleIn(toStartPresence(0), 5, rules)).toBe(0);
+    expect(toVisibleIn(VISIBLE, 5, rules)).toBe(0);
     expect(toVisibleIn({ kind: "yawning", since: 0, spokeAt: 0 }, 5, rules)).toBe(0);
   });
 

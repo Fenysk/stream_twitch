@@ -11,6 +11,14 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-14 — Le renard démarre caché et une page `/fox` qui se connecte ne change plus sa présence : l'évènement `reset` disparaît
+
+**Contexte.** Visible au démarrage et rendu visible (3 min de plus) à chaque connexion d'OBS, il se montrait sans raison dès qu'Alexis rafraîchissait la source.
+**Décision.** `toStartPresence` donne `away` (serveur, `createFox` et page : hors de l'écran, sans animation de départ). `/api/fox/events` envoie l'état courant sans rien changer ; `PresenceEvent` et le contrôleur perdent `reset`. La relance compte son silence depuis le démarrage, comme depuis un départ ; il revient par les chemins de H (message accepté, « Faire parler », remerciement, pique ou rappel, annonce de l'horloge).
+**Renoncement.** Garder `reset` pour une page qui se connecte : une source OBS rafraîchie le ferait réapparaître. Démarrer visible puis partir tout de suite : on le verrait plonger à chaque démarrage.
+
+---
+
 ## 2026-10-14 — Une prédiction résolue donne une phrase aux perdants : `channel.prediction.end` rejoint le flux EventSub, le droit `channel:read:predictions` s'ajoute ; `prediction` entre au lexique
 
 **Contexte.** Alexis veut que le renard commente la fin d'une prédiction (les points perdus par une partie du chat) ; EventSub `channel.prediction.end` est le seul moyen de la voir, avec le jeton d'Alexis, comme les follows et les récompenses.
