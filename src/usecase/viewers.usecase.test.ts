@@ -112,3 +112,47 @@ describe("createViewers : le nombre de viewers du live", () => {
     expect(pending()).toHaveLength(0);
   });
 });
+
+describe("createViewers : l'état du nombre de viewers", () => {
+  it("est inconnu avant la première réponse", () => {
+    expect(setup(12).viewers.getState()).toEqual({ kind: "unknown" });
+  });
+
+  it("est en cours avec le nombre dès la première réponse", async () => {
+    const { viewers } = setup(12);
+    await viewers.start();
+    expect(viewers.getState()).toEqual({ kind: "live", count: 12 });
+  });
+
+  it("est en cours à zéro, alors que getCount ne dit jamais zéro", async () => {
+    const { viewers } = setup(0);
+    await viewers.start();
+    expect(viewers.getState()).toEqual({ kind: "live", count: 0 });
+    expect(viewers.getCount()).toBeNull();
+  });
+
+  it("est hors ligne quand Twitch répond que la chaîne n'est pas en live", async () => {
+    const { viewers } = setup(null);
+    await viewers.start();
+    expect(viewers.getState()).toEqual({ kind: "offline" });
+  });
+
+  it("passe de en cours à hors ligne quand le live s'arrête", async () => {
+    const { viewers, state, runNext } = setup(12);
+    await viewers.start();
+    state.next = null;
+    await runNext();
+    expect(viewers.getState()).toEqual({ kind: "offline" });
+  });
+
+  it("est inconnu quand Twitch ne répond pas, puis en cours quand Twitch répond de nouveau", async () => {
+    const { viewers, state, runNext } = setup(12);
+    await viewers.start();
+    state.next = new Error("HTTP 503");
+    await runNext();
+    expect(viewers.getState()).toEqual({ kind: "unknown" });
+    state.next = 25;
+    await runNext();
+    expect(viewers.getState()).toEqual({ kind: "live", count: 25 });
+  });
+});

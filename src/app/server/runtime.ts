@@ -45,7 +45,7 @@ import { createHeadLoop, type HeadFeed } from "../../usecase/head.usecase";
 import { createSettingsStore, type SettingsStore } from "../../usecase/settings.usecase";
 import { createTimetable } from "../../usecase/timetable.usecase";
 import { createTwitchConnection, type TwitchConnection } from "../../usecase/twitch-connection.usecase";
-import { createViewers, type ViewersPort } from "../../usecase/viewers.usecase";
+import { createViewers, type Viewers, type ViewersPort } from "../../usecase/viewers.usecase";
 import { log } from "./server-log";
 import { getTwitchApp } from "./twitch-app";
 
@@ -64,6 +64,8 @@ export type Runtime = {
   twitch: TwitchConnection;
   // Le bilan du live : « Faire le bilan », et la fin prévue.
   review: FoxReview;
+  // Le nombre de viewers du live, relu toutes les 60 s.
+  viewers: Viewers;
 };
 
 // Le plugin Nitro et les routes serveur partagent ce module : c'est le seul état du serveur.
@@ -332,7 +334,11 @@ export function startRuntime(): Runtime {
   // connexion d'Alexis.
   const viewersPort: ViewersPort = twitchApp
     ? createViewersClient({ ...twitchApp, channelId: initial.chatChannelId })
-    : { get: async () => null };
+    : {
+        get: async () => {
+          throw new Error("identifiants Twitch absents");
+        },
+      };
   const viewers = createViewers({ port: viewersPort, schedule, log });
   // Les remerciements : un follow, un sub, un resub, un sub offert, des bits ou un raid donnent une phrase, devant les messages ;
   // une récompense de points de chaîne fait piquer Fenysk (par la relance) ou réveille le renard.
@@ -393,7 +399,7 @@ export function startRuntime(): Runtime {
     `Serveur démarré : http://localhost:${port}/head, /chat et /fox (réglages : http://localhost:${port}/)`,
   );
   log(`Réglages : micro « ${initial.micName} », seuil ${initial.threshold} dB, délai ${initial.delay} ms.`);
-  current = { feed: loop.feed, expressions, settings, obs, chat, fox, mode, thanks, twitch, review };
+  current = { feed: loop.feed, expressions, settings, obs, chat, fox, mode, thanks, twitch, review, viewers };
   return current;
 }
 

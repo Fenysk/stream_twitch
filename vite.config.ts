@@ -23,6 +23,7 @@ export default defineConfig({
         "/api/fox/review": "./src/app/server/fox-review.ts",
         "/api/fox/speech/:id": "./src/app/server/fox-speech.ts",
         "/api/twitch/status": "./src/app/server/twitch-status.ts",
+        "/api/twitch/viewers": "./src/app/server/twitch-viewers.ts",
         "/api/twitch/disconnect": "./src/app/server/twitch-disconnect.ts",
         "/auth/twitch/start": "./src/app/server/twitch-start.ts",
         "/auth/twitch/callback": "./src/app/server/twitch-callback.ts",
