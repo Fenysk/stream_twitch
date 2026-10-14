@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isJabDue, type JabRules, toJabRules } from "./jab.rules";
+import { isJabDue, type JabRules, toJabRules, toNextSilenceKind } from "./jab.rules";
 import type { Settings } from "./settings.schema";
 
 const rules: JabRules = { after: 180_000, gap: 600_000 };
@@ -47,6 +47,34 @@ describe("isJabDue : la relance", () => {
       ),
     ).toBe(true);
     expect(isJabDue({ ...due, awayFor: 29_999 }, quick)).toBe(false);
+  });
+});
+
+describe("toNextSilenceKind : une pique, puis un rappel", () => {
+  const both = { hasJab: true, hasReminder: true };
+
+  it("commence par la pique, puis alterne avec le rappel", () => {
+    expect(toNextSilenceKind(null, both)).toBe("jab");
+    expect(toNextSilenceKind("jab", both)).toBe("reminder");
+    expect(toNextSilenceKind("reminder", both)).toBe("jab");
+  });
+
+  it("garde la pique seule quand il n'y a aucun rappel, comme avant", () => {
+    const jabOnly = { hasJab: true, hasReminder: false };
+    expect(toNextSilenceKind(null, jabOnly)).toBe("jab");
+    expect(toNextSilenceKind("jab", jabOnly)).toBe("jab");
+    expect(toNextSilenceKind("reminder", jabOnly)).toBe("jab");
+  });
+
+  it("dit le rappel seul quand il n'y a aucune pique", () => {
+    const reminderOnly = { hasJab: false, hasReminder: true };
+    expect(toNextSilenceKind(null, reminderOnly)).toBe("reminder");
+    expect(toNextSilenceKind("reminder", reminderOnly)).toBe("reminder");
+  });
+
+  it("ne dit rien quand il n'y a ni pique ni rappel", () => {
+    expect(toNextSilenceKind(null, { hasJab: false, hasReminder: false })).toBeNull();
+    expect(toNextSilenceKind("jab", { hasJab: false, hasReminder: false })).toBeNull();
   });
 });
 

@@ -22,6 +22,8 @@ const base: Settings = {
   foxThanksGiftOne: ["{user} offre un sub à {recipient}."],
   foxThanksGiftMany: ["{user} offre {count} subs."],
   foxThanksCheer: ["Merci {user} pour {bits} bits."],
+  foxThanksLurk: ["Merci {user} pour le lurk."],
+  foxThanksLurkGeneric: ["Merci pour le lurk."],
 };
 
 const insults = toInsultList("connard\nsalope");
@@ -415,6 +417,110 @@ describe("l'écoute du tchat et les réglages", () => {
     const { thanks, pushed } = setup();
     thanks.update({ obsAddress: base.obsAddress, micName: "x", threshold: -40, delay: 250 });
     thanks.receive({ kind: "sub", user: "Alice", message: null });
+    expect(pushed).toEqual([]);
+  });
+});
+
+describe("un message « !lurk » est remercié comme un follow", () => {
+  // Le usecase écoute le tchat dès le départ : ces tests parlent par ses messages.
+  const started = (overrides: Partial<Settings> = {}) => {
+    const harness = setup(overrides);
+    harness.thanks.start();
+    return harness;
+  };
+
+  const say = (
+    listeners: Set<(event: ChatSourceEvent) => void>,
+    text: string,
+    overrides: Partial<RawMessage> = {},
+  ) => {
+    for (const listener of listeners)
+      listener({ kind: "message", message: { ...message(text), ...overrides } });
+  };
+
+  it("remercie par un sourire d'1 s puis une phrase avec le pseudo, devant les messages, sans être coupé", () => {
+    const { listeners, pushed, state } = started();
+    say(listeners, "!lurk");
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0]).toMatchObject({
+      kind: "thanks",
+      text: "Merci Alice pour le lurk.",
+      isCuttable: false,
+      isUrgent: true,
+    });
+    expect(pushed[0]?.toShow()).toEqual(SMILE_MODE);
+    expect(state.activity).toBe(1);
+  });
+
+  it("écrit le remerciement au journal", () => {
+    const { listeners, logs } = started();
+    say(listeners, "!lurk");
+    expect(logs).toEqual(["Renard : remerciement (lurk) : « Merci Alice pour le lurk. »"]);
+  });
+
+  it("reconnaît !lurk sans tenir compte des majuscules, suivi ou non d'un texte", () => {
+    const { listeners, texts } = started();
+    say(listeners, "!LURK à tout à l'heure", { viewerId: "v1" });
+    say(listeners, "!Lurk", { viewerId: "v2", nickname: "Bob" });
+    expect(texts()).toEqual(["Merci Alice pour le lurk.", "Merci Bob pour le lurk."]);
+  });
+
+  it("ne remercie un viewer qu'une fois depuis le démarrage : le deuxième !lurk ne dit rien", () => {
+    const { listeners, texts } = started();
+    say(listeners, "!lurk");
+    say(listeners, "!lurk");
+    say(listeners, "!LURK encore");
+    expect(texts()).toEqual(["Merci Alice pour le lurk."]);
+    say(listeners, "!lurk", { viewerId: "v2", nickname: "Bob" });
+    expect(texts()).toEqual(["Merci Alice pour le lurk.", "Merci Bob pour le lurk."]);
+  });
+
+  it("ne remercie ni un message ordinaire, ni une autre commande, ni un !lurk qui n'est pas le premier mot", () => {
+    const { listeners, pushed } = started();
+    say(listeners, "bonne soirée à tous");
+    say(listeners, "!discord");
+    say(listeners, "bonne soirée, !lurk");
+    say(listeners, "!lurker");
+    expect(pushed).toEqual([]);
+  });
+
+  it("ne dit jamais un pseudo refusé par le filtre d'insultes : la phrase générique", () => {
+    const { listeners, texts, logs } = started();
+    say(listeners, "!lurk", { nickname: "connard" });
+    expect(texts()).toEqual(["Merci pour le lurk."]);
+    expect(logs.join("\n")).not.toContain("connard");
+    expect(logs).toContain("Renard : pseudo refusé par le filtre d'insultes (lurk), il n'est pas dit.");
+  });
+
+  it("ne remercie rien quand la case des remerciements est décochée", () => {
+    const { listeners, pushed } = started({ foxShouldThank: false });
+    say(listeners, "!lurk");
+    expect(pushed).toEqual([]);
+  });
+
+  it("remercie de nouveau après que la case a été recochée : un lurk ignoré ne compte pas comme remercié", () => {
+    const { thanks, listeners, texts } = started({ foxShouldThank: false });
+    say(listeners, "!lurk");
+    thanks.update({ ...base, foxShouldThank: true });
+    say(listeners, "!lurk");
+    expect(texts()).toEqual(["Merci Alice pour le lurk."]);
+  });
+
+  it("tire les phrases de la liste sans répéter avant d'avoir tout dit, et suit la liste changée en direct", () => {
+    const { thanks, listeners, texts } = started({ foxThanksLurk: ["A {user}", "B {user}"] });
+    say(listeners, "!lurk", { viewerId: "v1", nickname: "Al" });
+    say(listeners, "!lurk", { viewerId: "v2", nickname: "Bo" });
+    say(listeners, "!lurk", { viewerId: "v3", nickname: "Cy" });
+    expect(texts()).toEqual(["A Al", "B Bo", "A Cy"]);
+    thanks.update({ ...base, foxThanksLurk: ["Z {user}"] });
+    say(listeners, "!lurk", { viewerId: "v4", nickname: "Di" });
+    expect(texts().at(-1)).toBe("Z Di");
+  });
+
+  it("n'écoute plus les messages après l'arrêt", () => {
+    const { thanks, listeners, pushed } = started();
+    thanks.stop();
+    say(listeners, "!lurk");
     expect(pushed).toEqual([]);
   });
 });

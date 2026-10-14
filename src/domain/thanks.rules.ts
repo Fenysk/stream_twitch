@@ -8,7 +8,9 @@ export type ThanksKey =
   | "foxThanksSub"
   | "foxThanksGiftOne"
   | "foxThanksGiftMany"
-  | "foxThanksCheer";
+  | "foxThanksCheer"
+  | "foxThanksLurk"
+  | "foxThanksLurkGeneric";
 
 // Ce qu'il montre avant la phrase : un sourire (1 s) pour un follow ou un cheer, un saut de joie pour un sub.
 export type ThanksShow = "smile" | "joy";
@@ -21,8 +23,11 @@ export type ThanksPlan = {
   show: ThanksShow;
 };
 
-// Plusieurs follows regroupés (une rafale) : une seule phrase, sans pseudo.
-export type ThanksSubject = LiveEvent | { kind: "follow-group" };
+// Plusieurs follows regroupés (une rafale) : une seule phrase, sans pseudo. Un lurk : un viewer a écrit « !lurk » dans le tchat.
+export type ThanksSubject = LiveEvent | { kind: "follow-group" } | { kind: "lurk"; user: string };
+
+// Le premier mot du message est « !lurk », majuscules ignorées : le viewer regarde sans parler.
+export const isLurk = (text: string): boolean => text.trim().split(/\s+/, 1)[0]?.toLowerCase() === "!lurk";
 
 // Un pseudo refusé par le filtre d'insultes n'est pas dit : il devient « quelqu'un ».
 export const SOMEONE = "quelqu'un";
@@ -66,6 +71,9 @@ export function toThanksPlan(subject: ThanksSubject, { isRefused, viewers }: Tha
         values: { user: name(subject.user), bits: subject.bits },
         show: "smile",
       };
+    case "lurk":
+      if (isRefused(subject.user)) return { list: "foxThanksLurkGeneric", values: {}, show: "smile" };
+      return { list: "foxThanksLurk", values: { user: subject.user }, show: "smile" };
   }
 }
 
@@ -88,6 +96,8 @@ export function toThanksRules(settings: Settings): ThanksRules | undefined {
     foxThanksGiftOne,
     foxThanksGiftMany,
     foxThanksCheer,
+    foxThanksLurk,
+    foxThanksLurkGeneric,
   } = settings;
   if (
     foxShouldThank === undefined ||
@@ -97,7 +107,9 @@ export function toThanksRules(settings: Settings): ThanksRules | undefined {
     foxThanksSub === undefined ||
     foxThanksGiftOne === undefined ||
     foxThanksGiftMany === undefined ||
-    foxThanksCheer === undefined
+    foxThanksCheer === undefined ||
+    foxThanksLurk === undefined ||
+    foxThanksLurkGeneric === undefined
   )
     return undefined;
   return {
@@ -110,6 +122,8 @@ export function toThanksRules(settings: Settings): ThanksRules | undefined {
       foxThanksGiftOne,
       foxThanksGiftMany,
       foxThanksCheer,
+      foxThanksLurk,
+      foxThanksLurkGeneric,
     },
   };
 }

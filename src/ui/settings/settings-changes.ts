@@ -2,7 +2,7 @@
 
 import type { EditableSettings, LocalSettings, SettingsIssue } from "../../domain/settings.schema";
 import { CHAT_SLIDERS } from "./chat-fields";
-import { FOX_LISTS, FOX_SLIDERS } from "./fox-fields";
+import { FOX_LISTS, FOX_SLIDERS, FOX_TIMES } from "./fox-fields";
 import { SLIDERS, type SliderKey } from "./head-fields";
 
 // Les curseurs de tous les onglets : ceux de la tête, du tchat, puis du renard.
@@ -53,7 +53,7 @@ export const toRemainingDrafts = (
 
 // Le serveur parle de `threshold` ; l'interface montre « Seuil du micro » : un refus se lit avec les libellés des curseurs.
 const LABELS = new Map<string, string>(
-  [...ALL_SLIDERS, ...FOX_LISTS].map(({ key, label }): [string, string] => [key, label]),
+  [...ALL_SLIDERS, ...FOX_LISTS, ...FOX_TIMES].map(({ key, label }): [string, string] => [key, label]),
 );
 
 const toReadable = (message: string): string =>
@@ -66,7 +66,8 @@ export type FieldErrors = { byKey: Partial<Record<string, string>>; general: str
 
 // Un refus qui nomme un curseur s'écrit sous lui ; une règle entre plusieurs réglages, ou une panne, s'écrit en haut.
 export const toFieldErrors = (issues: readonly SettingsIssue[]): FieldErrors => {
-  const known = new Set<string>(SLIDER_KEYS);
+  // Les réglages dont le refus s'écrit sous leur champ : les curseurs et les heures.
+  const known = new Set<string>([...SLIDER_KEYS, ...FOX_TIMES.map(({ key }) => key)]);
   const lists = new Set<string>(FOX_LISTS.map(({ key }) => key));
   const errors: FieldErrors = { byKey: {}, general: [] };
   for (const { path, message } of issues) {

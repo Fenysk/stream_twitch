@@ -14,6 +14,7 @@ import { isFillable, toFilledPhrase } from "../domain/phrase.rules";
 import { toNextPick } from "../domain/pick.rules";
 import type { Settings } from "../domain/settings.schema";
 import {
+  isLurk,
   type ThanksKey,
   type ThanksRules,
   type ThanksSubject,
@@ -59,6 +60,7 @@ const SUBJECT_TEXTS: Record<ThanksSubject["kind"], string> = {
   gift: "sub offert",
   "mystery-gift": "série de subs offerts",
   cheer: "cheer",
+  lurk: "lurk",
 };
 
 const toEmptySaid = (): Record<ThanksKey, string[]> => ({
@@ -68,6 +70,8 @@ const toEmptySaid = (): Record<ThanksKey, string[]> => ({
   foxThanksGiftOne: [],
   foxThanksGiftMany: [],
   foxThanksCheer: [],
+  foxThanksLurk: [],
+  foxThanksLurkGeneric: [],
 });
 
 // Le message qui accompagne l'évènement, prêt à passer le filtre : un cheer n'y garde pas ses cheermotes (« Cheer100 »).
@@ -82,7 +86,8 @@ const toAttachedMessage = (event: LiveEvent): RawMessage | null => {
 
 // Les remerciements : un évènement du live (follow, sub, resub, sub offert, cheer) donne une phrase tirée au hasard dans la
 // liste de son espèce, qui passe devant les messages de la file. Elle attend le silence de Fenysk mais sa voix ne la coupe
-// pas. Les follows en rafale ne sont remerciés nominativement qu'un par délai, les autres sont regroupés en une phrase.
+// pas. Les follows en rafale ne sont remerciés nominativement qu'un par délai, les autres sont regroupés en une phrase. Un
+// message du tchat dont le premier mot est « !lurk » est remercié de même, une fois par viewer depuis le démarrage du serveur.
 export function createFoxThanks({
   chat,
   queue,
@@ -99,6 +104,8 @@ export function createFoxThanks({
   let rules: ThanksRules | undefined = toThanksRules(initial);
   let burst: FollowBurst = BURST_START;
   let cancelGroup: (() => void) | undefined;
+  // Les viewers déjà remerciés d'un lurk depuis le démarrage du serveur.
+  const lurkers = new Set<string>();
   // Les phrases déjà dites de chaque liste depuis son dernier tour : pas de répétition avant d'avoir tout dit.
   const said = toEmptySaid();
   let unsubscribe: (() => void) | undefined;
@@ -178,10 +185,18 @@ export function createFoxThanks({
     else thank(event, toAttachedMessage(event));
   };
 
+  // Le premier « !lurk » d'un viewer : un remerciement comme un follow. La commande, elle, n'est jamais lue.
+  const receiveMessage = ({ viewerId, nickname, text }: RawMessage) => {
+    if (!rules?.shouldThank || !isLurk(text) || lurkers.has(viewerId)) return;
+    lurkers.add(viewerId);
+    thank({ kind: "lurk", user: nickname }, null);
+  };
+
   return {
     start() {
       unsubscribe ??= chat.subscribeSource((event) => {
         if (event.kind === "live") receive(event.event);
+        else if (event.kind === "message") receiveMessage(event.message);
       });
     },
     stop() {

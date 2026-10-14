@@ -254,7 +254,13 @@ const toSmoothed = (current: number, target: number, elapsed: number): number =>
   current + (target - current) * (1 - Math.exp(-Math.min(elapsed, MAX_STEP_MS) / BOUNCE_SMOOTHING_MS));
 
 const isShowing = ({ kind }: FoxMode): boolean =>
-  kind === "reaction" || kind === "wave" || kind === "yawn" || kind === "address" || kind === "joy";
+  kind === "reaction" ||
+  kind === "wave" ||
+  kind === "yawn" ||
+  kind === "address" ||
+  kind === "joy" ||
+  kind === "flinch" ||
+  kind === "startle";
 
 // Un pas de l'animation : la page l'appelle à chaque image, avec le level de la voix (null : il ne parle pas) et le mode
 // que le serveur lui donne.
@@ -294,6 +300,11 @@ const toModeImage = ({ mode, modeAt }: FoxState, now: number): FoxImage | null =
     // Le saut de joie d'un sub : un grand sourire, le corps bondit (joy.rules.ts).
     case "joy":
       return "front-smile-rest";
+    // Le sursaut d'un cri : la tête choquée, le regard à gauche qu'on retourne vers Fenysk. Celui du jeu : la même tête, sans
+    // retournement (isFacingFenysk).
+    case "flinch":
+    case "startle":
+      return MOUTH_IMAGES.large;
     default:
       return null;
   }

@@ -33,6 +33,8 @@ type FoxFields = {
   foxBlinkMax?: number | undefined;
   foxListenMin?: number | undefined;
   foxListenMax?: number | undefined;
+  foxLateYawnMin?: number | undefined;
+  foxLateYawnMax?: number | undefined;
 };
 
 const hasAllOrNoneOfScale = ({ quietLevel, quietScale, loudScale, loudLevel }: ScaleFields): boolean => {
@@ -88,6 +90,38 @@ const FOX_KEYS: readonly string[] = [
   "foxJabAfter",
   "foxJabGap",
   "foxJabs",
+  "foxReminders",
+  "foxShoutThreshold",
+  "foxShoutMerge",
+  "foxShoutCount",
+  "foxShoutPeriod",
+  "foxShoutLong",
+  "foxShoutGap",
+  "foxShouts",
+  "foxTunnelAfter",
+  "foxTunnelPause",
+  "foxTunnelGap",
+  "foxTunnelToFenysk",
+  "foxTunnelToChat",
+  "foxBalanceMargin",
+  "foxBalanceAfter",
+  "foxBalanceGap",
+  "foxBalanceAlerts",
+  "foxStartleRise",
+  "foxStartleWithin",
+  "foxStartleLevel",
+  "foxStartleGap",
+  "foxHourPhrases",
+  "foxEndTime",
+  "foxEndWarning",
+  "foxEndWarningPhrases",
+  "foxEndPhrases",
+  "foxOvertimeGap",
+  "foxOvertimePhrases",
+  "foxBedtimePhrases",
+  "foxLateAfter",
+  "foxLateYawnMin",
+  "foxLateYawnMax",
   "foxPronunciations",
   "foxJoyDuration",
   "foxShouldThank",
@@ -98,6 +132,8 @@ const FOX_KEYS: readonly string[] = [
   "foxThanksGiftOne",
   "foxThanksGiftMany",
   "foxThanksCheer",
+  "foxThanksLurk",
+  "foxThanksLurkGeneric",
 ];
 
 const hasAllOrNoneOfFox = (fields: Readonly<Record<string, unknown>>): boolean => {
@@ -118,6 +154,9 @@ const isFoxListenMaxAboveMin = ({ foxListenMin, foxListenMax }: FoxFields): bool
 
 const isFoxBlinkMaxAboveMin = ({ foxBlinkMin, foxBlinkMax }: FoxFields): boolean =>
   foxBlinkMin === undefined || foxBlinkMax === undefined || foxBlinkMax >= foxBlinkMin;
+
+const isFoxLateYawnMaxAboveMin = ({ foxLateYawnMin, foxLateYawnMax }: FoxFields): boolean =>
+  foxLateYawnMin === undefined || foxLateYawnMax === undefined || foxLateYawnMax >= foxLateYawnMin;
 
 const isTalkMaxAboveMin = ({ talkMin, talkMax }: TalkFields): boolean =>
   talkMin === undefined || talkMax === undefined || talkMax >= talkMin;
@@ -143,12 +182,27 @@ const phraseList = (needsOne: boolean) => {
   return needsOne ? phrases.min(1, "doit avoir au moins une phrase") : phrases;
 };
 const nonNegative = () => z.number(NOT_A_NUMBER).min(0, "ne peut pas être négatif");
+// Une heure du jour, « HH:MM » de 00:00 à 23:59 ; `orEmpty` : le texte vide est permis (pas d'heure).
+const clockTime = (orEmpty: boolean) =>
+  z
+    .string("doit être un texte")
+    .regex(
+      orEmpty ? /^(?:(?:[01]\d|2[0-3]):[0-5]\d)?$/ : /^(?:[01]\d|2[0-3]):[0-5]\d$/,
+      orEmpty
+        ? "doit s'écrire HH:MM (de 00:00 à 23:59), ou rester vide"
+        : "doit s'écrire HH:MM (de 00:00 à 23:59)",
+    );
+// Un écart entre deux levels, en dB : positif ou négatif.
+const decibelGap = () =>
+  z.number(NOT_A_NUMBER).min(-20, "doit être d'au moins -20 dB").max(20, "doit être d'au plus 20 dB");
 
 // Tous les réglages, un par champ. `strict` : une faute de frappe est refusée, pas ignorée.
 export const SettingsFieldsSchema = z
   .object({
     obsAddress: z.string("doit être un texte").regex(/^wss?:\/\/.+/, "doit commencer par ws:// ou wss://"),
     micName: z.string("doit être un texte").min(1, "ne peut pas être vide"),
+    // La source OBS du son du PC, comme le micro : choisie dans settings.json. Absente, le renard ne compare pas.
+    desktopName: z.string("doit être un texte").min(1, "ne peut pas être vide").optional(),
     threshold: decibels(),
     delay: positiveWhole(),
     rhythm: positiveWhole().optional(),
@@ -232,6 +286,51 @@ export const SettingsFieldsSchema = z
     foxJabAfter: positiveWhole().optional(),
     foxJabGap: positiveWhole().optional(),
     foxJabs: phraseList(false).optional(),
+    // Les rappels du silence de la relance, tournés vers le tchat, une phrase par entrée : ils alternent avec les piques.
+    foxReminders: phraseList(false).optional(),
+    // Le cri : le level du mic (dB) au-dessus duquel Fenysk crie, l'écart (ms) sous lequel deux passages font un seul cri, puis
+    // ce qui est pénible : ce nombre de cris dans cette période (ms), ou un cri de plus de cette durée (ms). Au plus une
+    // phrase de cri par écart (ms) ; les phrases, une par entrée.
+    foxShoutThreshold: decibels().optional(),
+    foxShoutMerge: positiveWhole().optional(),
+    foxShoutCount: positiveWhole().optional(),
+    foxShoutPeriod: positiveWhole().optional(),
+    foxShoutLong: positiveWhole().optional(),
+    foxShoutGap: positiveWhole().optional(),
+    foxShouts: phraseList(false).optional(),
+    // Le tunnel : Fenysk parle depuis cette durée (ms) sans silence de plus de cette pause (ms) ; au plus un par écart (ms) ;
+    // les phrases tournées vers lui, et celles tournées vers le tchat.
+    foxTunnelAfter: positiveWhole().optional(),
+    foxTunnelPause: positiveWhole().optional(),
+    foxTunnelGap: positiveWhole().optional(),
+    foxTunnelToFenysk: phraseList(false).optional(),
+    foxTunnelToChat: phraseList(false).optional(),
+    // La balance du son : l'écart toléré du desktop sur la voix (dB), la durée de parole cumulée (ms) où il la couvre avant
+    // d'alerter, l'écart (ms) entre deux alertes, et les phrases d'alerte.
+    foxBalanceMargin: decibelGap().optional(),
+    foxBalanceAfter: positiveWhole().optional(),
+    foxBalanceGap: positiveWhole().optional(),
+    foxBalanceAlerts: phraseList(false).optional(),
+    // Le sursaut du jeu : la hausse (dB) du son du PC, en moins de ce temps (ms), jusqu'au-dessus de ce level (dB) ; au plus un
+    // sursaut par écart (ms).
+    foxStartleRise: positive().max(100, "doit être d'au plus 100 dB").optional(),
+    foxStartleWithin: positiveWhole().optional(),
+    foxStartleLevel: decibels().optional(),
+    foxStartleGap: positiveWhole().optional(),
+    // L'heure du live : les phrases de chaque heure pleine ; la fin prévue (« HH:MM », vide : pas de fin prévue), combien de ms
+    // avant elle il prévient, ses phrases, celles de la fin, l'écart (ms) entre deux rappels après elle, leurs phrases, la phrase
+    // du coucher ; puis l'heure (« HH:MM ») après laquelle il bâille sans fin prévue, et l'écart (ms) entre deux bâillements.
+    foxHourPhrases: phraseList(false).optional(),
+    foxEndTime: clockTime(true).optional(),
+    foxEndWarning: positiveWhole().optional(),
+    foxEndWarningPhrases: phraseList(false).optional(),
+    foxEndPhrases: phraseList(false).optional(),
+    foxOvertimeGap: positiveWhole().optional(),
+    foxOvertimePhrases: phraseList(false).optional(),
+    foxBedtimePhrases: phraseList(false).optional(),
+    foxLateAfter: clockTime(false).optional(),
+    foxLateYawnMin: positiveWhole().optional(),
+    foxLateYawnMax: positiveWhole().optional(),
     // Les remerciements : la durée du saut de joie d'un sub (ms), la case « Remercier les follows, subs et cheers », le délai
     // (ms) entre deux remerciements nominatifs de follow, et les phrases de chaque sorte d'évènement.
     foxJoyDuration: positiveWhole().optional(),
@@ -243,6 +342,8 @@ export const SettingsFieldsSchema = z
     foxThanksGiftOne: phraseList(true).optional(),
     foxThanksGiftMany: phraseList(true).optional(),
     foxThanksCheer: phraseList(true).optional(),
+    foxThanksLurk: phraseList(true).optional(),
+    foxThanksLurkGeneric: phraseList(true).optional(),
     // La prononciation : une ligne par mot, « abréviation = forme dite », appliquée à tout ce qu'il dit avant la synthèse.
     foxPronunciations: z
       .array(
@@ -325,6 +426,10 @@ export const SettingsSchema = SettingsFieldsSchema.refine(hasAllOrNoneOfScale, {
   .refine(isFoxBlinkMaxAboveMin, {
     message: "foxBlinkMax ne peut pas être plus petit que foxBlinkMin",
     path: ["foxBlinkMax"],
+  })
+  .refine(isFoxLateYawnMaxAboveMin, {
+    message: "foxLateYawnMax ne peut pas être plus petit que foxLateYawnMin",
+    path: ["foxLateYawnMax"],
   });
 
 export type Settings = z.infer<typeof SettingsSchema>;
@@ -373,6 +478,38 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxJabAfter: true,
   foxJabGap: true,
   foxJabs: true,
+  foxReminders: true,
+  foxShoutThreshold: true,
+  foxShoutMerge: true,
+  foxShoutCount: true,
+  foxShoutPeriod: true,
+  foxShoutLong: true,
+  foxShoutGap: true,
+  foxShouts: true,
+  foxTunnelAfter: true,
+  foxTunnelPause: true,
+  foxTunnelGap: true,
+  foxTunnelToFenysk: true,
+  foxTunnelToChat: true,
+  foxBalanceMargin: true,
+  foxBalanceAfter: true,
+  foxBalanceGap: true,
+  foxBalanceAlerts: true,
+  foxStartleRise: true,
+  foxStartleWithin: true,
+  foxStartleLevel: true,
+  foxStartleGap: true,
+  foxHourPhrases: true,
+  foxEndTime: true,
+  foxEndWarning: true,
+  foxEndWarningPhrases: true,
+  foxEndPhrases: true,
+  foxOvertimeGap: true,
+  foxOvertimePhrases: true,
+  foxBedtimePhrases: true,
+  foxLateAfter: true,
+  foxLateYawnMin: true,
+  foxLateYawnMax: true,
   foxPronunciations: true,
   foxJoyDuration: true,
   foxShouldThank: true,
@@ -383,6 +520,8 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxThanksGiftOne: true,
   foxThanksGiftMany: true,
   foxThanksCheer: true,
+  foxThanksLurk: true,
+  foxThanksLurkGeneric: true,
   chatStyle: true,
   chatOpacity: true,
   chatTextSize: true,

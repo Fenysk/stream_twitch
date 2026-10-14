@@ -3,7 +3,7 @@ import type { RawMessage } from "../domain/chat.types";
 import { toInsultList } from "../domain/chat-insults.rules";
 import { FOX_START, toFoxDisplay, toFoxRules, toNextFox } from "../domain/fox.rules";
 import type { FoxEvent, FoxMode } from "../domain/fox.schema";
-import { IDLE_MODE } from "../domain/fox-mode.rules";
+import { ADDRESS_MODE, FLINCH_MODE, IDLE_MODE, isFacingFenysk } from "../domain/fox-mode.rules";
 import { NO_JOY, toJoyBody } from "../domain/joy.rules";
 import type { LiveEvent } from "../domain/live.types";
 import { MIRROR_START, toMirrorScale, toNextMirror } from "../domain/mirror.rules";
@@ -15,14 +15,20 @@ import {
   toPresenceBody,
 } from "../domain/presence.rules";
 import type { Settings } from "../domain/settings.schema";
+import type { Slot } from "../domain/timetable.rules";
 import type { Voice } from "../domain/voice.schema";
 import type { ChatSourceEvent } from "./chat.usecase";
 import { createFox, type VoicePort } from "./fox.usecase";
+import { createFoxBalance } from "./fox-balance.usecase";
 import { createFoxChat } from "./fox-chat.usecase";
+import { type Broadcast, createFoxHours } from "./fox-hours.usecase";
 import { createFoxJab } from "./fox-jab.usecase";
 import { createFoxMode } from "./fox-mode.usecase";
 import { createFoxQueue } from "./fox-queue.usecase";
+import { createFoxShout } from "./fox-shout.usecase";
+import { createFoxStartle } from "./fox-startle.usecase";
 import { createFoxThanks } from "./fox-thanks.usecase";
+import { createFoxTunnel } from "./fox-tunnel.usecase";
 
 const settings: Settings = {
   obsAddress: "ws://127.0.0.1:4455",
@@ -57,6 +63,28 @@ const settings: Settings = {
   foxYawnDuration: 2000,
   foxJabAfter: 180_000,
   foxJabGap: 600_000,
+  foxShoutThreshold: -5,
+  foxShoutMerge: 1000,
+  foxShoutCount: 3,
+  foxShoutPeriod: 120_000,
+  foxShoutLong: 3000,
+  foxShoutGap: 600_000,
+  foxTunnelAfter: 180_000,
+  foxTunnelPause: 5000,
+  foxTunnelGap: 600_000,
+  foxBalanceMargin: 0,
+  foxBalanceAfter: 10_000,
+  foxBalanceGap: 300_000,
+  foxStartleRise: 20,
+  foxStartleWithin: 300,
+  foxStartleLevel: -15,
+  foxStartleGap: 30_000,
+  foxEndTime: "",
+  foxEndWarning: 1_800_000,
+  foxOvertimeGap: 600_000,
+  foxLateAfter: "23:30",
+  foxLateYawnMin: 300_000,
+  foxLateYawnMax: 600_000,
   foxShouldReadChat: true,
   foxShouldReadOwn: true,
   foxReadMaxLength: 150,
@@ -130,13 +158,40 @@ type Timed = { at: number; event: FoxEvent };
 // Le serveur du renard vrai (voix et tchat exceptés) dans un temps simulé : les timers se déclenchent à leur date exacte,
 // et le micro d'Alexis est un faux qui n'émet que quand le test le fait parler.
 const build = (
-  options: { seconds?: number; jabs?: string[]; viewers?: number | null; overrides?: Partial<Settings> } = {},
+  options: {
+    seconds?: number;
+    jabs?: string[];
+    reminders?: string[];
+    // Le prochain live d'Alexis dans sa timetable.
+    slot?: Slot;
+    shouts?: string[];
+    tunnelToFenysk?: string[];
+    tunnelToChat?: string[];
+    balanceAlerts?: string[];
+    viewers?: number | null;
+    overrides?: Partial<Settings>;
+    // L'heure du PC au départ (ms) ; par défaut 1 000 000.
+    startAt?: number;
+    // Les réglages de l'heure du live : toutes les listes de phrases sont vides tant qu'un test ne les donne pas.
+    hours?: Partial<Settings>;
+  } = {},
 ) => {
   // Les réglages de ce serveur : les piques sont celles du test, aucune par défaut (le renard ne revient pas de lui-même).
   // Un remerciement par liste : la phrase est connue d'avance.
   const serverSettings: Settings = {
     ...settings,
     foxJabs: options.jabs ?? [],
+    foxReminders: options.reminders ?? [],
+    foxShouts: options.shouts ?? [],
+    foxTunnelToFenysk: options.tunnelToFenysk ?? [],
+    foxTunnelToChat: options.tunnelToChat ?? [],
+    foxBalanceAlerts: options.balanceAlerts ?? [],
+    foxHourPhrases: [],
+    foxEndWarningPhrases: [],
+    foxEndPhrases: [],
+    foxOvertimePhrases: [],
+    foxBedtimePhrases: [],
+    ...options.hours,
     foxPronunciations: ["gg = gé gé", "wtf = what the fuck", "fenysk = Fénisque"],
     foxShouldThank: true,
     foxThankGap: 10_000,
@@ -146,9 +201,11 @@ const build = (
     foxThanksGiftOne: ["{user} offre un sub à {recipient}."],
     foxThanksGiftMany: ["{user} offre {count} subs."],
     foxThanksCheer: ["Merci {user} pour {bits} bits."],
+    foxThanksLurk: ["Merci {user} pour le lurk."],
+    foxThanksLurkGeneric: ["Merci pour le lurk."],
     ...options.overrides,
   };
-  const sim = { now: 1_000_000, order: 0, ids: 0 };
+  const sim = { now: options.startAt ?? 1_000_000, order: 0, ids: 0 };
   const start = sim.now;
   let timers: Timer[] = [];
   const events: Timed[] = [];
@@ -200,16 +257,26 @@ const build = (
     log: (line) => logs.push(line),
   });
   fox.subscribe("screen", (event) => events.push({ at: sim.now, event }));
-  let micListener: (level: number) => void = () => undefined;
-  const mode = createFoxMode({
-    mic: {
-      subscribe(listener) {
-        micListener = listener;
-        return () => {
-          micListener = () => undefined;
-        };
-      },
+  const micListeners = new Set<(level: number) => void>();
+  const mic = {
+    subscribe(listener: (level: number) => void) {
+      micListeners.add(listener);
+      return () => {
+        micListeners.delete(listener);
+      };
     },
+  };
+  const desktopListeners = new Set<(level: number) => void>();
+  const desktop = {
+    subscribe(listener: (level: number) => void) {
+      desktopListeners.add(listener);
+      return () => {
+        desktopListeners.delete(listener);
+      };
+    },
+  };
+  const mode = createFoxMode({
+    mic,
     fox,
     settings: serverSettings,
     clock: () => sim.now,
@@ -250,9 +317,66 @@ const build = (
     queue,
     mode,
     fox,
+    timetable: { getNext: () => options.slot ?? null },
     settings: serverSettings,
     clock: () => sim.now,
     random: seeded(11),
+    log: (line) => logs.push(line),
+  });
+  const shout = createFoxShout({
+    mic,
+    queue,
+    mode,
+    fox,
+    settings: serverSettings,
+    clock: () => sim.now,
+    random: seeded(3),
+    log: (line) => logs.push(line),
+  });
+  const tunnel = createFoxTunnel({
+    queue,
+    mode,
+    settings: serverSettings,
+    clock: () => sim.now,
+    schedule,
+    random: seeded(9),
+    log: (line) => logs.push(line),
+  });
+  const broadcastListeners = new Set<(broadcast: Broadcast) => void>();
+  const broadcast = {
+    subscribe(listener: (broadcast: Broadcast) => void) {
+      broadcastListeners.add(listener);
+      return () => {
+        broadcastListeners.delete(listener);
+      };
+    },
+  };
+  const hours = createFoxHours({
+    broadcast,
+    queue,
+    mode,
+    settings: serverSettings,
+    clock: () => sim.now,
+    random: seeded(17),
+    log: (line) => logs.push(line),
+  });
+  const startle = createFoxStartle({
+    desktop,
+    queue,
+    mode,
+    fox,
+    settings: serverSettings,
+    clock: () => sim.now,
+    log: (line) => logs.push(line),
+  });
+  const balance = createFoxBalance({
+    mic,
+    desktop,
+    queue,
+    mode,
+    settings: serverSettings,
+    clock: () => sim.now,
+    random: seeded(13),
     log: (line) => logs.push(line),
   });
   const thanks = createFoxThanks({
@@ -272,7 +396,16 @@ const build = (
   queue.start();
   foxChat.start();
   jab.start();
+  shout.start();
+  tunnel.start();
+  balance.start();
+  startle.start();
+  hours.start();
   thanks.start();
+  // OBS dit où en est la diffusion.
+  const updateBroadcast = (value: Broadcast) => {
+    for (const listener of broadcastListeners) listener(value);
+  };
   // Un évènement du tchat (sub, resub, sub offert, cheer), comme ComfyJS le donne.
   const live = async (event: LiveEvent) => {
     emit({ kind: "live", event });
@@ -283,12 +416,17 @@ const build = (
     await flush();
   };
   // Alexis parle `ms` : un level fort toutes les 50 ms, comme le flux du micro d'OBS.
-  const talk = async (ms: number) => {
+  // `voice` et `game` : le level du mic et celui du son du PC (null : rien), toutes les 50 ms comme le flux d'OBS.
+  const sound = async (ms: number, { voice, game }: { voice: number | null; game: number | null }) => {
     for (let spent = 0; spent < ms; spent += 50) {
-      micListener(-15);
+      if (voice !== null) for (const listener of micListeners) listener(voice);
+      if (game !== null) for (const listener of desktopListeners) listener(game);
       await run(50);
     }
   };
+  const talk = (ms: number) => sound(ms, { voice: -15, game: null });
+  // Alexis crie `ms` : un level au-dessus du seuil de cri (-5 dB), comme le flux du micro d'OBS.
+  const cry = (ms: number) => sound(ms, { voice: -3, game: null });
   // Les évènements depuis l'indice `since`, avec leur date relative au démarrage ; les règles et le nombre de pages sont laissés.
   const timeline = (since = 0) =>
     events
@@ -333,8 +471,16 @@ const build = (
     foxChat,
     jab,
     thanks,
+    shout,
+    tunnel,
+    balance,
+    startle,
+    hours,
+    updateBroadcast,
     run,
     talk,
+    cry,
+    sound,
     receive,
     live,
     wave,
@@ -541,7 +687,7 @@ describe("G : il fait coucou au premier message de chaque viewer", () => {
 
   it("ne compte pas un message ignoré comme le premier message lu", async () => {
     const harness = build();
-    await harness.receive(message("1", "!lurk", { viewerId: "alice", isCommand: true }));
+    await harness.receive(message("1", "!discord", { viewerId: "alice", isCommand: true }));
     await harness.run(2000);
     expect(harness.timeline()).toEqual([]);
     await harness.receive(message("2", "Bonjour", { viewerId: "alice" }));
@@ -696,7 +842,7 @@ describe("H : il revient en sautant", () => {
     const harness = build();
     await harness.run(AWAY_AT);
     const since = harness.events.length;
-    await harness.receive(message("1", "!lurk", { isCommand: true }));
+    await harness.receive(message("1", "!discord", { isCommand: true }));
     await harness.receive(message("2", "va voir https://exemple.com"));
     await harness.receive(message("3", "t'es un c0nn4rd"));
     await harness.run(5000);
@@ -852,8 +998,7 @@ const toScaleAt = (harness: ReturnType<typeof build>, at: number): number => {
   let mirror = MIRROR_START;
   for (const { at: when, event } of harness.events) {
     const time = when - harness.start;
-    if (event.kind === "mode" && time <= at)
-      mirror = toNextMirror(mirror, event.mode.kind === "address", time);
+    if (event.kind === "mode" && time <= at) mirror = toNextMirror(mirror, isFacingFenysk(event.mode), time);
   }
   return toMirrorScale(mirror, at);
 };
@@ -944,7 +1089,7 @@ describe("La relance : caché, il revient piquer Fenysk après 3 min de silence 
   it("attend 3 min de plus quand le tchat dit quelque chose, même un message que le filtre ignore", async () => {
     const harness = build({ jabs: JABS });
     await harness.run(300_000);
-    await harness.receive(message("1", "!lurk", { isCommand: true }));
+    await harness.receive(message("1", "!discord", { isCommand: true }));
     await harness.run(JAB_AT + 100_000 - 300_000);
     expect(jabLines(harness)).toEqual([]);
     await harness.run(300_000 + 180_000 - (JAB_AT + 100_000) - 100);
@@ -1273,5 +1418,845 @@ describe("Les remerciements, de bout en bout", () => {
     const since = harness.events.length;
     await harness.run(185_000);
     expect(harness.timeline(since).map(({ label: name }) => name)).toContain("presence:away");
+  });
+});
+
+const SHOUTS = ["Doucement ! J'ai des oreilles de renard, moi."];
+
+const shoutLines = (harness: ReturnType<typeof build>): string[] =>
+  harness.logs.filter((line) => line.startsWith("Renard : Fenysk crie"));
+
+describe("K : il sursaute quand Fenysk crie", () => {
+  it("se tourne vers Fenysk, la tête choquée, pendant 1 s, sans rien dire", async () => {
+    const harness = build({ shouts: SHOUTS });
+    await harness.run(10_000);
+    const since = harness.events.length;
+    const at = harness.sim.now - harness.start;
+    await harness.cry(500);
+    await harness.run(3000);
+    expect(harness.timeline(since)).toEqual([
+      { at, label: "mode:flinch" },
+      { at: at + 1000, label: "mode:idle" },
+    ]);
+    expect(harness.speeches()).toHaveLength(0);
+    expect(shoutLines(harness)).toEqual([]);
+  });
+
+  it("montre left-large-rest pendant tout le sursaut, retourné vers la droite", async () => {
+    const harness = build({ shouts: SHOUTS });
+    await harness.run(10_000);
+    const at = harness.sim.now - harness.start;
+    await harness.cry(300);
+    await harness.run(3000);
+    const images = harness.toImages(harness.start + at + 200, harness.start + at + 990);
+    expect(new Set(images)).toEqual(new Set(["left-large-rest"]));
+    expect(toScaleAt(harness, at)).toBe(1);
+    expect(toScaleAt(harness, at + 75)).toBeCloseTo(0, 1);
+    expect(toScaleAt(harness, at + 400)).toBe(-1);
+    expect(toScaleAt(harness, at + 1000 + 150)).toBe(1);
+  });
+
+  it("sursaute à chaque cri, à plus d'1 s d'écart", async () => {
+    const harness = build({ shouts: SHOUTS });
+    await harness.run(10_000);
+    const since = harness.events.length;
+    await harness.cry(200);
+    await harness.run(1500);
+    await harness.cry(200);
+    await harness.run(3000);
+    const flinches = harness.timeline(since).filter(({ label: name }) => name === "mode:flinch");
+    expect(flinches).toHaveLength(2);
+  });
+
+  it("ne sursaute qu'une fois pour deux cris à moins d'1 s d'écart", async () => {
+    const harness = build({ shouts: SHOUTS });
+    await harness.run(10_000);
+    const since = harness.events.length;
+    await harness.cry(200);
+    await harness.run(700);
+    await harness.cry(200);
+    await harness.run(3000);
+    expect(harness.timeline(since).filter(({ label: name }) => name === "mode:flinch")).toHaveLength(1);
+  });
+
+  it("ne bouge pas pour une voix forte sous le seuil de cri", async () => {
+    const harness = build({ shouts: SHOUTS });
+    await harness.run(10_000);
+    const since = harness.events.length;
+    await harness.talk(2000);
+    expect(harness.timeline(since).map(({ label: name }) => name)).not.toContain("mode:flinch");
+  });
+
+  it("ne revient pas et ne compte pas quand il est caché : trois cris de suite ne disent rien", async () => {
+    const harness = build({ shouts: SHOUTS });
+    await harness.run(AWAY_AT + 1000);
+    const since = harness.events.length;
+    for (let cries = 0; cries < 3; cries += 1) {
+      await harness.cry(200);
+      await harness.run(5000);
+    }
+    const names = harness.timeline(since).map(({ label: name }) => name);
+    expect(names).not.toContain("mode:flinch");
+    expect(names).not.toContain("presence:returning");
+    expect(harness.speeches()).toHaveLength(0);
+    expect(shoutLines(harness)).toEqual([]);
+  });
+
+  it("dit sa phrase tournée vers Fenysk au troisième cri en 2 min, 1 s après son silence", async () => {
+    const harness = build({ shouts: SHOUTS });
+    await harness.run(10_000);
+    await harness.cry(200);
+    await harness.run(20_000);
+    await harness.cry(200);
+    await harness.run(20_000);
+    expect(harness.speeches()).toHaveLength(0);
+    const since = harness.events.length;
+    await harness.cry(200);
+    const lastLoud = harness.sim.now - 50;
+    await harness.run(6000);
+    expect(shoutLines(harness)).toEqual([`Renard : Fenysk crie, il proteste : « ${SHOUTS[0]} »`]);
+    expect(harness.synthesized).toEqual([SHOUTS[0]]);
+    const speech = harness.speeches()[0];
+    expect((speech?.at ?? 0) - lastLoud).toBeGreaterThanOrEqual(1000);
+    expect((speech?.at ?? 0) - lastLoud).toBeLessThanOrEqual(1500);
+    const names = harness.timeline(since).map(({ label: name }) => name);
+    expect(names).toContain("mode:address");
+    expect(names.at(-1)).toBe("mode:idle");
+  });
+
+  it("dit sa phrase quand un cri dure plus de 3 s, après la fin du cri", async () => {
+    const harness = build({ shouts: SHOUTS });
+    await harness.run(10_000);
+    await harness.cry(4000);
+    const lastLoud = harness.sim.now - 50;
+    expect(harness.speeches()).toHaveLength(0);
+    await harness.run(4000);
+    expect(harness.speeches()).toHaveLength(1);
+    expect((harness.speeches()[0]?.at ?? 0) - lastLoud).toBeGreaterThanOrEqual(1000);
+  });
+
+  it("ne dit rien pour deux cris, ni pour trois cris séparés de plus de 2 min", async () => {
+    const harness = build({ shouts: SHOUTS });
+    await harness.run(10_000);
+    await harness.cry(200);
+    await harness.run(60_000);
+    await harness.cry(200);
+    await harness.run(60_000);
+    // Le premier cri a plus de 2 min quand le troisième arrive : il n'en reste que deux dans la période.
+    await harness.cry(200);
+    await harness.run(10_000);
+    expect(shoutLines(harness)).toEqual([]);
+    expect(harness.speeches()).toHaveLength(0);
+  });
+
+  it("n'est pas coupée quand Fenysk reparle plus d'1 s : elle va au bout", async () => {
+    const harness = build({ shouts: SHOUTS, seconds: 6 });
+    await harness.run(10_000);
+    await harness.cry(4000);
+    await harness.run(1500);
+    expect(harness.speeches()).toHaveLength(1);
+    const since = harness.events.length;
+    await harness.talk(3000);
+    expect(harness.events.slice(since).filter(({ event }) => event.kind === "stop")).toEqual([]);
+    expect(harness.speeches()).toHaveLength(1);
+  });
+
+  it("passe devant un message du tchat qui attendait", async () => {
+    const harness = build({ shouts: SHOUTS });
+    await harness.wave("alice");
+    await harness.cry(4000);
+    await harness.receive(message("2", "Bonjour tout le monde", { viewerId: "alice" }));
+    const before = harness.synthesized.length;
+    await harness.run(8000);
+    expect(harness.synthesized.slice(before, before + 2)).toEqual([SHOUTS[0], "Bonjour tout le monde"]);
+  });
+
+  it("au plus une phrase de cri toutes les 10 min", async () => {
+    const harness = build({ shouts: SHOUTS, overrides: { foxAwayAfter: 3_600_000 } });
+    await harness.run(10_000);
+    await harness.cry(4000);
+    await harness.run(20_000);
+    await harness.cry(4000);
+    await harness.run(20_000);
+    expect(shoutLines(harness)).toHaveLength(1);
+    await harness.run(600_000);
+    await harness.cry(4000);
+    expect(shoutLines(harness)).toHaveLength(2);
+  });
+
+  it("n'écrase pas le retournement vers Fenysk d'une phrase : le contrôleur ne montre rien d'autre par-dessus", async () => {
+    const harness = build();
+    const intro = harness.mode.introduce(ADDRESS_MODE);
+    await harness.run(300);
+    expect(harness.mode.flash(FLINCH_MODE)).toBe(0);
+    intro.cancel();
+    expect(harness.mode.flash(FLINCH_MODE)).toBe(1000);
+  });
+
+  it("ne montre pas de sursaut tant qu'il est parti, et n'en montre plus après l'arrêt du contrôleur", async () => {
+    const harness = build();
+    await harness.run(AWAY_AT + 1000);
+    expect(harness.mode.flash(FLINCH_MODE)).toBe(0);
+    harness.mode.wake();
+    await harness.run(1000);
+    const since = harness.events.length;
+    expect(harness.mode.flash(FLINCH_MODE)).toBe(1000);
+    harness.mode.stop();
+    await harness.run(2000);
+    expect(harness.timeline(since).map(({ label: name }) => name)).toEqual(["mode:flinch"]);
+  });
+
+  it("sursaute de nouveau quand un cri arrive pendant un sursaut : la fin repart", async () => {
+    const harness = build();
+    await harness.run(10_000);
+    expect(harness.mode.flash(FLINCH_MODE)).toBe(1000);
+    await harness.run(600);
+    expect(harness.mode.flash(FLINCH_MODE)).toBe(1000);
+    const since = harness.events.length;
+    await harness.run(900);
+    expect(harness.timeline(since)).toEqual([]);
+    await harness.run(200);
+    expect(harness.timeline(since).map(({ label: name }) => name)).toEqual(["mode:idle"]);
+  });
+
+  it("sursaute sans rien dire quand la liste des phrases de cri est vide", async () => {
+    const harness = build({ shouts: [] });
+    await harness.run(10_000);
+    const since = harness.events.length;
+    await harness.cry(4000);
+    await harness.run(5000);
+    expect(harness.timeline(since).map(({ label: name }) => name)).toContain("mode:flinch");
+    expect(harness.speeches()).toHaveLength(0);
+  });
+});
+
+const TO_FENYSK = ["Tu respires, des fois ?"];
+const TO_CHAT = ["Je crois que Fenysk nous tunnel."];
+
+const tunnelLines = (harness: ReturnType<typeof build>): string[] =>
+  harness.logs.filter((line) => line.startsWith("Renard : Fenysk parle sans s'arrêter"));
+
+describe("L : Fenysk parle trop longtemps", () => {
+  it("bâille 2 s (shut-yawn-cover) quand Fenysk parle depuis 3 min, sans partir, puis attend son silence pour parler", async () => {
+    const harness = build({ tunnelToFenysk: TO_FENYSK });
+    await harness.talk(179_000);
+    expect(harness.timeline().map(({ label: name }) => name)).not.toContain("mode:yawn");
+    await harness.talk(4000);
+    const timeline = harness.timeline();
+    const yawn = timeline.find(({ label: name }) => name === "mode:yawn");
+    expect(yawn).toBeDefined();
+    expect(yawn?.at).toBeGreaterThanOrEqual(180_000);
+    expect(yawn?.at).toBeLessThan(181_000);
+    const after = timeline.find(({ at }) => at > (yawn?.at ?? 0));
+    expect(after).toEqual({ at: (yawn?.at ?? 0) + 2000, label: "mode:listening" });
+    const images = harness.toImages(
+      harness.start + (yawn?.at ?? 0) + 100,
+      harness.start + (yawn?.at ?? 0) + 1900,
+    );
+    expect(new Set(images)).toEqual(new Set(["shut-yawn-cover"]));
+    expect(timeline.map(({ label: name }) => name)).not.toContain("presence:leaving");
+    expect(harness.speeches()).toHaveLength(0);
+    expect(tunnelLines(harness)).toHaveLength(1);
+  });
+
+  it("dit sa phrase tournée vers Fenysk 1 s après son silence", async () => {
+    const harness = build({ tunnelToFenysk: TO_FENYSK });
+    await harness.talk(182_000);
+    const since = harness.events.length;
+    const lastLoud = harness.sim.now - 50;
+    await harness.run(5000);
+    const speech = harness.speeches()[0];
+    expect(harness.synthesized).toEqual(TO_FENYSK);
+    expect((speech?.at ?? 0) - lastLoud).toBeGreaterThanOrEqual(1000);
+    expect((speech?.at ?? 0) - lastLoud).toBeLessThanOrEqual(1500);
+    expect(harness.timeline(since).map(({ label: name }) => name)).toContain("mode:address");
+  });
+
+  it("dit une phrase du tchat vers la gauche, sans se retourner", async () => {
+    const harness = build({ tunnelToChat: TO_CHAT });
+    await harness.talk(182_000);
+    const since = harness.events.length;
+    await harness.run(5000);
+    expect(harness.synthesized).toEqual(["Je crois que Fénisque nous tunnel."]);
+    expect(harness.speeches()).toHaveLength(1);
+    expect(harness.timeline(since).map(({ label: name }) => name)).not.toContain("mode:address");
+  });
+
+  it("n'est pas coupée quand Fenysk reparle plus d'1 s : elle va au bout", async () => {
+    const harness = build({ tunnelToFenysk: TO_FENYSK, seconds: 6 });
+    await harness.talk(182_000);
+    await harness.run(1500);
+    expect(harness.speeches()).toHaveLength(1);
+    const since = harness.events.length;
+    await harness.talk(3000);
+    expect(harness.events.slice(since).filter(({ event }) => event.kind === "stop")).toEqual([]);
+  });
+
+  it("ne le déclenche pas quand Fenysk se tait plus de 5 s au milieu : les 3 min repartent de zéro", async () => {
+    const harness = build({ tunnelToFenysk: TO_FENYSK });
+    await harness.talk(100_000);
+    await harness.run(5100);
+    await harness.talk(100_000);
+    expect(tunnelLines(harness)).toEqual([]);
+    expect(harness.timeline().map(({ label: name }) => name)).not.toContain("mode:yawn");
+  });
+
+  it("continue après une pause de 4 s : 3 min de parole en deux morceaux comptent", async () => {
+    const harness = build({ tunnelToFenysk: TO_FENYSK });
+    await harness.talk(100_000);
+    await harness.run(4000);
+    await harness.talk(85_000);
+    expect(tunnelLines(harness)).toHaveLength(1);
+  });
+
+  it("revient en sautant, sans bâiller, s'il était parti, pour dire sa phrase", async () => {
+    const harness = build({ tunnelToFenysk: TO_FENYSK });
+    await harness.run(AWAY_AT + 6000);
+    const since = harness.events.length;
+    await harness.talk(182_000);
+    const names = harness.timeline(since).map(({ label: name }) => name);
+    expect(names).toContain("presence:returning");
+    expect(names).not.toContain("mode:yawn");
+    await harness.run(6000);
+    expect(harness.speeches()).toHaveLength(1);
+    expect(harness.synthesized).toEqual(TO_FENYSK);
+  });
+
+  it("ne le déclenche pas deux fois avant 10 min de parole, et repart de zéro après", async () => {
+    const harness = build({ tunnelToFenysk: TO_FENYSK, tunnelToChat: TO_CHAT, seconds: 1 });
+    await harness.talk(770_000);
+    expect(tunnelLines(harness)).toHaveLength(1);
+    await harness.talk(20_000);
+    expect(tunnelLines(harness)).toHaveLength(2);
+  });
+
+  it("dit chaque phrase des deux listes avant d'en redire une", async () => {
+    const harness = build({ tunnelToFenysk: ["A", "B"], tunnelToChat: ["C"] });
+    await harness.talk(3 * 600_000 + 10_000);
+    const phrases = tunnelLines(harness).map((line) => /« (.+) »/.exec(line)?.[1]);
+    expect(phrases.slice(0, 3).sort()).toEqual(["A", "B", "C"]);
+  });
+
+  it("ne bâille ni ne parle quand les deux listes sont vides", async () => {
+    const harness = build();
+    await harness.talk(200_000);
+    expect(harness.timeline().map(({ label: name }) => name)).not.toContain("mode:yawn");
+    expect(tunnelLines(harness)).toEqual([]);
+  });
+});
+
+const ALERTS = ["Fenysk, le jeu parle plus fort que toi !"];
+
+const balanceLines = (harness: ReturnType<typeof build>): string[] =>
+  harness.logs.filter((line) => line.startsWith("Renard : le son du PC couvre"));
+
+describe("N : la balance du son", () => {
+  it("alerte Fenysk, tourné vers lui, quand le jeu couvre sa voix pendant 10 s de parole, 1 s après son silence", async () => {
+    const harness = build({ balanceAlerts: ALERTS });
+    await harness.sound(9000, { voice: -15, game: -15 });
+    expect(balanceLines(harness)).toEqual([]);
+    await harness.sound(2000, { voice: -15, game: -15 });
+    expect(balanceLines(harness)).toHaveLength(1);
+    expect(harness.speeches()).toHaveLength(0);
+    const since = harness.events.length;
+    const lastLoud = harness.sim.now - 50;
+    await harness.run(5000);
+    expect(harness.synthesized).toEqual(["Fénisque, le jeu parle plus fort que toi !"]);
+    const speech = harness.speeches()[0];
+    expect((speech?.at ?? 0) - lastLoud).toBeGreaterThanOrEqual(1000);
+    expect((speech?.at ?? 0) - lastLoud).toBeLessThanOrEqual(1500);
+    expect(harness.timeline(since).map(({ label: name }) => name)).toContain("mode:address");
+  });
+
+  it("alerte aussi quand le jeu est plus fort que la voix", async () => {
+    const harness = build({ balanceAlerts: ALERTS });
+    await harness.sound(11_000, { voice: -20, game: -8 });
+    expect(balanceLines(harness)).toHaveLength(1);
+  });
+
+  it("n'alerte pas tant que la voix de Fenysk reste devant le son du PC", async () => {
+    const harness = build({ balanceAlerts: ALERTS });
+    await harness.sound(60_000, { voice: -15, game: -30 });
+    expect(balanceLines(harness)).toEqual([]);
+  });
+
+  it("n'alerte pas quand Fenysk se tait : un jeu fort est normal", async () => {
+    const harness = build({ balanceAlerts: ALERTS });
+    await harness.sound(60_000, { voice: null, game: -5 });
+    expect(balanceLines(harness)).toEqual([]);
+  });
+
+  it("cumule la parole : 6 s de voix, un silence, puis 5 s de voix sous un jeu fort", async () => {
+    const harness = build({ balanceAlerts: ALERTS });
+    await harness.sound(6000, { voice: -15, game: -15 });
+    await harness.sound(3000, { voice: null, game: -5 });
+    expect(balanceLines(harness)).toEqual([]);
+    await harness.sound(5000, { voice: -15, game: -15 });
+    expect(balanceLines(harness)).toHaveLength(1);
+  });
+
+  it("revient en sautant s'il était parti, pour l'alerte", async () => {
+    const harness = build({ balanceAlerts: ALERTS });
+    await harness.run(AWAY_AT + 6000);
+    const since = harness.events.length;
+    await harness.sound(11_000, { voice: -15, game: -15 });
+    expect(harness.timeline(since).map(({ label: name }) => name)).toContain("presence:returning");
+    await harness.run(6000);
+    expect(harness.synthesized).toEqual(["Fénisque, le jeu parle plus fort que toi !"]);
+  });
+
+  it("n'est pas coupée quand Fenysk reparle plus d'1 s : elle va au bout", async () => {
+    const harness = build({ balanceAlerts: ALERTS, seconds: 6 });
+    await harness.sound(11_000, { voice: -15, game: -15 });
+    await harness.run(1500);
+    expect(harness.speeches()).toHaveLength(1);
+    const since = harness.events.length;
+    await harness.sound(3000, { voice: -15, game: -30 });
+    expect(harness.events.slice(since).filter(({ event }) => event.kind === "stop")).toEqual([]);
+  });
+
+  it("au plus une alerte toutes les 5 min", async () => {
+    const harness = build({ balanceAlerts: ALERTS });
+    await harness.sound(290_000, { voice: -15, game: -15 });
+    expect(balanceLines(harness)).toHaveLength(1);
+    await harness.sound(30_000, { voice: -15, game: -15 });
+    expect(balanceLines(harness)).toHaveLength(2);
+  });
+
+  it("ne dit rien quand la liste des alertes est vide", async () => {
+    const harness = build({ balanceAlerts: [] });
+    await harness.sound(60_000, { voice: -15, game: -5 });
+    expect(balanceLines(harness)).toEqual([]);
+    expect(harness.speeches()).toHaveLength(0);
+  });
+});
+
+// L'heure du PC dans ces tests : un soir d'octobre, à l'heure locale.
+const at = (hours: number, minutes = 0, day = 14): number => new Date(2026, 9, day, hours, minutes).getTime();
+
+describe("M : il tient l'heure du live", () => {
+  it("revient pour une heure pleine de live, tourné vers le tchat, même parti", async () => {
+    const harness = build({
+      startAt: at(21),
+      hours: { foxHourPhrases: ["Ding ! {heures} de live."] },
+    });
+    harness.updateBroadcast({ isLive: true, duration: 3_300_000 });
+    await harness.run(299_000);
+    expect(harness.speeches()).toHaveLength(0);
+    const since = harness.events.length;
+    await harness.run(3000);
+    const names = harness.timeline(since).map(({ label: name }) => name);
+    expect(names).toContain("presence:returning");
+    expect(names).not.toContain("mode:address");
+    await harness.run(5000);
+    expect(harness.synthesized).toEqual(["Ding ! 1 heure de live."]);
+    expect(harness.speeches()).toHaveLength(1);
+  });
+
+  it("ne compte que pendant la diffusion : OBS ne la lance pas, il ne dit rien", async () => {
+    const harness = build({
+      startAt: at(21),
+      hours: { foxHourPhrases: ["Ding ! {heures} de live."], foxEndTime: "21:05", foxEndPhrases: ["Fin."] },
+    });
+    harness.updateBroadcast({ isLive: false, duration: 0 });
+    await harness.run(600_000);
+    expect(harness.speeches()).toHaveLength(0);
+  });
+
+  it("attend le silence de Fenysk, et sa voix ne coupe pas l'annonce", async () => {
+    const harness = build({
+      startAt: at(21),
+      seconds: 4,
+      hours: { foxHourPhrases: ["Ding ! {heures} de live."] },
+    });
+    harness.updateBroadcast({ isLive: true, duration: 3_595_000 });
+    await harness.talk(10_000);
+    expect(harness.speeches()).toHaveLength(0);
+    const lastLoud = harness.sim.now - 50;
+    await harness.run(1500);
+    const speech = harness.speeches()[0];
+    expect((speech?.at ?? 0) - lastLoud).toBeGreaterThanOrEqual(1000);
+    const since = harness.events.length;
+    await harness.talk(3000);
+    expect(harness.events.slice(since).filter(({ event }) => event.kind === "stop")).toEqual([]);
+  });
+
+  it("déroule la fin prévue : l'avertissement, la fin, deux rappels, le coucher, puis plus rien", async () => {
+    const harness = build({
+      startAt: at(23, 40),
+      hours: {
+        foxEndTime: "00:00",
+        foxEndWarning: 600_000,
+        foxEndWarningPhrases: ["Plus que {minutes} minutes."],
+        foxEndPhrases: ["{fin}. Le live est fini."],
+        foxOvertimePhrases: ["Il est {maintenant}, {retard} de rab."],
+        foxBedtimePhrases: ["Je vais me coucher."],
+      },
+    });
+    harness.updateBroadcast({ isLive: true, duration: 0 });
+    await harness.run(51 * 60_000);
+    expect(harness.synthesized).toEqual([
+      "Plus que 10 minutes.",
+      "Minuit. Le live est fini.",
+      "Il est minuit 10, 10 minutes de rab.",
+      "Il est minuit 20, 20 minutes de rab.",
+      "Je vais me coucher.",
+    ]);
+    const timeline = harness.timeline();
+    const names = timeline.map(({ label: name }) => name);
+    expect(names.filter((name) => name === "mode:address")).toHaveLength(5);
+    expect(names.filter((name) => name === "presence:returning").length).toBeGreaterThanOrEqual(4);
+    // Après le coucher : il bâille, glisse hors de la source, puis est parti, et ne rappelle plus rien.
+    const bedtime = timeline.findLast(({ label: name }) => name === "speech");
+    const afterwards = timeline
+      .filter(({ at: when }) => when > (bedtime?.at ?? 0))
+      .map(({ label: name }) => name);
+    expect(afterwards).toContain("presence:leaving");
+    expect(afterwards.at(-1)).toBe("presence:away");
+    const speechCount = harness.speeches().length;
+    await harness.run(40 * 60_000);
+    expect(harness.speeches()).toHaveLength(speechCount);
+  });
+
+  it("revient quand un message du tchat arrive, après son coucher, comme d'habitude", async () => {
+    const harness = build({
+      startAt: at(23, 40),
+      hours: {
+        foxEndTime: "00:00",
+        foxEndWarning: 600_000,
+        foxBedtimePhrases: ["Je vais me coucher."],
+      },
+    });
+    harness.updateBroadcast({ isLive: true, duration: 0 });
+    await harness.run(55 * 60_000);
+    expect(harness.synthesized).toEqual(["Je vais me coucher."]);
+    const since = harness.events.length;
+    await harness.receive(message("1", "Bonjour à tous", { viewerId: "alice" }));
+    await harness.run(8000);
+    expect(harness.timeline(since).map(({ label: name }) => name)).toContain("presence:returning");
+    expect(harness.synthesized.at(-1)).toBe("Bonjour à tous");
+  });
+
+  it("ne rejoue pas la fin quand le serveur démarre en plein dépassement", async () => {
+    const harness = build({
+      startAt: at(0, 15, 15),
+      hours: {
+        foxEndTime: "00:00",
+        foxEndPhrases: ["{fin}. Le live est fini."],
+        foxOvertimePhrases: ["Il est {maintenant}."],
+        foxBedtimePhrases: ["Je vais me coucher."],
+      },
+    });
+    harness.updateBroadcast({ isLive: true, duration: 3 * 3_600_000 + 15 * 60_000 });
+    await harness.run(4 * 60_000);
+    expect(harness.speeches()).toHaveLength(0);
+    await harness.run(2 * 60_000);
+    expect(harness.synthesized).toEqual(["Il est minuit 20."]);
+  });
+
+  it("bâille au repos, sans partir, 5 à 10 min après 23 h 30 sans fin prévue, quand il est là", async () => {
+    const harness = build({
+      startAt: at(23, 25),
+      overrides: { foxAwayAfter: 3_600_000 },
+      hours: { foxLateAfter: "23:30" },
+    });
+    harness.updateBroadcast({ isLive: true, duration: 0 });
+    await harness.run(25 * 60_000);
+    const timeline = harness.timeline();
+    const yawns = timeline.filter(({ label: name }) => name === "mode:yawn");
+    expect(yawns.length).toBeGreaterThanOrEqual(2);
+    expect(yawns.length).toBeLessThanOrEqual(4);
+    // 23 h 30 est à 5 min du départ : le premier bâillement tombe entre 23 h 35 et 23 h 40.
+    expect(yawns[0]?.at).toBeGreaterThanOrEqual(10 * 60_000);
+    expect(yawns[0]?.at).toBeLessThanOrEqual(15 * 60_000);
+    for (const { at: when } of yawns) {
+      expect(
+        timeline.find(({ at: next, label: name }) => next === when + 2000 && name !== "mode:yawn"),
+      ).toBeDefined();
+    }
+    for (let index = 1; index < yawns.length; index += 1) {
+      const gap = (yawns[index]?.at ?? 0) - (yawns[index - 1]?.at ?? 0);
+      expect(gap).toBeGreaterThanOrEqual(300_000);
+      expect(gap).toBeLessThanOrEqual(600_000 + 100);
+    }
+    const names = timeline.map(({ label: name }) => name);
+    expect(names).not.toContain("presence:leaving");
+    expect(harness.speeches()).toHaveLength(0);
+  });
+
+  it("ne bâille pas avant l'heure, ni hors diffusion", async () => {
+    const harness = build({
+      startAt: at(22),
+      overrides: { foxAwayAfter: 14_400_000 },
+      hours: { foxLateAfter: "23:30" },
+    });
+    harness.updateBroadcast({ isLive: true, duration: 0 });
+    await harness.run(80 * 60_000);
+    expect(harness.timeline().map(({ label: name }) => name)).not.toContain("mode:yawn");
+    harness.updateBroadcast({ isLive: false, duration: 0 });
+    await harness.run(60 * 60_000);
+    expect(harness.timeline().map(({ label: name }) => name)).not.toContain("mode:yawn");
+  });
+
+  it("ne revient pas pour un bâillement : parti, il reste caché", async () => {
+    const harness = build({ startAt: at(23, 25), hours: { foxLateAfter: "23:30" } });
+    harness.updateBroadcast({ isLive: true, duration: 0 });
+    await harness.run(AWAY_AT + 5000);
+    const since = harness.events.length;
+    await harness.run(30 * 60_000);
+    expect(harness.timeline(since)).toEqual([]);
+  });
+});
+
+const REMINDER = "Venez dessiner sur LivePlace !";
+
+describe("O : les rappels dans les silences", () => {
+  it("dit un rappel au silence qui suit la pique, tourné vers le tchat, le renard étant revenu en sautant", async () => {
+    const harness = build({ jabs: ["Pique A"], reminders: [REMINDER], seconds: 2 });
+    await harness.run(JAB_AT + 10_000);
+    expect(harness.synthesized).toEqual(["Pique A"]);
+    const since = harness.events.length;
+    await harness.run(600_000);
+    expect(harness.synthesized).toEqual(["Pique A", REMINDER]);
+    const names = harness.timeline(since).map(({ label: name }) => name);
+    expect(names).toContain("presence:returning");
+    expect(names).not.toContain("mode:address");
+    expect(toScaleAt(harness, harness.sim.now - harness.start)).toBe(1);
+    expect(harness.logs.filter((line) => line.startsWith("Renard : il revient faire un rappel"))).toEqual([
+      `Renard : il revient faire un rappel au tchat : « ${REMINDER} »`,
+    ]);
+  });
+
+  it("repique ensuite, puis rappelle, à tour de rôle, toutes les 10 min", async () => {
+    const harness = build({ jabs: ["Pique A", "Pique B"], reminders: [REMINDER], seconds: 1 });
+    await harness.run(JAB_AT + 3 * 600_000 + 10_000);
+    const [first, second, third, fourth] = harness.synthesized;
+    expect([second, fourth]).toEqual([REMINDER, REMINDER]);
+    expect(new Set([first, third])).toEqual(new Set(["Pique A", "Pique B"]));
+  });
+
+  it("s'arrête quand Fenysk parle plus d'1 s, comme une pique, et ne reprend pas", async () => {
+    const harness = build({ jabs: [], reminders: [REMINDER], seconds: 6 });
+    await harness.run(JAB_AT + 1500);
+    expect(harness.speeches()).toHaveLength(1);
+    const since = harness.events.length;
+    await harness.talk(2000);
+    expect(harness.events.slice(since).filter(({ event }) => event.kind === "stop")).toHaveLength(1);
+    await harness.run(60_000);
+    expect(harness.speeches()).toHaveLength(1);
+  });
+
+  it("dit le prochain live d'Alexis, avec son jour, son heure et son titre, quand il n'y a que lui", async () => {
+    const harness = build({
+      startAt: new Date(2026, 9, 14, 21, 0).getTime(),
+      jabs: [],
+      reminders: [],
+      slot: { start: new Date(2026, 9, 16, 20, 0).getTime(), title: "Soirée jeux" },
+    });
+    await harness.run(JAB_AT + 5000);
+    expect(harness.synthesized).toEqual([
+      "Prochain live : vendredi à 20 heures. Au programme : Soirée jeux.",
+    ]);
+  });
+
+  it("mêle le prochain live aux rappels de la liste, sans répéter avant d'avoir tout dit", async () => {
+    const harness = build({
+      startAt: new Date(2026, 9, 14, 21, 0).getTime(),
+      jabs: [],
+      reminders: [REMINDER],
+      slot: { start: new Date(2026, 9, 17, 20, 30).getTime(), title: null },
+    });
+    await harness.run(JAB_AT + 600_000 + 5000);
+    expect(new Set(harness.synthesized)).toEqual(
+      new Set([REMINDER, "Prochain live : samedi à 20 heures 30."]),
+    );
+  });
+
+  it("garde la pique seule, comme avant, sans aucun rappel ni aucun live à venir", async () => {
+    const harness = build({ jabs: ["Pique A", "Pique B"], reminders: [], seconds: 1 });
+    await harness.run(JAB_AT + 600_000 + 5000);
+    expect([...harness.synthesized].sort()).toEqual(["Pique A", "Pique B"]);
+  });
+});
+
+describe("P : il remercie les lurks", () => {
+  const lurk = (id: string, overrides: Partial<RawMessage> = {}, text = "!lurk"): RawMessage =>
+    message(id, text, { nickname: "Alice", viewerId: "alice", isCommand: true, ...overrides });
+
+  it("remercie un !lurk comme un follow : 1 s de sourire, puis la phrase, sans lire la commande", async () => {
+    const harness = build();
+    await harness.run(10_000);
+    const since = harness.events.length;
+    const at = harness.sim.now - harness.start;
+    await harness.receive(lurk("1"));
+    await harness.run(5000);
+    expect(harness.timeline(since).slice(0, 3)).toEqual([
+      { at, label: "mode:reaction:front-smile-rest" },
+      { at: at + 1000, label: "mode:idle" },
+      { at: at + 1000, label: "speech" },
+    ]);
+    expect(harness.synthesized).toEqual(["Merci Alice pour le lurk."]);
+    expect(harness.timeline(since).map(({ label: name }) => name)).not.toContain("mode:address");
+  });
+
+  it("reconnaît !LURK avec un texte derrière, et ne remercie le viewer qu'une fois", async () => {
+    const harness = build();
+    await harness.receive(lurk("1", {}, "!LURK à plus tard"));
+    await harness.run(5000);
+    await harness.receive(lurk("2", {}, "!lurk"));
+    await harness.run(5000);
+    expect(harness.synthesized).toEqual(["Merci Alice pour le lurk."]);
+    await harness.receive(lurk("3", { viewerId: "bob", nickname: "Bob" }));
+    await harness.run(5000);
+    expect(harness.synthesized).toEqual(["Merci Alice pour le lurk.", "Merci Bob pour le lurk."]);
+  });
+
+  it("revient en sautant s'il était parti, sourit, puis remercie", async () => {
+    const harness = build();
+    await harness.run(AWAY_AT + 6000);
+    const since = harness.events.length;
+    await harness.receive(lurk("1"));
+    await harness.run(5000);
+    const names = harness.timeline(since).map(({ label: name }) => name);
+    expect(names.slice(0, 2)).toEqual(["presence:returning", "mode:reaction:front-smile-rest"]);
+    expect(harness.synthesized).toEqual(["Merci Alice pour le lurk."]);
+  });
+
+  it("passe devant un message du tchat qui attendait", async () => {
+    const harness = build();
+    await harness.wave("carol");
+    const before = harness.synthesized.length;
+    await harness.talk(3000);
+    await harness.receive(message("2", "Bonjour tout le monde", { viewerId: "carol" }));
+    await harness.receive(lurk("3"));
+    await harness.run(8000);
+    expect(harness.synthesized.slice(before, before + 2)).toEqual([
+      "Merci Alice pour le lurk.",
+      "Bonjour tout le monde",
+    ]);
+  });
+
+  it("attend le silence de Fenysk, et sa voix ne le coupe pas", async () => {
+    const harness = build({ seconds: 4 });
+    await harness.talk(2000);
+    await harness.receive(lurk("1"));
+    await harness.talk(2000);
+    expect(harness.speeches()).toHaveLength(0);
+    const lastLoud = harness.sim.now - 50;
+    // 1 s de silence, puis 1 s de sourire, puis la phrase.
+    await harness.run(1900);
+    expect(harness.speeches()).toHaveLength(0);
+    await harness.run(600);
+    const speech = harness.speeches()[0];
+    expect((speech?.at ?? 0) - lastLoud).toBeGreaterThanOrEqual(2000);
+    const since = harness.events.length;
+    await harness.talk(3000);
+    expect(harness.events.slice(since).filter(({ event }) => event.kind === "stop")).toEqual([]);
+  });
+
+  it("ne dit pas un pseudo insultant : la phrase générique", async () => {
+    const harness = build();
+    await harness.receive(lurk("1", { nickname: "connard" }));
+    await harness.run(5000);
+    expect(harness.synthesized).toEqual(["Merci pour le lurk."]);
+    const thanksLines = harness.logs.filter(
+      (line) => line.includes("remerciement") || line.includes("dits par"),
+    );
+    expect(thanksLines.join("\n")).not.toContain("connard");
+  });
+
+  it("ne remercie rien, et ne réveille pas le renard parti, quand la case est décochée", async () => {
+    const harness = build({ overrides: { foxShouldThank: false } });
+    await harness.run(AWAY_AT + 6000);
+    const since = harness.events.length;
+    await harness.receive(lurk("1"));
+    await harness.run(5000);
+    expect(harness.timeline(since)).toEqual([]);
+    expect(harness.synthesized).toEqual([]);
+  });
+
+  it("compte pour de l'activité : la relance attend 3 min de plus", async () => {
+    const harness = build({ jabs: JABS });
+    await harness.run(300_000);
+    await harness.receive(lurk("1"));
+    await harness.run(JAB_AT + 100_000 - 300_000);
+    expect(jabLines(harness)).toEqual([]);
+  });
+});
+
+describe("S : il sursaute avec le jeu", () => {
+  // Le jeu est calme, puis explose : -45 dB pendant 150 ms, puis -10 dB.
+  const explode = async (harness: ReturnType<typeof build>) => {
+    await harness.sound(150, { voice: null, game: -45 });
+    await harness.sound(50, { voice: null, game: -10 });
+  };
+
+  it("prend la tête choquée pendant 1 s, tournée vers le tchat (sans miroir), sans rien dire", async () => {
+    const harness = build();
+    await harness.run(10_000);
+    const since = harness.events.length;
+    const at = harness.sim.now - harness.start + 150;
+    await explode(harness);
+    await harness.run(3000);
+    expect(harness.timeline(since)).toEqual([
+      { at, label: "mode:startle" },
+      { at: at + 1000, label: "mode:idle" },
+    ]);
+    const images = harness.toImages(harness.start + at + 200, harness.start + at + 990);
+    expect(new Set(images)).toEqual(new Set(["left-large-rest"]));
+    expect(toScaleAt(harness, at + 400)).toBe(1);
+    expect(harness.speeches()).toHaveLength(0);
+  });
+
+  it("ne sursaute pas pour un son qui monte lentement, ni pour un son déjà fort", async () => {
+    const harness = build();
+    await harness.run(10_000);
+    const since = harness.events.length;
+    for (let step = 0; step < 15; step += 1) await harness.sound(50, { voice: null, game: -40 + 2 * step });
+    await harness.sound(2000, { voice: null, game: -10 });
+    expect(harness.timeline(since).map(({ label: name }) => name)).not.toContain("mode:startle");
+  });
+
+  it("ne sursaute pas caché, et ne revient pas pour un pic du jeu", async () => {
+    const harness = build();
+    await harness.run(AWAY_AT + 5000);
+    const since = harness.events.length;
+    await explode(harness);
+    await harness.run(3000);
+    expect(harness.timeline(since)).toEqual([]);
+  });
+
+  it("ne sursaute pas pendant qu'il parle ou qu'une phrase l'attend", async () => {
+    const harness = build({ seconds: 4 });
+    await harness.receive(message("1", "Salut tout le monde", { viewerId: "alice" }));
+    await harness.run(1500);
+    expect(harness.speeches()).toHaveLength(1);
+    const since = harness.events.length;
+    await explode(harness);
+    expect(harness.timeline(since).map(({ label: name }) => name)).not.toContain("mode:startle");
+  });
+
+  it("sursaute au plus toutes les 30 s", async () => {
+    const harness = build({ overrides: { foxAwayAfter: 3_600_000 } });
+    await harness.run(10_000);
+    const since = harness.events.length;
+    await explode(harness);
+    await harness.run(10_000);
+    await explode(harness);
+    await harness.run(30_000);
+    await explode(harness);
+    await harness.run(3000);
+    const startles = harness.timeline(since).filter(({ label: name }) => name === "mode:startle");
+    expect(startles).toHaveLength(2);
+    expect((startles[1]?.at ?? 0) - (startles[0]?.at ?? 0)).toBeGreaterThanOrEqual(30_000);
+  });
+
+  it("n'écrase pas le retournement vers Fenysk d'une phrase", async () => {
+    const harness = build({ jabs: JABS, seconds: 4 });
+    await harness.run(JAB_AT + 1500);
+    expect(harness.speeches()).toHaveLength(1);
+    const since = harness.events.length;
+    await explode(harness);
+    expect(harness.timeline(since).map(({ label: name }) => name)).not.toContain("mode:startle");
   });
 });

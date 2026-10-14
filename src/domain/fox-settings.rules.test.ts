@@ -32,6 +32,38 @@ const fox = {
   foxJabAfter: 180_000,
   foxJabGap: 600_000,
   foxJabs: ["Hé, on s'ennuie là !", "Courage au tchat."],
+  foxReminders: ["Venez dessiner sur LivePlace !"],
+  foxShoutThreshold: -5,
+  foxShoutMerge: 1000,
+  foxShoutCount: 3,
+  foxShoutPeriod: 120_000,
+  foxShoutLong: 3000,
+  foxShoutGap: 600_000,
+  foxShouts: ["Doucement !"],
+  foxTunnelAfter: 180_000,
+  foxTunnelPause: 5000,
+  foxTunnelGap: 600_000,
+  foxTunnelToFenysk: ["Tu respires, des fois ?"],
+  foxTunnelToChat: ["Je crois que Fenysk nous tunnel."],
+  foxBalanceMargin: 0,
+  foxBalanceAfter: 10_000,
+  foxBalanceGap: 300_000,
+  foxBalanceAlerts: ["Fenysk, le jeu parle plus fort que toi !"],
+  foxStartleRise: 20,
+  foxStartleWithin: 300,
+  foxStartleLevel: -15,
+  foxStartleGap: 30_000,
+  foxHourPhrases: ["{heures} de live."],
+  foxEndTime: "",
+  foxEndWarning: 1_800_000,
+  foxEndWarningPhrases: ["Plus que {minutes} minutes."],
+  foxEndPhrases: ["C'est l'heure !"],
+  foxOvertimeGap: 600_000,
+  foxOvertimePhrases: ["Il est {maintenant}."],
+  foxBedtimePhrases: ["Je vais me coucher."],
+  foxLateAfter: "23:30",
+  foxLateYawnMin: 300_000,
+  foxLateYawnMax: 600_000,
   foxPronunciations: ["wtf = what the fuck", "fenysk = Fénisque"],
   foxShouldThank: true,
   foxThankGap: 10_000,
@@ -41,6 +73,8 @@ const fox = {
   foxThanksGiftOne: ["{user} offre un sub à {recipient} !"],
   foxThanksGiftMany: ["{user} offre {count} subs !"],
   foxThanksCheer: ["{bits} bits de {user} !"],
+  foxThanksLurk: ["Merci pour le lurk, {user}."],
+  foxThanksLurkGeneric: ["Merci pour le lurk !"],
   foxShouldReadChat: true,
   foxShouldReadOwn: true,
   foxReadMaxLength: 150,
@@ -207,6 +241,152 @@ describe("les réglages fox*", () => {
   it("refusent un silence ou un écart nul pour la relance", () => {
     expect(issuesOf(toEffectiveSettings(defaults, { foxJabAfter: 0 }))[0]?.path).toBe("foxJabAfter");
     expect(issuesOf(toEffectiveSettings(defaults, { foxJabGap: -1 }))[0]?.path).toBe("foxJabGap");
+  });
+
+  it("changent la liste des rappels dans settings.local.json, et la laissent vide pour que la pique reste seule", () => {
+    expect(toNextLocal({}, { foxReminders: ["Suivez-moi !"] })).toEqual({
+      ok: true,
+      value: { foxReminders: ["Suivez-moi !"] },
+    });
+    expect(toNextLocal({}, { foxReminders: [] }).ok).toBe(true);
+    const empty = toNextLocal({}, { foxReminders: ["Suivez-moi !", ""] });
+    expect(empty.ok ? [] : empty.issues).toEqual([
+      { path: "foxReminders.1", message: "ne peut pas être vide" },
+    ]);
+  });
+
+  it("règlent le cri : un seuil de 0 dB au plus, des durées et un nombre strictement positifs", () => {
+    expect(issuesOf(toEffectiveSettings(defaults, { foxShoutThreshold: 1 }))[0]?.path).toBe(
+      "foxShoutThreshold",
+    );
+    for (const key of [
+      "foxShoutMerge",
+      "foxShoutCount",
+      "foxShoutPeriod",
+      "foxShoutLong",
+      "foxShoutGap",
+    ] as const) {
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: 0 }))[0]?.path, key).toBe(key);
+    }
+    expect(toEffectiveSettings(defaults, { foxShoutThreshold: 0, foxShoutCount: 1 }).ok).toBe(true);
+  });
+
+  it("règlent le tunnel : une durée, une pause et un écart strictement positifs", () => {
+    for (const key of ["foxTunnelAfter", "foxTunnelPause", "foxTunnelGap"] as const) {
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: 0 }))[0]?.path, key).toBe(key);
+    }
+    expect(toEffectiveSettings(defaults, { foxTunnelAfter: 30_000, foxTunnelPause: 1000 }).ok).toBe(true);
+  });
+
+  it("règlent la balance : un écart de -20 à 20 dB, une durée et un écart strictement positifs", () => {
+    expect(issuesOf(toEffectiveSettings(defaults, { foxBalanceMargin: 21 }))[0]?.path).toBe(
+      "foxBalanceMargin",
+    );
+    expect(issuesOf(toEffectiveSettings(defaults, { foxBalanceMargin: -21 }))[0]?.path).toBe(
+      "foxBalanceMargin",
+    );
+    expect(toEffectiveSettings(defaults, { foxBalanceMargin: -20 }).ok).toBe(true);
+    expect(toEffectiveSettings(defaults, { foxBalanceMargin: 20 }).ok).toBe(true);
+    for (const key of ["foxBalanceAfter", "foxBalanceGap"] as const) {
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: 0 }))[0]?.path, key).toBe(key);
+    }
+  });
+
+  it("règlent le sursaut du jeu : une hausse de 0 à 100 dB, un level de -100 à 0 dB, un temps et un écart strictement positifs", () => {
+    for (const key of ["foxStartleRise", "foxStartleWithin", "foxStartleGap"] as const) {
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: 0 }))[0]?.path, key).toBe(key);
+    }
+    expect(issuesOf(toEffectiveSettings(defaults, { foxStartleRise: 101 }))[0]?.path).toBe("foxStartleRise");
+    expect(issuesOf(toEffectiveSettings(defaults, { foxStartleLevel: 1 }))[0]?.path).toBe("foxStartleLevel");
+    expect(issuesOf(toEffectiveSettings(defaults, { foxStartleLevel: -101 }))[0]?.path).toBe(
+      "foxStartleLevel",
+    );
+    expect(toEffectiveSettings(defaults, { foxStartleRise: 12.5, foxStartleLevel: 0 }).ok).toBe(true);
+  });
+
+  it("règlent l'heure du live : des durées strictement positives, les bâillements tardifs du plus court au plus long", () => {
+    for (const key of ["foxEndWarning", "foxOvertimeGap", "foxLateYawnMin", "foxLateYawnMax"] as const) {
+      expect(issuesOf(toEffectiveSettings(defaults, { [key]: 0 }))[0]?.path, key).toBe(key);
+    }
+    expect(issuesOf(toEffectiveSettings(defaults, { foxLateYawnMin: 700_000 }))).toEqual([
+      {
+        path: "foxLateYawnMax",
+        message: "foxLateYawnMax ne peut pas être plus petit que foxLateYawnMin",
+      },
+    ]);
+    expect(toEffectiveSettings(defaults, { foxLateYawnMin: 600_000 }).ok).toBe(true);
+  });
+
+  it("veulent une fin prévue HH:MM de 00:00 à 23:59, ou vide pour n'en avoir aucune", () => {
+    for (const time of ["", "00:00", "21:30", "23:59"]) {
+      expect(toEffectiveSettings(defaults, { foxEndTime: time }).ok, time).toBe(true);
+    }
+    for (const time of ["24:00", "21:60", "9:30", "21h30", "minuit", "21:30:00", " 21:30"]) {
+      expect(issuesOf(toEffectiveSettings(defaults, { foxEndTime: time }))[0]?.path, time).toBe("foxEndTime");
+    }
+  });
+
+  it("veulent une heure des bâillements tardifs HH:MM, jamais vide", () => {
+    expect(toEffectiveSettings(defaults, { foxLateAfter: "22:45" }).ok).toBe(true);
+    for (const time of ["", "25:00", "tard"]) {
+      expect(issuesOf(toEffectiveSettings(defaults, { foxLateAfter: time }))[0]?.path, time).toBe(
+        "foxLateAfter",
+      );
+    }
+  });
+
+  it("changent les cinq listes de l'heure du live dans settings.local.json, chacune pouvant être vide", () => {
+    const keys = [
+      "foxHourPhrases",
+      "foxEndWarningPhrases",
+      "foxEndPhrases",
+      "foxOvertimePhrases",
+      "foxBedtimePhrases",
+    ] as const;
+    for (const key of keys) {
+      expect(toNextLocal({}, { [key]: ["Une phrase"] }).ok, key).toBe(true);
+      expect(toNextLocal({}, { [key]: [] }).ok, key).toBe(true);
+      expect(toNextLocal({}, { [key]: [""] }).ok, key).toBe(false);
+    }
+  });
+
+  it("changent la liste des alertes du son dans settings.local.json, et la laissent vide pour qu'il se taise", () => {
+    expect(toNextLocal({}, { foxBalanceAlerts: ["Le jeu couvre ta voix !"] }).ok).toBe(true);
+    expect(toNextLocal({}, { foxBalanceAlerts: [] }).ok).toBe(true);
+    expect(toNextLocal({}, { foxBalanceAlerts: [""] }).ok).toBe(false);
+  });
+
+  it("choisissent la source du son du PC dans settings.json seulement : un nom non vide, pas dans l'interface", () => {
+    expect(SettingsSchema.safeParse({ ...head, desktopName: "Audio du bureau" }).success).toBe(true);
+    expect(SettingsSchema.safeParse({ ...head, desktopName: "" }).success).toBe(false);
+    expect(SettingsSchema.safeParse(head).success).toBe(true);
+    const local = toNextLocal({}, { desktopName: "Autre" });
+    expect(local.ok ? [] : local.issues).toEqual([
+      { path: "desktopName", message: "ce réglage ne se change pas ici, il reste dans settings.json" },
+    ]);
+    const view = toSettingsView({
+      defaults: { ...defaults, desktopName: "Audio du bureau" },
+      local: {},
+      effective: { ...defaults, desktopName: "Audio du bureau" },
+    });
+    expect(view.effective).not.toHaveProperty("desktopName");
+  });
+
+  it("changent les deux listes du tunnel dans settings.local.json, chacune pouvant être vide", () => {
+    const local = toNextLocal({}, { foxTunnelToFenysk: ["Tu respires ?"], foxTunnelToChat: [] });
+    expect(local).toEqual({ ok: true, value: { foxTunnelToFenysk: ["Tu respires ?"], foxTunnelToChat: [] } });
+    const empty = toNextLocal({}, { foxTunnelToChat: [""] });
+    expect(empty.ok ? [] : empty.issues).toEqual([
+      { path: "foxTunnelToChat.0", message: "ne peut pas être vide" },
+    ]);
+  });
+
+  it("changent la liste des phrases de cri dans settings.local.json, et la laissent vide pour qu'il se taise", () => {
+    const local = toNextLocal({}, { foxShouts: ["Aïe !", "Mes oreilles !"] });
+    expect(local).toEqual({ ok: true, value: { foxShouts: ["Aïe !", "Mes oreilles !"] } });
+    expect(toNextLocal({}, { foxShouts: [] }).ok).toBe(true);
+    const empty = toNextLocal({}, { foxShouts: ["Aïe !", ""] });
+    expect(empty.ok ? [] : empty.issues).toEqual([{ path: "foxShouts.1", message: "ne peut pas être vide" }]);
   });
 
   it("refusent la liste des emotes dans settings.local.json : elle reste dans settings.json", () => {

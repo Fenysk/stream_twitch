@@ -2,12 +2,24 @@
 // accolades (« Merci {user} ! »). Ces variables sont celles de sa liste, et seulement elles.
 export const PHRASE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   foxJabs: [],
+  foxReminders: [],
+  foxShouts: [],
+  foxTunnelToFenysk: [],
+  foxTunnelToChat: [],
+  foxBalanceAlerts: [],
+  foxHourPhrases: ["heures"],
+  foxEndWarningPhrases: ["minutes", "fin"],
+  foxEndPhrases: ["fin", "maintenant"],
+  foxOvertimePhrases: ["fin", "maintenant", "retard"],
+  foxBedtimePhrases: ["fin", "maintenant", "retard"],
   foxThanksFollow: ["user", "viewers"],
   foxThanksFollowGeneric: [],
   foxThanksSub: ["user"],
   foxThanksGiftOne: ["user", "recipient"],
   foxThanksGiftMany: ["user", "count"],
   foxThanksCheer: ["user", "bits"],
+  foxThanksLurk: ["user"],
+  foxThanksLurkGeneric: [],
 };
 
 const VARIABLE = /\{(\w+)\}/g;

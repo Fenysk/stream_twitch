@@ -9,13 +9,14 @@ import {
   FOX_READ_SLIDERS,
   FOX_SLIDER_KEYS,
   FOX_SLIDERS,
+  FOX_TIMES,
   FOX_TOGGLES,
 } from "./fox-fields";
 import { SLIDER_KEYS } from "./head-fields";
 import { isDefaultTab, toChanges, toFieldErrors } from "./settings-changes";
 
 // Les réglages de chaque onglet, comme les onglets les désignent à « Revenir aux valeurs par défaut » : la tête (ses six
-// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses trente et un curseurs, ses huit listes, la voix et trois cases).
+// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses cinquante et un curseurs, ses vingt listes, ses deux heures, la voix et trois cases).
 const HEAD_KEYS = [...SLIDER_KEYS, "expression"];
 const CHAT_KEYS = [
   ...CHAT_SLIDERS.map(({ key }) => key),
@@ -35,7 +36,7 @@ const labelsOf = (key: string): string[] => spec(key).steps.map(({ label }) => l
 const valuesOf = (key: string): number[] => spec(key).steps.map(({ value }) => value);
 
 describe("les curseurs de l'onglet Renard", () => {
-  it("sont trente et un : vingt-six pour l'animation en neuf groupes, cinq pour la lecture du tchat", () => {
+  it("sont cinquante et un : quarante-six pour l'animation en quatorze groupes, cinq pour la lecture du tchat", () => {
     expect(FOX_GROUPS.map(({ title }) => title)).toEqual([
       "Quand il parle",
       "Au repos",
@@ -45,6 +46,11 @@ describe("les curseurs de l'onglet Renard", () => {
       "Quand il s'ennuie",
       "Relance",
       "Remerciements",
+      "Quand tu cries",
+      "Quand tu parles longtemps",
+      "Balance du son",
+      "Quand le jeu explose",
+      "Heure du live",
       "Prononciation",
     ]);
     expect(FOX_SLIDER_KEYS).toEqual([
@@ -74,6 +80,26 @@ describe("les curseurs de l'onglet Renard", () => {
       "foxJabGap",
       "foxThankGap",
       "foxJoyDuration",
+      "foxShoutThreshold",
+      "foxShoutMerge",
+      "foxShoutCount",
+      "foxShoutPeriod",
+      "foxShoutLong",
+      "foxShoutGap",
+      "foxTunnelAfter",
+      "foxTunnelPause",
+      "foxTunnelGap",
+      "foxBalanceMargin",
+      "foxBalanceAfter",
+      "foxBalanceGap",
+      "foxStartleRise",
+      "foxStartleWithin",
+      "foxStartleLevel",
+      "foxStartleGap",
+      "foxEndWarning",
+      "foxOvertimeGap",
+      "foxLateYawnMin",
+      "foxLateYawnMax",
       "foxReadMaxLength",
       "foxCapitalsMaxLength",
       "foxReadGap",
@@ -127,7 +153,7 @@ describe("les curseurs de l'onglet Renard", () => {
       "Écoute : regard au plus long",
       "Silence avant de lire",
       "Coupure quand tu parles",
-      "Durée de la réaction et du coucou",
+      "Durée de la réaction, du coucou et du sursaut",
       "Délai avant de partir",
       "Durée du bâillement",
       "Durée de l'accroupissement",
@@ -138,6 +164,26 @@ describe("les curseurs de l'onglet Renard", () => {
       "Écart entre deux piques",
       "Un follow nommé toutes les",
       "Durée du saut de joie",
+      "Seuil d'un cri",
+      "Cris collés : écart maximum",
+      "Nombre de cris avant une phrase",
+      "Période de ces cris",
+      "Durée d'un cri pénible",
+      "Écart entre deux phrases de cri",
+      "Durée avant qu'il bâille",
+      "Silence qui coupe ce monologue",
+      "Écart entre deux monologues",
+      "Écart du jeu sur ta voix",
+      "Durée du jeu trop fort",
+      "Écart entre deux alertes",
+      "Hausse du son du PC",
+      "Durée de cette hausse",
+      "Level du son à dépasser",
+      "Écart entre deux sursauts",
+      "Avertissement avant la fin",
+      "Écart entre deux rappels de fin",
+      "Bâillement tardif : au plus tôt",
+      "Bâillement tardif : au plus tard",
       "Longueur d'un message lu",
       "Majuscules permises jusqu'à",
       "Un message par viewer toutes les",
@@ -221,15 +267,27 @@ describe("les curseurs de l'onglet Renard", () => {
 });
 
 describe("les listes de phrases de l'onglet Renard", () => {
-  it("sont celles des groupes : les piques, une phrase par ligne", () => {
+  it("sont celles des groupes : les piques, les rappels, les phrases de cri et les autres, une phrase par ligne", () => {
     expect(FOX_LISTS.map(({ key }) => key)).toEqual([
       "foxJabs",
+      "foxReminders",
       "foxThanksFollow",
       "foxThanksFollowGeneric",
       "foxThanksSub",
       "foxThanksGiftOne",
       "foxThanksGiftMany",
       "foxThanksCheer",
+      "foxThanksLurk",
+      "foxThanksLurkGeneric",
+      "foxShouts",
+      "foxTunnelToFenysk",
+      "foxTunnelToChat",
+      "foxBalanceAlerts",
+      "foxHourPhrases",
+      "foxEndWarningPhrases",
+      "foxEndPhrases",
+      "foxOvertimePhrases",
+      "foxBedtimePhrases",
       "foxPronunciations",
     ]);
     expect(FOX_GROUPS.find(({ title }) => title === "Remerciements")?.lists?.map(({ key }) => key)).toEqual([
@@ -239,9 +297,28 @@ describe("les listes de phrases de l'onglet Renard", () => {
       "foxThanksGiftOne",
       "foxThanksGiftMany",
       "foxThanksCheer",
+      "foxThanksLurk",
+      "foxThanksLurkGeneric",
     ]);
     expect(FOX_GROUPS.find(({ title }) => title === "Relance")?.lists?.map(({ key }) => key)).toEqual([
       "foxJabs",
+      "foxReminders",
+    ]);
+    expect(FOX_GROUPS.find(({ title }) => title === "Quand tu cries")?.lists?.map(({ key }) => key)).toEqual([
+      "foxShouts",
+    ]);
+    expect(
+      FOX_GROUPS.find(({ title }) => title === "Quand tu parles longtemps")?.lists?.map(({ key }) => key),
+    ).toEqual(["foxTunnelToFenysk", "foxTunnelToChat"]);
+    expect(FOX_GROUPS.find(({ title }) => title === "Balance du son")?.lists?.map(({ key }) => key)).toEqual([
+      "foxBalanceAlerts",
+    ]);
+    expect(FOX_GROUPS.find(({ title }) => title === "Heure du live")?.lists?.map(({ key }) => key)).toEqual([
+      "foxHourPhrases",
+      "foxEndWarningPhrases",
+      "foxEndPhrases",
+      "foxOvertimePhrases",
+      "foxBedtimePhrases",
     ]);
     expect(FOX_GROUPS.find(({ title }) => title === "Prononciation")?.lists?.map(({ key }) => key)).toEqual([
       "foxPronunciations",
@@ -262,12 +339,22 @@ describe("les listes de phrases de l'onglet Renard", () => {
 });
 
 describe("les clés de chaque onglet", () => {
-  it("sont quarante-trois pour le renard : ses trente et un curseurs, ses huit listes, la case des remerciements, la voix et les deux cases de la lecture du tchat", () => {
-    expect(FOX_KEYS).toHaveLength(43);
+  it("sont soixante-dix-sept pour le renard : ses cinquante et un curseurs, ses vingt listes, ses deux heures, la case des remerciements, la voix et les deux cases de la lecture du tchat", () => {
+    expect(FOX_KEYS).toHaveLength(77);
+    expect(FOX_KEYS).toContain("foxThanksLurk");
+    expect(FOX_KEYS).toContain("foxThanksLurkGeneric");
+    expect(FOX_KEYS).toContain("foxReminders");
+    expect(FOX_TIMES.map(({ key }) => key)).toEqual(["foxEndTime", "foxLateAfter"]);
+    expect(FOX_KEYS).toContain("foxEndTime");
+    expect(FOX_KEYS).toContain("foxLateAfter");
     expect(FOX_TOGGLES.map(({ key }) => key)).toEqual(["foxShouldThank"]);
     expect(FOX_KEYS).toContain("foxShouldThank");
     expect(FOX_KEYS).toContain("foxThanksCheer");
     expect(FOX_KEYS).toContain("foxJabs");
+    expect(FOX_KEYS).toContain("foxShouts");
+    expect(FOX_KEYS).toContain("foxTunnelToFenysk");
+    expect(FOX_KEYS).toContain("foxTunnelToChat");
+    expect(FOX_KEYS).toContain("foxBalanceAlerts");
     expect(FOX_KEYS).toContain("foxVoice");
     expect(FOX_KEYS).toContain("foxShouldReadChat");
     expect(FOX_KEYS).toContain("foxShouldReadOwn");
@@ -294,6 +381,28 @@ describe("les clés de chaque onglet", () => {
     const effective = { threshold: -40, foxBounce: 0.03, foxVoice: "Microsoft Claude" };
     expect(isDefaultTab(FOX_KEYS, {}, {}, effective)).toBe(true);
     expect(isDefaultTab(FOX_KEYS, { foxBounce: 0.05 }, {}, effective)).toBe(false);
+  });
+});
+
+describe("les heures de l'onglet Renard", () => {
+  it("sont la fin prévue et l'heure des bâillements tardifs, chacune avec un libellé et une aide", () => {
+    for (const { label, help } of FOX_TIMES) {
+      expect(label.length).toBeGreaterThan(0);
+      expect(help.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("ont pour défaut la valeur de settings.json : pas de fin prévue, 23:30", () => {
+    expect(defaults.foxEndTime).toBe("");
+    expect(defaults.foxLateAfter).toBe("23:30");
+  });
+
+  it("lisent le refus d'une heure sous son champ, avec son libellé", () => {
+    const errors = toFieldErrors([
+      { path: "foxEndTime", message: "doit s'écrire HH:MM (de 00:00 à 23:59), ou rester vide" },
+    ]);
+    expect(errors.byKey).toEqual({ foxEndTime: "doit s'écrire HH:MM (de 00:00 à 23:59), ou rester vide" });
+    expect(errors.general).toEqual([]);
   });
 });
 

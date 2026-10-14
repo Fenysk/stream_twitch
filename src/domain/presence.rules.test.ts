@@ -132,6 +132,42 @@ describe("H : il revient en sautant", () => {
   });
 });
 
+describe("M : il part tout de suite au coucher (évènement leave)", () => {
+  it("bâille 2 s, glisse vers le bas, puis est parti, sans attendre les 3 min", () => {
+    const { trail } = run(toStartPresence(0), 0, 10_000, { 1000: "leave" });
+    expect(kindsOf(trail)).toEqual(["visible", "yawning", "leaving", "away"]);
+    const at = (kind: string) => trail.find(({ state }) => state.kind === kind)?.now;
+    expect(at("yawning")).toBe(1000);
+    expect(at("leaving")).toBe(3000);
+    expect(at("away")).toBe(4500);
+  });
+
+  it("ne repart pas s'il bâille déjà, glisse déjà ou est déjà parti", () => {
+    const yawning = toNextPresence(toStartPresence(0), { now: THREE_MINUTES }, rules);
+    expect(yawning.kind).toBe("yawning");
+    expect(toNextPresence(yawning, { now: THREE_MINUTES + 500, event: "leave" }, rules)).toEqual(yawning);
+    const leaving: PresenceState = { kind: "leaving", since: 100, spokeAt: 0 };
+    expect(toNextPresence(leaving, { now: 200, event: "leave" }, rules)).toEqual(leaving);
+    const away: PresenceState = { kind: "away", since: 100, spokeAt: 0 };
+    expect(toNextPresence(away, { now: 200, event: "leave" }, rules)).toEqual(away);
+  });
+
+  it("part aussi en plein saut de retour", () => {
+    const returning: PresenceState = { kind: "returning", since: 100, spokeAt: 100 };
+    expect(toNextPresence(returning, { now: 300, event: "leave" }, rules).kind).toBe("yawning");
+  });
+
+  it("revient comme d'habitude quand un message l'appelle après son départ", () => {
+    const { trail } = run(toStartPresence(0), 0, 12_000, { 1000: "leave", 8000: "wake" });
+    expect(kindsOf(trail)).toEqual(["visible", "yawning", "leaving", "away", "returning", "visible"]);
+  });
+
+  it("se réveille pendant son bâillement de départ s'il est appelé : il reste là", () => {
+    const { trail } = run(toStartPresence(0), 0, 10_000, { 1000: "leave", 2000: "wake" });
+    expect(kindsOf(trail)).toEqual(["visible", "yawning", "visible"]);
+  });
+});
+
 describe("toPresenceView", () => {
   it("dit visible pendant le bâillement : il est encore là", () => {
     expect(toPresenceView({ kind: "yawning", since: 0, spokeAt: 0 })).toBe("visible");

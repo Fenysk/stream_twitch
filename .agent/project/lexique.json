@@ -46,7 +46,20 @@
     { "canonical": "fragment",  "meaning": "Un morceau d'un message : un texte, ou une emote.", "banned": ["segment", "piece", "morceau"] },
     { "canonical": "mention",   "meaning": "Le nickname d'un viewer cité dans un message avec une arobase (@Benitoad) : le renard le dit sans l'arobase.", "banned": ["arobase", "ping"] },
     { "canonical": "command",   "meaning": "Un message qui commence par « ! » (!discord, !lurk) : une demande à un bot, pas une phrase. Masqué par défaut.", "banned": ["cmd"] },
-    { "canonical": "bot",       "meaning": "Un viewer automatique connu (Nightbot, StreamElements), listé dans settings.json. Ses messages sont masqués par défaut.", "banned": ["robot"] }
+    { "canonical": "bot",       "meaning": "Un viewer automatique connu (Nightbot, StreamElements), listé dans settings.json. Ses messages sont masqués par défaut.", "banned": ["robot"] },
+    { "canonical": "shout",     "meaning": "Un level du mic au-dessus de foxShoutThreshold ; deux passages à moins de foxShoutMerge ne font qu'un shout.", "banned": ["cri"] },
+    { "canonical": "flinch",    "meaning": "Le mode du renard quand Fenysk crie : tourné vers Fenysk (miroir), la tête choquée left-large-rest, le temps d'une réaction.", "banned": ["sursaut"] },
+    { "canonical": "tunnel",    "meaning": "Fenysk parle depuis foxTunnelAfter sans silence de plus de foxTunnelPause : le renard bâille sans partir, puis le dit.", "banned": ["monologue"] },
+    { "canonical": "desktop",   "meaning": "La source OBS du son du PC (desktopName dans settings.json), dont le renard compare le level à la voix de Fenysk.", "banned": ["bureau"] },
+    { "canonical": "balance",   "meaning": "Le desktop est au moins aussi fort que la voix de Fenysk (à foxBalanceMargin près) pendant qu'il parle : le renard le dit.", "banned": ["equilibre"] },
+    { "canonical": "broadcast", "meaning": "La diffusion en cours côté OBS (GetStreamStatus) : le renard ne tient l'heure que pendant elle.", "banned": ["diffusion"] },
+    { "canonical": "overtime",  "meaning": "Le temps passé après la fin prévue (foxEndTime) : le renard rappelle toutes les foxOvertimeGap, puis se couche.", "banned": ["rab"] },
+    { "canonical": "reminder",  "meaning": "Une phrase du silence de la relance, tournée vers le chat : l'une des foxReminders, ou le prochain slot de la timetable. Elle alterne avec une pique.", "banned": ["rappel"] },
+    { "canonical": "timetable", "meaning": "Le planning Twitch d'Alexis (Helix schedule), relu toutes les 30 min.", "banned": ["planning"] },
+    { "canonical": "slot",      "meaning": "Un créneau de la timetable : un début et un titre éventuel. Annulé, il n'existe pas.", "banned": ["creneau"] },
+    { "canonical": "lurk",      "meaning": "Un message dont le premier mot est !lurk : le viewer regarde sans parler. Le renard le remercie une fois par viewer, sans le lire.", "banned": [] },
+    { "canonical": "spike",     "meaning": "Une hausse soudaine du level du desktop : au moins foxStartleRise dB en moins de foxStartleWithin ms, jusqu'au-dessus de foxStartleLevel dB.", "banned": [] },
+    { "canonical": "startle",   "meaning": "Le mode du renard quand le desktop a un spike : la tête choquée left-large-rest, tournée vers le chat (sans miroir), le temps d'une réaction. Pas de phrase.", "banned": [] }
   ],
 
   "verbs": [

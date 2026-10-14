@@ -18,6 +18,7 @@ import { createObsClient, createObsSocket, type ObsClient } from "../../infra/ob
 import { getSettings } from "../../infra/settings.repository";
 import { createTwitchAuthClient } from "../../infra/twitch-auth.client";
 import { createFollowFeed } from "../../infra/twitch-follows.client";
+import { createTimetableClient } from "../../infra/twitch-timetable.client";
 import { createTwitchTokenStore } from "../../infra/twitch-token.repository";
 import { createViewersClient } from "../../infra/twitch-viewers.client";
 import { createPowerShellRunner, createVoiceClient, sweepVoiceFiles } from "../../infra/voice.client";
@@ -25,13 +26,19 @@ import { type Chat, createChat } from "../../usecase/chat.usecase";
 import { createEmoteSync } from "../../usecase/emote-sync.usecase";
 import { createExpressionLibrary, type ExpressionLibrary } from "../../usecase/expression.usecase";
 import { createFox, type Fox } from "../../usecase/fox.usecase";
+import { createFoxBalance } from "../../usecase/fox-balance.usecase";
 import { createFoxChat } from "../../usecase/fox-chat.usecase";
+import { createFoxHours } from "../../usecase/fox-hours.usecase";
 import { createFoxJab } from "../../usecase/fox-jab.usecase";
 import { createFoxMode, type FoxModeController } from "../../usecase/fox-mode.usecase";
 import { createFoxQueue } from "../../usecase/fox-queue.usecase";
+import { createFoxShout } from "../../usecase/fox-shout.usecase";
+import { createFoxStartle } from "../../usecase/fox-startle.usecase";
 import { createFoxThanks, type FoxThanks } from "../../usecase/fox-thanks.usecase";
+import { createFoxTunnel } from "../../usecase/fox-tunnel.usecase";
 import { createHeadLoop, type HeadFeed } from "../../usecase/head.usecase";
 import { createSettingsStore, type SettingsStore } from "../../usecase/settings.usecase";
+import { createTimetable } from "../../usecase/timetable.usecase";
 import { createTwitchConnection, type TwitchConnection } from "../../usecase/twitch-connection.usecase";
 import { createViewers, type ViewersPort } from "../../usecase/viewers.usecase";
 import { log } from "./server-log";
@@ -115,10 +122,16 @@ export function startRuntime(): Runtime {
       loop.update(effective);
       applyExpression(effective);
       obs.updateMicName(effective.micName);
+      obs.updateDesktopName(effective.desktopName);
       fox.update(effective);
       mode.update(effective);
       queue.update(effective);
       jab.update(effective);
+      shout.update(effective);
+      tunnel.update(effective);
+      balance.update(effective);
+      startle.update(effective);
+      hours.update(effective);
       thanks.update(effective);
       chat.update(effective);
       foxChat.update(effective);
@@ -151,6 +164,7 @@ export function startRuntime(): Runtime {
     {
       address: initial.obsAddress,
       micName: initial.micName,
+      desktopName: initial.desktopName,
       // Seules les sources qui pointent vers CE port sont rafraîchies : un serveur d'essai sur un autre port ne touche pas à celle du stream.
       pageHosts: [`localhost:${port}`, `127.0.0.1:${port}`],
       log,
@@ -186,9 +200,39 @@ export function startRuntime(): Runtime {
   // La file de parole : les messages du tchat (et plus tard les remerciements et les piques) y attendent leur tour.
   const queue = createFoxQueue({ fox, mode, settings: initial, clock: Date.now, schedule, log });
   const foxChat = createFoxChat({ chat, queue, emotes, settings: initial, insults, clock: Date.now, log });
-  // La relance : caché, après un long silence de Fenysk et du tchat, il revient lui dire une pique.
+  // L'application Twitch (LivePlace) : ses identifiants viennent de .env. Sans eux, le nombre de viewers et le planning restent
+  // inconnus, la connexion d'Alexis est indisponible et les follows attendent ; le journal le dit une fois.
+  const twitchApp = getTwitchApp(process.env);
+  if (!twitchApp) {
+    log(
+      "Twitch : TWITCH_CLIENT_ID et TWITCH_CLIENT_SECRET absents de .env : pas de nombre de viewers, pas de planning, pas de connexion, les follows attendent.",
+    );
+  }
+  // Le planning d'Alexis (son prochain live entre dans les rappels de la relance) : l'API Twitch avec le jeton de l'application,
+  // relue toutes les 30 min. Sans application, aucun live à venir.
+  const timetable = createTimetable({
+    port: twitchApp
+      ? createTimetableClient({ ...twitchApp, channelId: initial.chatChannelId })
+      : { get: async () => [] },
+    schedule,
+    clock: Date.now,
+    log,
+  });
+  // La relance : caché, après un long silence de Fenysk et du tchat, il revient dire une pique à Fenysk, puis un rappel au tchat.
   const jab = createFoxJab({
     chat,
+    queue,
+    mode,
+    fox,
+    timetable,
+    settings: initial,
+    clock: Date.now,
+    random: Math.random,
+    log,
+  });
+  // Le cri : visible, il sursaute quand Fenysk crie, et proteste si c'est pénible.
+  const shout = createFoxShout({
+    mic: obs.mic,
     queue,
     mode,
     fox,
@@ -197,14 +241,47 @@ export function startRuntime(): Runtime {
     random: Math.random,
     log,
   });
-  // L'application Twitch (LivePlace) : ses identifiants viennent de .env. Sans eux, le nombre de viewers reste inconnu, la
-  // connexion d'Alexis est indisponible et les follows attendent ; le journal le dit une fois.
-  const twitchApp = getTwitchApp(process.env);
-  if (!twitchApp) {
-    log(
-      "Twitch : TWITCH_CLIENT_ID et TWITCH_CLIENT_SECRET absents de .env : pas de nombre de viewers, pas de connexion, les follows attendent.",
-    );
-  }
+  // Le tunnel : Fenysk parle des minutes sans pause, le renard bâille puis le fait remarquer.
+  const tunnel = createFoxTunnel({
+    queue,
+    mode,
+    settings: initial,
+    clock: Date.now,
+    schedule,
+    random: Math.random,
+    log,
+  });
+  // La balance du son : pendant que Fenysk parle, le son du PC ne doit pas couvrir sa voix.
+  const balance = createFoxBalance({
+    mic: obs.mic,
+    desktop: obs.desktop,
+    queue,
+    mode,
+    settings: initial,
+    clock: Date.now,
+    random: Math.random,
+    log,
+  });
+  // Le sursaut du jeu : un pic soudain du son du PC fait sursauter le renard, sans un mot.
+  const startle = createFoxStartle({
+    desktop: obs.desktop,
+    queue,
+    mode,
+    fox,
+    settings: initial,
+    clock: Date.now,
+    log,
+  });
+  // L'heure du live : pendant la diffusion d'OBS, il annonce les heures pleines, la fin prévue et ses rappels.
+  const hours = createFoxHours({
+    broadcast: obs.broadcast,
+    queue,
+    mode,
+    settings: initial,
+    clock: Date.now,
+    random: Math.random,
+    log,
+  });
   // Le nombre de viewers (variable {viewers} des remerciements) : l'API Twitch avec le jeton de l'application, sans la
   // connexion d'Alexis.
   const viewersPort: ViewersPort = twitchApp
@@ -251,8 +328,14 @@ export function startRuntime(): Runtime {
   void emotes.start();
   foxChat.start();
   jab.start();
+  shout.start();
+  tunnel.start();
+  balance.start();
+  startle.start();
+  hours.start();
   thanks.start();
   void viewers.start();
+  void timetable.start();
   void twitch.start();
   chat.start();
   log(

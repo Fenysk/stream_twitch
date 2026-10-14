@@ -55,8 +55,13 @@ export type FoxModeController = {
   noteSpoke(): void;
   // H : une page `/fox` vient de se connecter, il est visible.
   reset(): void;
+  // H : il part maintenant, s'il est là (le coucher de l'heure du live) : il bâille, puis s'en va.
+  leave(): void;
   // E, G et H : il revient s'il était parti, puis montre `show` pendant la durée d'une réaction (sans `show`, rien).
   introduce(show: Show | null): Intro;
+  // Le sursaut d'un cri : il montre `show` de lui-même, sans phrase, le temps qu'il lui faut. Seulement visible, et si rien
+  // d'autre n'est montré. Rend combien de ms (0 : rien n'a été montré). Ne sert qu'aux modes qui s'effacent seuls.
+  flash(show: Show): number;
   // « Faire parler » : il revient s'il était parti, puis dit la phrase. Ni D ni la file n'y touchent.
   say(text: string): Promise<SpeakResult>;
   // Appelé à chaque pas (100 ms) : de quoi attendre le silence d'Alexis, ou couper une lecture.
@@ -90,6 +95,9 @@ export function createFoxMode({
   let voice: Voice = VOICE_START;
   let presence: PresenceState = toStartPresence(clock());
   let shown: Show | null = null;
+  // Ce qu'un `flash` montre en ce moment, et de quoi l'effacer.
+  let flashed: Show | null = null;
+  let cancelFlash: (() => void) | undefined;
   const listeners = new Set<() => void>();
   let unsubscribe: (() => void) | undefined;
   let cancelTick: (() => void) | undefined;
@@ -177,6 +185,24 @@ export function createFoxMode({
     };
   };
 
+  const flash = (show: Show): number => {
+    if (!rules || toPresenceView(presence) !== "visible") return 0;
+    if (shown !== null && shown !== flashed) return 0;
+    const ms = toShowMs(show, rules);
+    cancelFlash?.();
+    shown = show;
+    flashed = show;
+    publish();
+    cancelFlash = schedule(() => {
+      cancelFlash = undefined;
+      flashed = null;
+      if (shown !== show) return;
+      shown = null;
+      publish();
+    }, ms);
+    return ms;
+  };
+
   return {
     start() {
       unsubscribe ??= mic.subscribe(hear);
@@ -187,6 +213,8 @@ export function createFoxMode({
       unsubscribe = undefined;
       cancelTick?.();
       cancelTick = undefined;
+      cancelFlash?.();
+      cancelFlash = undefined;
     },
     update(next) {
       rules = toFoxModeRules(next);
@@ -208,7 +236,12 @@ export function createFoxMode({
       step("reset");
       publish();
     },
+    leave() {
+      step("leave");
+      publish();
+    },
     introduce,
+    flash,
     async say(text) {
       const intro = introduce(null);
       const result = await fox.speak(text, { waitFor: intro.ready });

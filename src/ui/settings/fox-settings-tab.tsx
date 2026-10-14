@@ -1,7 +1,8 @@
 // L'onglet « Renard » : l'aperçu en direct, « Faire parler », le choix de la voix, puis chaque durée et chaque seuil de ses
-// comportements (il parle, il est au repos, il cligne, il t'écoute, il réagit, il s'ennuie, il relance, il remercie), leurs
-// listes de phrases, la connexion à Twitch et la lecture du tchat. Chaque choix s'applique en direct sur la page `/fox` et se garde dans
-// settings.local.json : rien à enregistrer. La mise en page est celle de l'onglet de la tête.
+// comportements (il parle, il est au repos, il cligne, il t'écoute, il réagit, il s'ennuie, il relance, il remercie, il
+// sursaute, il bâille, il compare le son, il tient l'heure), leurs heures et listes de phrases, la connexion à Twitch et la
+// lecture du tchat. Chaque choix s'applique en direct sur la page `/fox` et se garde dans settings.local.json : rien à
+// enregistrer. La mise en page est celle de l'onglet de la tête.
 
 import { Button } from "../design/button";
 import { Checkbox } from "../design/checkbox";
@@ -13,6 +14,7 @@ import { FoxPreview } from "./fox-preview";
 import { FoxSpeakForm } from "./fox-speak-form";
 import { LinesField } from "./lines-field";
 import { SettingSlider } from "./setting-slider";
+import { SettingTime } from "./setting-time";
 import { SettingToggle } from "./setting-toggle";
 import { isDefaultTab } from "./settings-changes";
 import { TwitchBlock } from "./twitch-block";
@@ -69,7 +71,7 @@ export const FoxSettingsTab = () => {
               {message}
             </p>
           ))}
-          {FOX_GROUPS.map(({ title, toggles, sliders, lists }) => (
+          {FOX_GROUPS.map(({ title, toggles, sliders, times, lists }) => (
             <section key={title} className="fox-group">
               <h2 className="lp-type-heading">{title}</h2>
               {toggles?.map((spec) => (
@@ -77,6 +79,9 @@ export const FoxSettingsTab = () => {
               ))}
               {sliders.map((spec) => (
                 <SettingSlider key={spec.key} spec={spec} settings={settings} effective={effective} />
+              ))}
+              {times?.map((spec) => (
+                <SettingTime key={spec.key} spec={spec} settings={settings} effective={effective} />
               ))}
               {lists?.map((spec) => (
                 <LinesField key={spec.key} spec={spec} settings={settings} effective={effective} />

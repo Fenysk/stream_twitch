@@ -25,13 +25,15 @@
   gap: var(--space-2);
 }
 
-/* Une liste de phrases : le champ, puis son aide et ses variables dessous */
-.settings-lines {
+/* Une liste de phrases ou une heure : le champ, puis son aide et ses variables dessous */
+.settings-lines,
+.settings-time {
   display: grid;
   gap: var(--space-1);
 }
 
-.settings-lines p {
+.settings-lines p,
+.settings-time p {
   margin: 0;
 }
 

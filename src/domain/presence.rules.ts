@@ -11,8 +11,8 @@ export type PresenceState = { kind: PresenceKind; since: number; spokeAt: number
 export type PresenceRules = { awayAfter: number; yawnMs: number; leaveMs: number; returnMs: number };
 
 // `wake` : un message est accepté, ou « Faire parler ». `spoke` : une phrase vient de finir. `reset` : une page `/fox` vient de
-// se connecter, il est visible et le délai repart.
-export type PresenceEvent = "wake" | "spoke" | "reset";
+// se connecter, il est visible et le délai repart. `leave` : il part maintenant (il bâille puis s'en va), sans attendre le délai.
+export type PresenceEvent = "wake" | "spoke" | "reset" | "leave";
 
 export const toStartPresence = (now: number): PresenceState => ({
   kind: "visible",
@@ -34,6 +34,19 @@ const wake = (state: PresenceState, now: number): PresenceState => {
     case "leaving":
     case "away":
       return { kind: "returning", since: now, spokeAt: now };
+  }
+};
+
+// Il part maintenant, s'il est là : il bâille, puis s'en va. Déjà en train de partir ou parti, rien ne change.
+const leave = (state: PresenceState, now: number): PresenceState => {
+  switch (state.kind) {
+    case "visible":
+    case "returning":
+      return { ...state, kind: "yawning", since: now };
+    case "yawning":
+    case "leaving":
+    case "away":
+      return state;
   }
 };
 
@@ -70,6 +83,7 @@ export function toNextPresence(
   let state = previous;
   if (event === "spoke") state = { ...state, spokeAt: now };
   if (event === "wake") state = wake(state, now);
+  if (event === "leave") state = leave(state, now);
   for (let phases = 0; phases < 4; phases += 1) {
     const next = toNextPhase(state, now, rules);
     if (!next) break;

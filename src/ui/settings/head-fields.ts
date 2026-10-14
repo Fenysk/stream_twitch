@@ -26,6 +26,11 @@ export type ListKey = {
 
 export type ListSpec = { key: ListKey; label: string; help: string; rows?: number };
 
+// Les réglages qu'un champ d'heure change : une heure « HH:MM » (la fin prévue accepte aussi le texte vide).
+export type TimeKey = "foxEndTime" | "foxLateAfter";
+
+export type TimeSpec = { key: TimeKey; label: string; help: string };
+
 // Les réglages qu'une case change : ceux dont la valeur est vrai ou faux.
 export type ToggleKey = {
   [Key in keyof EditableSettings]-?: EditableSettings[Key] extends boolean | undefined ? Key : never;

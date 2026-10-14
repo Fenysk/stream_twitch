@@ -19,7 +19,14 @@ const createFakeSocket = (connections: ObsConnection[]) => {
   const levelListeners: Array<(inputs: ObsInputPeaks[]) => void> = [];
   const exitListeners: Array<() => void> = [];
   const closedListeners: Array<() => void> = [];
-  const state = { attempts: 0, pages: [] as ObsPage[], listError: undefined as Error | undefined };
+  const streamListeners: Array<(isLive: boolean) => void> = [];
+  const state = {
+    attempts: 0,
+    pages: [] as ObsPage[],
+    listError: undefined as Error | undefined,
+    stream: { isLive: false, durationMs: 0 },
+    streamError: undefined as Error | undefined,
+  };
   const refreshed: string[] = [];
   const socket: ObsSocket = {
     async connect() {
@@ -33,6 +40,11 @@ const createFakeSocket = (connections: ObsConnection[]) => {
     async refreshPage(name) {
       refreshed.push(name);
     },
+    async getStreamStatus() {
+      if (state.streamError) throw state.streamError;
+      return state.stream;
+    },
+    onStreamState: (listener) => streamListeners.push(listener),
     onLevels: (listener) => levelListeners.push(listener),
     onExitStarted: (listener) => exitListeners.push(listener),
     onClosed: (listener) => closedListeners.push(listener),
@@ -44,6 +56,9 @@ const createFakeSocket = (connections: ObsConnection[]) => {
     sendLevels: (inputs: ObsInputPeaks[]) => {
       for (const listener of levelListeners) listener(inputs);
     },
+    sendStreamState: (isLive: boolean) => {
+      for (const listener of streamListeners) listener(isLive);
+    },
     sendExitStarted: () => {
       for (const listener of exitListeners) listener();
     },
@@ -53,7 +68,7 @@ const createFakeSocket = (connections: ObsConnection[]) => {
   };
 };
 
-const setup = (connections: ObsConnection[]) => {
+const setup = (connections: ObsConnection[], overrides: Partial<ObsClientDeps> = {}) => {
   const fake = createFakeSocket(connections);
   const messages: string[] = [];
   const exits: string[] = [];
@@ -63,6 +78,7 @@ const setup = (connections: ObsConnection[]) => {
     pageHosts: ["localhost:4747", "127.0.0.1:4747"],
     log: (message) => messages.push(message),
     onExit: (reason) => exits.push(reason),
+    ...overrides,
   };
   const client = createObsClient(deps, fake.socket);
   client.start();
@@ -249,6 +265,175 @@ describe("createObsClient : niveau du micro", () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(messages.some((message) => message.startsWith("Attention"))).toBe(false);
     expect(messages).toContain("Niveau du micro « Mic/Aux » reçu.");
+  });
+});
+
+describe("createObsClient : niveau du son du PC", () => {
+  const withDesktop = { desktopName: "Audio du bureau" };
+
+  it("transmet en dB le pic le plus fort de la source du son du PC, sans toucher au mic", async () => {
+    const { fake, client } = setup([connected], withDesktop);
+    await vi.advanceTimersByTimeAsync(0);
+    const mic: number[] = [];
+    const desktop: number[] = [];
+    client.mic.subscribe((level) => mic.push(level));
+    client.desktop.subscribe((level) => desktop.push(level));
+    fake.sendLevels([
+      { name: "Mic/Aux", peaks: [0.5, 1] },
+      { name: "Audio du bureau", peaks: [0.1, 0.05] },
+      { name: "Tête", peaks: [1] },
+    ]);
+    expect(mic).toHaveLength(1);
+    expect(mic[0]).toBeCloseTo(0, 6);
+    expect(desktop).toHaveLength(1);
+    expect(desktop[0]).toBeCloseTo(-20, 6);
+  });
+
+  it("ne transmet plus rien à un abonné qui s'est désabonné", async () => {
+    const { fake, client } = setup([connected], withDesktop);
+    await vi.advanceTimersByTimeAsync(0);
+    const levels: number[] = [];
+    const unsubscribe = client.desktop.subscribe((level) => levels.push(level));
+    fake.sendLevels([{ name: "Audio du bureau", peaks: [0.1] }]);
+    unsubscribe();
+    fake.sendLevels([{ name: "Audio du bureau", peaks: [0.1] }]);
+    expect(levels).toHaveLength(1);
+  });
+
+  it("annonce l'abonnement et le premier niveau reçu", async () => {
+    const { fake, messages } = setup([connected], withDesktop);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(
+      messages.some((message) => message.startsWith("Abonné au niveau du son du PC « Audio du bureau »")),
+    ).toBe(true);
+    fake.sendLevels([{ name: "Audio du bureau", peaks: [0.1] }]);
+    expect(messages).toContain("Niveau du son du PC « Audio du bureau » reçu.");
+  });
+
+  it("avertit une fois, avec les noms reçus, si la source du son du PC n'apparaît pas en 5 s", async () => {
+    const { fake, messages } = setup([connected], withDesktop);
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendLevels([{ name: "Mic/Aux", peaks: [0.2] }]);
+    await vi.advanceTimersByTimeAsync(20_000);
+    const warnings = messages.filter((message) => message.startsWith("Attention"));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("« Audio du bureau »");
+    expect(warnings[0]).toContain("« Mic/Aux »");
+    expect(warnings[0]).toContain("Vérifier l'entrée du son du PC");
+  });
+
+  it("ne suit rien, et n'avertit de rien, sans nom de source", async () => {
+    const { fake, client, messages } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    const levels: number[] = [];
+    client.desktop.subscribe((level) => levels.push(level));
+    fake.sendLevels([{ name: "Audio du bureau", peaks: [0.1] }]);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(levels).toEqual([]);
+    expect(messages.some((message) => message.includes("son du PC"))).toBe(false);
+    expect(messages.filter((message) => message.startsWith("Attention"))).toHaveLength(1);
+  });
+
+  it("change de source en direct, le dit dans le journal, et l'efface avec undefined", async () => {
+    const { fake, client, messages } = setup([connected], withDesktop);
+    await vi.advanceTimersByTimeAsync(0);
+    const levels: number[] = [];
+    client.desktop.subscribe((level) => levels.push(level));
+    client.updateDesktopName("Musique");
+    fake.sendLevels([
+      { name: "Audio du bureau", peaks: [1] },
+      { name: "Musique", peaks: [0.1] },
+    ]);
+    expect(levels).toHaveLength(1);
+    expect(messages).toContain("Entrée du son du PC changée : « Musique ».");
+    client.updateDesktopName(undefined);
+    fake.sendLevels([{ name: "Musique", peaks: [0.1] }]);
+    expect(levels).toHaveLength(1);
+  });
+});
+
+describe("createObsClient : la diffusion", () => {
+  it("dit en quel état est la diffusion dès la connexion, même en plein live", async () => {
+    const fake = createFakeSocket([connected]);
+    fake.state.stream = { isLive: true, durationMs: 9_000_000 };
+    const client = createObsClient(
+      {
+        address: "ws://127.0.0.1:4455",
+        micName: "Mic/Aux",
+        pageHosts: [],
+        log: () => undefined,
+        onExit: () => undefined,
+      },
+      fake.socket,
+    );
+    const seen: Array<{ isLive: boolean; duration: number }> = [];
+    client.broadcast.subscribe((broadcast) => seen.push(broadcast));
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(seen).toEqual([{ isLive: true, duration: 9_000_000 }]);
+  });
+
+  it("dit aussi que la diffusion n'est pas lancée, quand OBS n'émet pas", async () => {
+    const { client } = setup([connected]);
+    const seen: Array<{ isLive: boolean; duration: number }> = [];
+    client.broadcast.subscribe((broadcast) => seen.push(broadcast));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(seen).toEqual([{ isLive: false, duration: 0 }]);
+  });
+
+  it("annonce le démarrage à zéro et l'arrêt de la diffusion", async () => {
+    const { fake, client } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    const seen: Array<{ isLive: boolean; duration: number }> = [];
+    client.broadcast.subscribe((broadcast) => seen.push(broadcast));
+    fake.sendStreamState(true);
+    fake.sendStreamState(false);
+    expect(seen).toEqual([
+      { isLive: true, duration: 0 },
+      { isLive: false, duration: 0 },
+    ]);
+  });
+
+  it("ne transmet plus rien à un abonné qui s'est désabonné", async () => {
+    const { fake, client } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    const received: Array<{ isLive: boolean; duration: number }> = [];
+    const unsubscribe = client.broadcast.subscribe((broadcast) => received.push(broadcast));
+    fake.sendStreamState(true);
+    unsubscribe();
+    fake.sendStreamState(false);
+    expect(received).toEqual([{ isLive: true, duration: 0 }]);
+  });
+
+  it("lit de nouveau l'état à chaque reconnexion", async () => {
+    const { fake, client } = setup([connected, unreachable, connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    const seen: Array<{ isLive: boolean; duration: number }> = [];
+    client.broadcast.subscribe((broadcast) => seen.push(broadcast));
+    fake.state.stream = { isLive: true, durationMs: 60_000 };
+    fake.sendClosed();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(seen).toEqual([{ isLive: true, duration: 60_000 }]);
+  });
+
+  it("journalise l'état illisible d'OBS avec son contexte, sans arrêter le client", async () => {
+    const fake = createFakeSocket([connected]);
+    fake.state.streamError = new Error("réponse inattendue");
+    const messages: string[] = [];
+    const client = createObsClient(
+      {
+        address: "ws://127.0.0.1:4455",
+        micName: "Mic/Aux",
+        pageHosts: [],
+        log: (message) => messages.push(message),
+        onExit: () => undefined,
+      },
+      fake.socket,
+    );
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(messages).toContain("Diffusion : état d'OBS illisible, réponse inattendue");
+    expect(client.getStatus().isLinked).toBe(true);
   });
 });
 

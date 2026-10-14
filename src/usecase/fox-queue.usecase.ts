@@ -4,20 +4,24 @@ import type { Settings } from "../domain/settings.schema";
 import type { Fox } from "./fox.usecase";
 import type { FoxModeController, Intro } from "./fox-mode.usecase";
 
-// Ce que le renard a à dire : un message du tchat, un remerciement, une pique. `label` nomme l'entrée dans le journal
-// (« message de Alice »). Un message garde de quoi la retirer quand la modération le supprime.
+// Ce que le renard a à dire : un message du tchat, un remerciement, une pique, un rappel, une phrase de cri, de tunnel, de
+// balance ou d'heure du live. `label` nomme l'entrée dans le journal (« message de Alice »). Un message garde de quoi la retirer quand la
+// modération le supprime.
 export type QueueItem = {
-  kind: "message" | "thanks" | "jab";
+  kind: "message" | "thanks" | "jab" | "reminder" | "shout" | "tunnel" | "balance" | "hours";
   label: string;
   text: string;
   messageId?: string | undefined;
   viewerId?: string | undefined;
-  // Alexis qui parle plus de `stopAfter` coupe la lecture, qui n'est jamais reprise (D). Un remerciement n'est pas coupé.
+  // Alexis qui parle plus de `stopAfter` coupe la lecture, qui n'est jamais reprise (D). Un remerciement, une phrase de cri
+  // de tunnel ou de balance ne sont pas coupés.
   isCuttable: boolean;
   // Passe devant les messages qui attendent (jamais devant celui qu'on lit).
   isUrgent: boolean;
   // Ce qu'il montre avant de parler, tiré au moment où la lecture commence.
   toShow: () => Show | null;
+  // Appelé quand la phrase est finie (ou qu'elle n'a pas pu être dite), jamais quand elle est coupée ou retirée.
+  onDone?: (() => void) | undefined;
 };
 
 export type FoxQueueDeps = {
@@ -123,9 +127,11 @@ export function createFoxQueue({
   };
 
   function finish() {
+    const item = current?.item;
     current?.intro.cancel();
     current = undefined;
     mode.noteSpoke();
+    item?.onDone?.();
     startNext();
   }
 

@@ -197,6 +197,50 @@ describe("createFoxQueue : l'ordre", () => {
     expect(calls.spokes).toBe(1);
     expect(calls.intros[0]?.isCancelled).toBe(true);
   });
+
+  it("rend la main à l'entrée une fois sa phrase finie, et pas avant", async () => {
+    const { queue, finishSynthesis, advance } = setup();
+    const done: string[] = [];
+    queue.push(item("un", { onDone: () => done.push("un") }));
+    await finishSynthesis(0, 1000);
+    await advance(1399);
+    expect(done).toEqual([]);
+    await advance(1);
+    expect(done).toEqual(["un"]);
+  });
+
+  it("rend la main aussi quand la phrase n'a pas pu être dite", async () => {
+    const { queue, spoken, flush } = setup();
+    const done: string[] = [];
+    queue.push(item("un", { onDone: () => done.push("un") }));
+    spoken[0]?.settle({ ok: false, status: 502, message: "la synthèse a échoué" });
+    await flush();
+    expect(done).toEqual(["un"]);
+  });
+
+  it("ne rend jamais la main à une entrée retirée ou coupée par la voix d'Alexis", async () => {
+    const { queue, voice, spoken, finishSynthesis, tick } = setup();
+    const done: string[] = [];
+    queue.push(item("un", { messageId: "m1", onDone: () => done.push("un") }));
+    await finishSynthesis(0);
+    talking(voice, 2000);
+    await tick();
+    queue.push(item("deux", { messageId: "m2", onDone: () => done.push("deux") }));
+    queue.removeWhere(({ messageId }) => messageId === "m2");
+    expect(spoken.length).toBeGreaterThan(0);
+    expect(done).toEqual([]);
+  });
+
+  it("garde le départ de la file en ordre : l'entrée suivante part après la main rendue", async () => {
+    const { queue, spoken, finishSynthesis, advance } = setup();
+    const order: string[] = [];
+    queue.push(item("un", { onDone: () => order.push(`done un, ${spoken.length} dite`) }));
+    queue.push(item("deux"));
+    await finishSynthesis(0);
+    await advance(1400);
+    expect(order).toEqual(["done un, 1 dite"]);
+    expect(spoken.map(({ text }) => text)).toEqual(["un", "deux"]);
+  });
 });
 
 describe("createFoxQueue : Alexis parle (D)", () => {

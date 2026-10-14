@@ -1,8 +1,16 @@
 // Les curseurs de l'onglet « Renard » : chaque durée et chaque seuil de A (il parle), B (il est au repos), C (il cligne), D (il
-// t'écoute), E et G (réaction et coucou), F et H (il bâille, s'en va et revient), puis la lecture du tchat.
+// t'écoute), E et G (réaction et coucou), F et H (il bâille, s'en va et revient), K (il sursaute quand tu cries), puis la
+// lecture du tchat.
 // La voix se choisit dans une liste, pas à un curseur. Les crans, leur libellé et le type d'un curseur sont ceux de la tête.
 
-import { type ListSpec, type SliderKey, type SliderSpec, type ToggleSpec, toSteps } from "./head-fields";
+import {
+  type ListSpec,
+  type SliderKey,
+  type SliderSpec,
+  type TimeSpec,
+  type ToggleSpec,
+  toSteps,
+} from "./head-fields";
 
 // La virgule française : 4 s, 1,5 s ; 1,5 %.
 const toSeconds = (ms: number): string => `${String(ms / 1000).replace(".", ",")} s`;
@@ -13,11 +21,12 @@ const toDecibels = (value: number): string => `${value} dB`;
 const toDelay = (ms: number): string =>
   ms < 60_000 ? toSeconds(ms) : `${String(ms / 60_000).replace(".", ",")} min`;
 
-// Un groupe de l'onglet : des cases, des curseurs, puis des listes de phrases (une phrase par ligne).
+// Un groupe de l'onglet : des cases, des curseurs, des heures, puis des listes de phrases (une phrase par ligne).
 export type FoxGroup = {
   title: string;
   toggles?: readonly ToggleSpec[];
   sliders: readonly SliderSpec[];
+  times?: readonly TimeSpec[];
   lists?: readonly ListSpec[];
 };
 
@@ -152,7 +161,7 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
     sliders: [
       {
         key: "foxReactionDuration",
-        label: "Durée de la réaction et du coucou",
+        label: "Durée de la réaction, du coucou et du sursaut",
         help: "Avant de lire le message.",
         steps: toSteps(250, 3000, 250, toSeconds),
         fallback: 1000,
@@ -231,6 +240,12 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
         help: "Une pique par ligne, dite à Fenysk. Il pioche sans répéter avant d'avoir tout dit.",
         rows: 10,
       },
+      {
+        key: "foxReminders",
+        label: "Rappels",
+        help: "Un rappel par ligne, dit au tchat. Ils alternent avec les piques, et le prochain live de ton planning Twitch s'y ajoute s'il existe.",
+        rows: 4,
+      },
     ],
   },
   {
@@ -239,7 +254,7 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
       {
         key: "foxShouldThank",
         label: "Remercier les follows, subs et cheers",
-        help: "Il revient, réagit, puis remercie par une phrase tirée dans la liste de l'évènement.",
+        help: "Il revient, réagit, puis remercie par une phrase tirée dans la liste de l'évènement, lurks compris.",
         fallback: true,
       },
     ],
@@ -295,6 +310,257 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
         label: "Cheer (bits)",
         help: "Un sourire d'1 s, puis la phrase, puis le message du cheer s'il passe le filtre.",
         rows: 8,
+      },
+      {
+        key: "foxThanksLurk",
+        label: "Lurk (!lurk)",
+        help: "Un sourire d'1 s, puis la phrase, une fois par viewer. Le message n'est jamais lu.",
+        rows: 6,
+      },
+      {
+        key: "foxThanksLurkGeneric",
+        label: "Lurk, pseudo refusé",
+        help: "Dite quand le pseudo de celui qui lurke est refusé. Sans pseudo.",
+        rows: 3,
+      },
+    ],
+  },
+  {
+    title: "Quand tu cries",
+    sliders: [
+      {
+        key: "foxShoutThreshold",
+        label: "Seuil d'un cri",
+        help: "Au-dessus, c'est un cri.",
+        steps: toSteps(-20, 0, 1, toDecibels),
+        fallback: -5,
+      },
+      {
+        key: "foxShoutMerge",
+        label: "Cris collés : écart maximum",
+        help: "Deux cris plus proches ne font qu'un.",
+        steps: toSteps(250, 5000, 250, toSeconds),
+        fallback: 1000,
+      },
+      {
+        key: "foxShoutCount",
+        label: "Nombre de cris avant une phrase",
+        help: "Dans la période ci-dessous.",
+        steps: toSteps(2, 10, 1, (value) => String(value)),
+        fallback: 3,
+      },
+      {
+        key: "foxShoutPeriod",
+        label: "Période de ces cris",
+        help: "Pendant ce temps, ils se cumulent.",
+        steps: toSteps(30_000, 600_000, 30_000, toDelay),
+        fallback: 120_000,
+      },
+      {
+        key: "foxShoutLong",
+        label: "Durée d'un cri pénible",
+        help: "Plus long, il parle tout de suite.",
+        steps: toSteps(1000, 10_000, 500, toSeconds),
+        fallback: 3000,
+      },
+      {
+        key: "foxShoutGap",
+        label: "Écart entre deux phrases de cri",
+        help: "Au plus une phrase dans ce délai.",
+        steps: toSteps(60_000, 1_800_000, 60_000, toDelay),
+        fallback: 600_000,
+      },
+    ],
+    lists: [
+      {
+        key: "foxShouts",
+        label: "Phrases de cri",
+        help: "Une phrase par ligne, dite à Fenysk. Seul un cri pénible en déclenche une ; un cri simple fait seulement sursauter.",
+        rows: 4,
+      },
+    ],
+  },
+  {
+    title: "Quand tu parles longtemps",
+    sliders: [
+      {
+        key: "foxTunnelAfter",
+        label: "Durée avant qu'il bâille",
+        help: "Tu parles sans pause longue.",
+        steps: toSteps(30_000, 600_000, 30_000, toDelay),
+        fallback: 180_000,
+      },
+      {
+        key: "foxTunnelPause",
+        label: "Silence qui coupe ce monologue",
+        help: "Une pause plus longue remet à zéro.",
+        steps: toSteps(1000, 30_000, 1000, toSeconds),
+        fallback: 5000,
+      },
+      {
+        key: "foxTunnelGap",
+        label: "Écart entre deux monologues",
+        help: "Au plus un bâillement dans ce délai.",
+        steps: toSteps(60_000, 1_800_000, 60_000, toDelay),
+        fallback: 600_000,
+      },
+    ],
+    lists: [
+      {
+        key: "foxTunnelToFenysk",
+        label: "Phrases pour Fenysk",
+        help: "Après le bâillement, tournées vers Fenysk. Tirées avec les phrases pour le tchat, sans répéter.",
+        rows: 6,
+      },
+      {
+        key: "foxTunnelToChat",
+        label: "Phrases pour le tchat",
+        help: "Après le bâillement, tournées vers le tchat.",
+        rows: 4,
+      },
+    ],
+  },
+  {
+    title: "Balance du son",
+    sliders: [
+      {
+        key: "foxBalanceMargin",
+        label: "Écart du jeu sur ta voix",
+        help: "Écart à partir duquel il alerte.",
+        steps: toSteps(-12, 12, 1, toDecibels),
+        fallback: 0,
+      },
+      {
+        key: "foxBalanceAfter",
+        label: "Durée du jeu trop fort",
+        help: "Cumulée sur le temps où tu parles.",
+        steps: toSteps(2000, 30_000, 1000, toSeconds),
+        fallback: 10_000,
+      },
+      {
+        key: "foxBalanceGap",
+        label: "Écart entre deux alertes",
+        help: "Au plus une alerte dans ce délai.",
+        steps: toSteps(60_000, 1_800_000, 60_000, toDelay),
+        fallback: 300_000,
+      },
+    ],
+    lists: [
+      {
+        key: "foxBalanceAlerts",
+        label: "Alertes du son",
+        help: "Une alerte par ligne, dite à Fenysk quand le jeu couvre sa voix. Le son du PC se choisit dans settings.json (desktopName).",
+        rows: 3,
+      },
+    ],
+  },
+  {
+    title: "Quand le jeu explose",
+    sliders: [
+      {
+        key: "foxStartleRise",
+        label: "Hausse du son du PC",
+        help: "Au moins cette hausse, en dB.",
+        steps: toSteps(5, 60, 1, toDecibels),
+        fallback: 20,
+      },
+      {
+        key: "foxStartleWithin",
+        label: "Durée de cette hausse",
+        help: "En moins de ce temps.",
+        steps: toSteps(50, 1000, 50, toSeconds),
+        fallback: 300,
+      },
+      {
+        key: "foxStartleLevel",
+        label: "Level du son à dépasser",
+        help: "Le pic doit aller au-dessus.",
+        steps: toSteps(-40, 0, 1, toDecibels),
+        fallback: -15,
+      },
+      {
+        key: "foxStartleGap",
+        label: "Écart entre deux sursauts",
+        help: "Au plus un sursaut dans ce délai.",
+        steps: toSteps(5000, 300_000, 5000, toDelay),
+        fallback: 30_000,
+      },
+    ],
+  },
+  {
+    title: "Heure du live",
+    sliders: [
+      {
+        key: "foxEndWarning",
+        label: "Avertissement avant la fin",
+        help: "Avant la fin prévue.",
+        steps: toSteps(300_000, 3_600_000, 300_000, toDelay),
+        fallback: 1_800_000,
+      },
+      {
+        key: "foxOvertimeGap",
+        label: "Écart entre deux rappels de fin",
+        help: "Après la fin prévue.",
+        steps: toSteps(60_000, 1_800_000, 60_000, toDelay),
+        fallback: 600_000,
+      },
+      {
+        key: "foxLateYawnMin",
+        label: "Bâillement tardif : au plus tôt",
+        help: "Au repos, sans partir.",
+        steps: toSteps(60_000, 1_800_000, 60_000, toDelay),
+        fallback: 300_000,
+      },
+      {
+        key: "foxLateYawnMax",
+        label: "Bâillement tardif : au plus tard",
+        help: "Au repos, sans partir.",
+        steps: toSteps(60_000, 1_800_000, 60_000, toDelay),
+        fallback: 600_000,
+      },
+    ],
+    times: [
+      {
+        key: "foxEndTime",
+        label: "Fin prévue",
+        help: "HH:MM, la prochaine fois qu'elle sonne. Vide : pas de fin prévue.",
+      },
+      {
+        key: "foxLateAfter",
+        label: "Il bâille à partir de",
+        help: "HH:MM, quand il n'y a pas de fin prévue. Avec une fin prévue, il bâille après elle.",
+      },
+    ],
+    lists: [
+      {
+        key: "foxHourPhrases",
+        label: "Heures pleines",
+        help: "Une phrase par ligne, dite au tchat à chaque heure de live.",
+        rows: 5,
+      },
+      {
+        key: "foxEndWarningPhrases",
+        label: "Avertissement de la fin",
+        help: "Dit à Fenysk avant la fin prévue.",
+        rows: 3,
+      },
+      {
+        key: "foxEndPhrases",
+        label: "Fin prévue",
+        help: "Dit à Fenysk à l'heure de la fin prévue.",
+        rows: 5,
+      },
+      {
+        key: "foxOvertimePhrases",
+        label: "Rappels après la fin",
+        help: "Dits à Fenysk, un rappel par écart. Le troisième est remplacé par le coucher.",
+        rows: 5,
+      },
+      {
+        key: "foxBedtimePhrases",
+        label: "Coucher",
+        help: "Dit à la place du troisième rappel. Puis il s'en va, et ne rappelle plus la fin.",
+        rows: 3,
       },
     ],
   },
@@ -362,6 +628,9 @@ export const FOX_SLIDER_KEYS: readonly SliderKey[] = FOX_SLIDERS.map(({ key }) =
 // Les listes de phrases de l'onglet, de tous ses groupes.
 export const FOX_LISTS: readonly ListSpec[] = FOX_GROUPS.flatMap(({ lists }) => lists ?? []);
 
+// Les heures des groupes de l'onglet.
+export const FOX_TIMES: readonly TimeSpec[] = FOX_GROUPS.flatMap(({ times }) => times ?? []);
+
 // Les cases des groupes de l'onglet (les deux de la lecture du tchat sont à part).
 export const FOX_TOGGLES: readonly ToggleSpec[] = FOX_GROUPS.flatMap(({ toggles }) => toggles ?? []);
 
@@ -369,6 +638,7 @@ export const FOX_TOGGLES: readonly ToggleSpec[] = FOX_GROUPS.flatMap(({ toggles 
 export const FOX_KEYS: readonly string[] = [
   ...FOX_SLIDER_KEYS,
   ...FOX_LISTS.map(({ key }) => key),
+  ...FOX_TIMES.map(({ key }) => key),
   ...FOX_TOGGLES.map(({ key }) => key),
   "foxVoice",
   "foxShouldReadChat",

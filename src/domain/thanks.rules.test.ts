@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RawMessage } from "./chat.types";
 import type { Settings } from "./settings.schema";
-import { SOMEONE, toThanksPlan, toThanksRules } from "./thanks.rules";
+import { isLurk, SOMEONE, toThanksPlan, toThanksRules } from "./thanks.rules";
 
 const message: RawMessage = {
   id: "m",
@@ -17,7 +17,44 @@ const message: RawMessage = {
 const open = { isRefused: () => false, viewers: 12 };
 const refuse = (...names: string[]) => ({ isRefused: (name: string) => names.includes(name), viewers: 12 });
 
+describe("isLurk : le premier mot du message est « !lurk »", () => {
+  it("reconnaît !lurk seul, ou suivi d'un texte, sans tenir compte des majuscules", () => {
+    expect(isLurk("!lurk")).toBe(true);
+    expect(isLurk("!LURK")).toBe(true);
+    expect(isLurk("!Lurk")).toBe(true);
+    expect(isLurk("!lurk bonne soirée à tous")).toBe(true);
+    expect(isLurk("  !lurk")).toBe(true);
+    expect(isLurk("!lurk\tbonne soirée")).toBe(true);
+  });
+
+  it("ne reconnaît pas un autre premier mot, ni un !lurk qui n'est pas le premier mot", () => {
+    expect(isLurk("bonne soirée !lurk")).toBe(false);
+    expect(isLurk("!lurker")).toBe(false);
+    expect(isLurk("!lurk,")).toBe(false);
+    expect(isLurk("lurk")).toBe(false);
+    expect(isLurk("!discord")).toBe(false);
+    expect(isLurk("")).toBe(false);
+    expect(isLurk("   ")).toBe(false);
+  });
+});
+
 describe("toThanksPlan : la liste, les valeurs et l'animation de chaque évènement", () => {
+  it("un lurk : la liste des lurks, le pseudo, un sourire", () => {
+    expect(toThanksPlan({ kind: "lurk", user: "Alice" }, open)).toEqual({
+      list: "foxThanksLurk",
+      values: { user: "Alice" },
+      show: "smile",
+    });
+  });
+
+  it("un lurk dont le pseudo est refusé : une phrase sans pseudo", () => {
+    expect(toThanksPlan({ kind: "lurk", user: "c0nn4rd" }, refuse("c0nn4rd"))).toEqual({
+      list: "foxThanksLurkGeneric",
+      values: {},
+      show: "smile",
+    });
+  });
+
   it("un follow : la liste des follows, le pseudo et le nombre de viewers, un sourire", () => {
     expect(toThanksPlan({ kind: "follow", user: "Alice" }, open)).toEqual({
       list: "foxThanksFollow",
@@ -124,7 +161,7 @@ describe("toThanksRules", () => {
     delay: 250,
   };
 
-  it("reprend la case, le délai et les six listes de phrases des réglages", () => {
+  it("reprend la case, le délai et les huit listes de phrases des réglages", () => {
     const rules = toThanksRules({
       ...base,
       foxShouldThank: true,
@@ -135,6 +172,8 @@ describe("toThanksRules", () => {
       foxThanksGiftOne: ["d"],
       foxThanksGiftMany: ["e"],
       foxThanksCheer: ["f"],
+      foxThanksLurk: ["g"],
+      foxThanksLurkGeneric: ["h"],
     });
     expect(rules).toEqual({
       shouldThank: true,
@@ -146,6 +185,8 @@ describe("toThanksRules", () => {
         foxThanksGiftOne: ["d"],
         foxThanksGiftMany: ["e"],
         foxThanksCheer: ["f"],
+        foxThanksLurk: ["g"],
+        foxThanksLurkGeneric: ["h"],
       },
     });
   });

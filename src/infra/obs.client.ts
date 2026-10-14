@@ -1,6 +1,8 @@
 import OBSWebSocket, { EventSubscription, OBSWebSocketError } from "obs-websocket-js/json";
 import { z } from "zod";
 import { toLevel } from "../domain/mic.rules";
+import type { DesktopPort } from "../usecase/fox-balance.usecase";
+import type { Broadcast, BroadcastPort } from "../usecase/fox-hours.usecase";
 import type { MicPort } from "../usecase/head.usecase";
 
 const PASSWORD_REFUSED_CODE = 4009;
@@ -20,6 +22,10 @@ export type ObsSocket = {
   listPages(): Promise<ObsPage[]>;
   refreshPage(name: string): Promise<void>;
   onLevels(listener: (inputs: ObsInputPeaks[]) => void): void;
+  // L'état de la diffusion à l'instant : en direct ou non, et depuis combien de ms.
+  getStreamStatus(): Promise<{ isLive: boolean; durationMs: number }>;
+  // La diffusion démarre (`true`) ou s'arrête (`false`) ; ses autres états (démarrage, coupure réseau) ne comptent pas.
+  onStreamState(listener: (isLive: boolean) => void): void;
   onExitStarted(listener: () => void): void;
   onClosed(listener: () => void): void;
 };
@@ -27,6 +33,13 @@ export type ObsSocket = {
 const MetersSchema = z.object({
   inputs: z.array(z.object({ inputName: z.string(), inputLevelsMul: z.array(z.array(z.number())) })),
 });
+
+// GetStreamStatus : `outputDuration` est en ms. StreamStateChanged : OBS_WEBSOCKET_OUTPUT_STARTED, _STOPPED (et _STARTING,
+// _STOPPING, _RECONNECTING, _RECONNECTED, que le renard laisse de côté : une coupure réseau garde la durée).
+const StreamStatusSchema = z.object({ outputActive: z.boolean(), outputDuration: z.number() });
+const StreamStateSchema = z.object({ outputState: z.string() });
+const STREAM_STARTED = "OBS_WEBSOCKET_OUTPUT_STARTED";
+const STREAM_STOPPED = "OBS_WEBSOCKET_OUTPUT_STOPPED";
 
 export function createObsSocket(options: {
   address: string;
@@ -82,6 +95,18 @@ export function createObsSocket(options: {
         }
       });
     },
+    async getStreamStatus() {
+      const status = StreamStatusSchema.parse(await obs.call("GetStreamStatus"));
+      return { isLive: status.outputActive, durationMs: status.outputDuration };
+    },
+    onStreamState(listener) {
+      obs.on("StreamStateChanged", (data) => {
+        const parsed = StreamStateSchema.safeParse(data);
+        if (!parsed.success) return;
+        if (parsed.data.outputState === STREAM_STARTED) listener(true);
+        else if (parsed.data.outputState === STREAM_STOPPED) listener(false);
+      });
+    },
     onExitStarted(listener) {
       obs.on("ExitStarted", listener);
     },
@@ -99,6 +124,8 @@ export function isOwnPage(url: string | undefined, hosts: string[]): boolean {
 export type ObsClientDeps = {
   address: string;
   micName: string;
+  // La source du son du PC ; absente, il n'est pas suivi.
+  desktopName?: string | undefined;
   pageHosts: string[];
   log: (message: string) => void;
   onExit: (reason: string) => void;
@@ -109,32 +136,106 @@ export type ObsStatus = { isLinked: boolean; inputNames: string[] };
 
 export type ObsClient = {
   mic: MicPort;
+  desktop: DesktopPort;
+  broadcast: BroadcastPort;
   start(): void;
   stop(): void;
   updateMicName(name: string): void;
+  updateDesktopName(name: string | undefined): void;
   getStatus(): ObsStatus;
 };
 
 export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClient {
   const { address, pageHosts, log, onExit } = deps;
-  let micName = deps.micName;
-  const listeners = new Set<(level: number) => void>();
   const namesSeen = new Set<string>();
   let hasConnected = false;
   let isLinked = false;
   let isStopped = false;
   let isRefusedLogged = false;
   let isUnreachableLogged = false;
-  let isMicSeen = false;
-  let isMicWarned = false;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let giveUpTimer: ReturnType<typeof setTimeout> | undefined;
-  let micTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Une entrée audio suivie par son nom (le mic, le son du PC) : son level part à ses abonnés, et le journal dit si elle n'est
+  // dans aucun évènement reçu 5 s après la connexion. `label` la nomme dans le journal (« du micro »).
+  const watch = (label: string, firstName: string | undefined) => {
+    let name = firstName;
+    const listeners = new Set<(level: number) => void>();
+    let isSeen = false;
+    let isWarned = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const warnIfUnseen = () => {
+      if (name === undefined || isSeen || isWarned) return;
+      isWarned = true;
+      const names = [...namesSeen].map((seen) => `« ${seen} »`).join(", ") || "(aucune)";
+      log(
+        `Attention : l'entrée « ${name} » n'est dans aucun évènement reçu depuis 5 s, le niveau reste à zéro. Entrées reçues : ${names}. Vérifier l'entrée ${label} dans les réglages.`,
+      );
+    };
+
+    return {
+      port: {
+        subscribe(listener: (level: number) => void) {
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        },
+      },
+      // La connexion vient d'aboutir : le journal dit ce qui est suivi, et l'attente de 5 s commence.
+      arm() {
+        if (name === undefined) return;
+        log(`Abonné au niveau ${label} « ${name} » (InputVolumeMeters, toutes les 50 ms).`);
+        timer = setTimeout(warnIfUnseen, MIC_UNSEEN_MS);
+      },
+      disarm() {
+        clearTimeout(timer);
+      },
+      hear(input: ObsInputPeaks) {
+        if (input.name !== name) return;
+        if (!isSeen) {
+          isSeen = true;
+          log(`Niveau ${label} « ${name} » reçu.`);
+        }
+        const level = toLevel(input.peaks);
+        for (const listener of listeners) listener(level);
+      },
+      rename(next: string | undefined) {
+        if (next === name) return;
+        name = next;
+        isSeen = false;
+        isWarned = false;
+        clearTimeout(timer);
+        if (next === undefined) return;
+        log(`Entrée ${label} changée : « ${next} ».`);
+        if (isLinked) timer = setTimeout(warnIfUnseen, MIC_UNSEEN_MS);
+      },
+    };
+  };
+  const mic = watch("du micro", deps.micName);
+  const desktop = watch("du son du PC", deps.desktopName);
+
+  // La diffusion : son état part aux abonnés à la connexion (le serveur peut démarrer en plein live), puis à chaque démarrage
+  // ou arrêt.
+  const broadcastListeners = new Set<(broadcast: Broadcast) => void>();
+  const emitBroadcast = (broadcast: Broadcast) => {
+    for (const listener of broadcastListeners) listener(broadcast);
+  };
+  const refreshBroadcast = async () => {
+    try {
+      const { isLive, durationMs } = await socket.getStreamStatus();
+      emitBroadcast({ isLive, duration: durationMs });
+    } catch (error) {
+      log(`Diffusion : état d'OBS illisible, ${error instanceof Error ? error.message : error}`);
+    }
+  };
 
   const clearTimers = () => {
     clearTimeout(retryTimer);
     clearTimeout(giveUpTimer);
-    clearTimeout(micTimer);
+    mic.disarm();
+    desktop.disarm();
   };
 
   const exit = (reason: string) => {
@@ -158,15 +259,6 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
     }
   };
 
-  const warnIfMicUnseen = () => {
-    if (isMicSeen || isMicWarned) return;
-    isMicWarned = true;
-    const names = [...namesSeen].map((name) => `« ${name} »`).join(", ") || "(aucune)";
-    log(
-      `Attention : l'entrée « ${micName} » n'est dans aucun évènement reçu depuis 5 s, le niveau reste à zéro. Entrées reçues : ${names}. Vérifier l'entrée du micro dans les réglages.`,
-    );
-  };
-
   const scheduleRetry = () => {
     retryTimer = setTimeout(connect, RETRY_MS);
   };
@@ -176,8 +268,9 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
     isLinked = true;
     clearTimeout(giveUpTimer);
     log(`Connecté à OBS ${address} (obs-websocket ${version}).`);
-    log(`Abonné au niveau du micro « ${micName} » (InputVolumeMeters, toutes les 50 ms).`);
-    micTimer = setTimeout(warnIfMicUnseen, MIC_UNSEEN_MS);
+    mic.arm();
+    desktop.arm();
+    void refreshBroadcast();
     void refreshPages();
   };
 
@@ -201,11 +294,14 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
 
   socket.onExitStarted(() => exit("OBS se ferme : arrêt du serveur."));
 
+  socket.onStreamState((isLive) => emitBroadcast({ isLive, duration: 0 }));
+
   socket.onClosed(() => {
     // Un essai de connexion qui échoue ferme aussi le socket : c'est `connect` qui le traite, pas ici.
     if (!isLinked || isStopped) return;
     isLinked = false;
-    clearTimeout(micTimer);
+    mic.disarm();
+    desktop.disarm();
     log("Connexion à OBS perdue : nouvel essai toutes les 2 s, arrêt du serveur dans 30 s sans retour.");
     giveUpTimer = setTimeout(() => exit("OBS ne revient pas depuis 30 s : arrêt du serveur."), GIVE_UP_MS);
     scheduleRetry();
@@ -214,34 +310,24 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
   socket.onLevels((inputs) => {
     for (const input of inputs) {
       namesSeen.add(input.name);
-      if (input.name !== micName) continue;
-      if (!isMicSeen) {
-        isMicSeen = true;
-        log(`Niveau du micro « ${micName} » reçu.`);
-      }
-      const level = toLevel(input.peaks);
-      for (const listener of listeners) listener(level);
+      mic.hear(input);
+      desktop.hear(input);
     }
   });
 
   return {
-    mic: {
+    mic: mic.port,
+    desktop: desktop.port,
+    broadcast: {
       subscribe(listener) {
-        listeners.add(listener);
+        broadcastListeners.add(listener);
         return () => {
-          listeners.delete(listener);
+          broadcastListeners.delete(listener);
         };
       },
     },
-    updateMicName(name) {
-      if (name === micName) return;
-      micName = name;
-      isMicSeen = false;
-      isMicWarned = false;
-      log(`Entrée du micro changée : « ${name} ».`);
-      clearTimeout(micTimer);
-      if (isLinked) micTimer = setTimeout(warnIfMicUnseen, MIC_UNSEEN_MS);
-    },
+    updateMicName: mic.rename,
+    updateDesktopName: desktop.rename,
     getStatus: () => ({ isLinked, inputNames: [...namesSeen].sort() }),
     start() {
       void connect();

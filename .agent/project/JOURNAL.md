@@ -11,6 +11,48 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-14 — Le jeu fait sursauter le renard : un pic soudain du son du PC (`spike`) donne le mode `startle` ; `spike` et `startle` entrent au lexique
+
+**Contexte.** Dans un jeu d'action, une explosion ou un cri fait exploser le son du PC ; le renard visible doit sursauter avec Fenysk, sans rien dire. N donne déjà le level du `desktop`.
+**Décision.** Un `spike` est un level du desktop qui monte d'au moins `foxStartleRise` (20 dB) en moins de `foxStartleWithin` (300 ms) et dépasse `foxStartleLevel` (-15 dB) ; il se mesure sur les pics bruts de 50 ms (aucun lissage : il est soudain par définition). Le renard prend alors `left-large-rest` le temps d'une réaction (`foxReactionDuration`), tourné vers le tchat (pas de miroir) : mode `startle`, montré de lui-même comme `flinch` (`flash`). Seulement visible, et quand la file est vide (il ne parle pas, ne va pas parler) ; au plus un par `foxStartleGap` (30 s), qu'il ait sursauté ou non. Aucune phrase. `lexique.json` : `spike`, `startle`.
+**Renoncement.** Lisser le level comme N : le lissage retombe lentement, il aplatirait la hausse que l'on cherche. Une phrase après le sursaut : le sursaut est un réflexe, le jeu en produit trop.
+
+## 2026-10-14 — Un `!lurk` est remercié comme un follow : `lurk` entre au lexique
+
+**Contexte.** Un viewer qui écrit `!lurk` dit qu'il regarde sans parler ; le renard ne lit jamais une commande, et ne lui répondait donc rien.
+**Décision.** Un message dont le premier mot est `!lurk` (majuscules ignorées) devient un remerciement de plus, sous la case « Remercier les follows, subs et cheers » : 1 s de sourire, puis une phrase de `foxThanksLurk` (`{user}`), ou de `foxThanksLurkGeneric` quand le pseudo est refusé par le filtre d'insultes. Il passe par les mêmes règles que les autres remerciements (devant les messages, attend le silence de Fenysk, jamais coupé, fait revenir). Un seul par viewer (`viewerId`) depuis le démarrage du serveur, gardé en mémoire. Le message reste une commande : jamais lu. `lexique.json` : `lurk`.
+**Renoncement.** Garder les lurkers dans un fichier : un redémarrage du serveur vaut un nouveau live, et un viewer qui relurke est remercié de nouveau. Un nouvel évènement `LiveEvent` : il vient du tchat, pas d'un service de Twitch, et n'a ni message joint ni paramètre.
+
+## 2026-10-14 — Les rappels dans les silences : la relance alterne pique et rappel, et lit le planning Twitch ; `reminder`, `timetable` et `slot` entrent au lexique
+
+**Contexte.** Le silence de la relance (caché, 3 min sans Fenysk ni tchat) ne donnait que des piques ; Alexis veut aussi y rappeler LivePlace et son prochain live.
+**Décision.** Le silence donne tour à tour une pique puis un `reminder` (même écart `foxJabGap`, coupé si Fenysk parle plus d'1 s, mais tourné vers le tchat). Il se tire dans `foxReminders` plus, s'il existe, la phrase du prochain `slot` de la `timetable` (Helix `GET /schedule?broadcaster_id=`, jeton d'application, relue toutes les 30 min ; 404, créneau annulé ou en vacances, pas d'application Twitch ou erreur : pas de créneau, une ligne au journal). Le jeton d'application sort de `twitch-viewers.client.ts` vers `twitch-app-token.client.ts`, partagé avec `twitch-timetable.client.ts` (le même code ne vit qu'à un endroit). `lexique.json` : `reminder` (banni : rappel), `timetable` (banni : planning), `slot` (banni : creneau) ; `timetable` et non `schedule`, qui nomme déjà le minuteur partout.
+**Renoncement.** Une seconde relance à part : deux délais et deux files de silence pour la même absence. Dire le planning à chaque rappel : il entre dans le tirage comme une phrase de plus.
+
+## 2026-10-14 — Le renard tient l'heure du live : OBS donne l'état de la diffusion ; `broadcast` et `overtime` entrent au lexique
+
+**Contexte.** Le renard doit annoncer les heures pleines de live, prévenir de la fin prévue, puis pousser Fenysk dehors s'il dépasse ; il ne sait rien du live, et le serveur peut démarrer en plein live.
+**Décision.** La `broadcast` vient d'OBS : `GetStreamStatus` à chaque connexion (`outputActive`, `outputDuration`), puis `StreamStateChanged` (STARTED démarre à zéro, STOPPED arrête ; RECONNECTED, une coupure réseau, ne remet pas la durée à zéro). Le renard ne compte que pendant elle : heures pleines (tournées vers le tchat), `foxEndTime` (première occurrence de l'heure après le début), avertissement `foxEndWarning`, fin, puis un `overtime` toutes les `foxOvertimeGap` ; au 3e rappel, une phrase de coucher puis le départ de H (nouvel évènement de présence `leave`, une file qui rend `onDone` à la fin de la phrase), et plus de rappel. Ce qui est déjà passé au démarrage du serveur ou à un changement de réglage n'est pas redit. Bâillements tardifs au repos (visible seulement, sans partir) après la fin prévue, ou après `foxLateAfter` sans fin prévue. Les heures se disent à la française (`spoken-time.rules.ts`). `lexique.json` : `broadcast` (banni : diffusion), `overtime` (banni : rab).
+**Renoncement.** Compter depuis le démarrage du serveur : faux en plein live. Rejouer les annonces manquées : des rappels de fin dits d'un coup.
+
+## 2026-10-14 — La balance du son : le renard compare le son du PC à la voix de Fenysk ; `balance` et `desktop` entrent au lexique
+
+**Contexte.** Quand le jeu couvre la voix de Fenysk, le tchat n'entend plus rien et lui ne s'en rend pas compte ; OBS donne déjà le level de toutes les sources (`InputVolumeMeters`), seul le mic était gardé.
+**Décision.** Le `desktop` est une seconde source OBS, nommée par `desktopName` (settings.json seulement, comme `micName`, « Audio du bureau » par défaut). La `balance` ne compare que pendant que Fenysk parle (détection de D) : le desktop au moins aussi fort que la voix, à `foxBalanceMargin` dB près (0), pendant `foxBalanceAfter` (10 s) de parole cumulée → alerte (`foxBalanceAlerts`, urgente, jamais coupée par la voix, tournée vers Fenysk), au plus une par `foxBalanceGap` (5 min) ; un silence de Fenysk plus long que `foxBalanceAfter` remet le compte à zéro. Lissage : le pic de chaque source, attaque immédiate et retombée de 1 s (8,7 dB par seconde), pour comparer des pics à des pics sans qu'une syllabe faible ne donne le jeu gagnant. `lexique.json` : `balance`, `desktop` (banni : bureau).
+**Renoncement.** Une moyenne glissante : un jeu continu y gagnerait toujours sur une voix faite de syllabes et de pauses. Comparer aussi en silence : un jeu fort est normal quand Fenysk se tait.
+
+## 2026-10-14 — Un monologue de 3 min fait bâiller le renard sans le faire partir, puis parler : `tunnel` entre au lexique
+
+**Contexte.** Quand Fenysk parle des minutes sans pause, le renard ne dit rien : la voix de Fenysk seule ne le fait jamais revenir (H), et rien ne remarque le monologue.
+**Décision.** Un `tunnel` est une parole de `foxTunnelAfter` (3 min) sans silence de plus de `foxTunnelPause` (5 s), au plus un par `foxTunnelGap` (10 min) ; ses 3 min repartent de zéro après lui. Visible, le renard bâille (`yawn`, la durée de `foxYawnDuration`, sans partir) puis dit une phrase tirée dans `foxTunnelToFenysk` (tournée vers Fenysk) et `foxTunnelToChat` (tournée vers le tchat), les deux listes tirées ensemble sans répéter. Caché, il revient en sautant pour la dire : seule exception à « la voix de Fenysk seule ne le fait pas revenir ». Le bâillement est un `Show` que le contrôleur montre de lui-même (`flash`), comme le sursaut. `lexique.json` : `tunnel` (banni : monologue).
+**Renoncement.** Réutiliser `talkingFor` (le delay de la tête, 250 ms) : une pause entre deux phrases le remettrait à zéro, aucun monologue n'atteindrait 3 min.
+
+## 2026-10-14 — Un cri de Fenysk fait sursauter le renard (`flinch`) et ne le fait parler que s'il est pénible : `shout` et `flinch` entrent au lexique
+
+**Contexte.** Fenysk crie parfois au mic (au-dessus de -5 dB, sa voix forte tient entre -13 et -10 dB) : le renard doit réagir sans commenter chaque cri.
+**Décision.** Un `shout` est un level du mic au-dessus de `foxShoutThreshold` ; deux passages à moins de `foxShoutMerge` n'en font qu'un. Visible, le renard se tourne vers Fenysk (miroir) avec `left-large-rest` le temps d'une réaction (`foxReactionDuration`, aucun réglage de durée de plus) : nouveau mode `flinch`. Il ne dit une phrase (`foxShouts`, urgente, jamais coupée par la voix) que si c'est pénible : `foxShoutCount` cris en `foxShoutPeriod`, ou un cri de plus de `foxShoutLong`, au plus une fois par `foxShoutGap`. Caché, un cri ne compte pas et ne le fait pas revenir. `lexique.json` : `shout` (banni : cri), `flinch` (banni : sursaut).
+**Renoncement.** Une phrase à chaque cri : elle deviendrait un tic. Une durée de sursaut à part : elle aurait copié celle de la réaction.
+
 ## 2026-10-13 — Un message qui attend trop longtemps dans la queue n'est plus lu : `wait` entre au lexique
 
 **Contexte.** Quand Alexis parle longtemps, les messages s'empilent dans la queue et seraient lus des minutes trop tard, hors de propos.

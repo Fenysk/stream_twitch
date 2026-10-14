@@ -1,6 +1,7 @@
 {
   "obsAddress": "ws://127.0.0.1:4455",
   "micName": "Mic/Aux",
+  "desktopName": "Audio du bureau",
   "threshold": -40,
   "delay": 250,
   "tilt": 0.5,
@@ -111,6 +112,59 @@
   ],
   "foxJabAfter": 180000,
   "foxJabGap": 600000,
+  "foxReminders": ["Venez dessiner sur LivePlace !"],
+  "foxShoutThreshold": -5,
+  "foxShoutMerge": 1000,
+  "foxShoutCount": 3,
+  "foxShoutPeriod": 120000,
+  "foxShoutLong": 3000,
+  "foxShoutGap": 600000,
+  "foxShouts": ["Doucement ! J'ai des oreilles de renard, moi."],
+  "foxTunnelAfter": 180000,
+  "foxTunnelPause": 5000,
+  "foxTunnelGap": 600000,
+  "foxTunnelToFenysk": [
+    "Tu respires, des fois ?",
+    "J'ai oublié le début de ta phrase, Fenysk.",
+    "Tu fais un podcast, Fenysk ?",
+    "Je vais chercher un café. Préviens-moi quand t'as fini !",
+    "Et la fin de l'histoire, c'est pour ce soir ?"
+  ],
+  "foxTunnelToChat": ["Je crois que Fenysk nous tunnel.", "Quelqu'un a le bouton pour couper Fenysk ?"],
+  "foxBalanceMargin": 0,
+  "foxBalanceAfter": 10000,
+  "foxBalanceGap": 300000,
+  "foxBalanceAlerts": ["Fenysk, le jeu parle plus fort que toi !"],
+  "foxStartleRise": 20,
+  "foxStartleWithin": 300,
+  "foxStartleLevel": -15,
+  "foxStartleGap": 30000,
+  "foxHourPhrases": [
+    "Ding ! {heures} de live. Je suis une horloge, maintenant.",
+    "{heures} de live. J'ai compté chaque minute.",
+    "{heures} de live. Toujours vivant, Fenysk ?",
+    "{heures} de live. À ce stade, c'est un marathon !"
+  ],
+  "foxEndTime": "",
+  "foxEndWarning": 1800000,
+  "foxEndWarningPhrases": ["Plus que {minutes} minutes, Fenysk. Je dis ça, je dis rien."],
+  "foxEndPhrases": [
+    "C'est l'heure, Fenysk ! Dis au revoir au tchat.",
+    "Fin du live prévue. Fenysk va dire \"encore cinq minutes\", je le sens.",
+    "C'est l'heure ! Le tchat, aidez-moi à le pousser vers la sortie !",
+    "{fin}. Le live est fini, c'est moi qui décide."
+  ],
+  "foxOvertimeGap": 600000,
+  "foxOvertimePhrases": [
+    "On avait dit {fin}. Il est {maintenant}. Je note.",
+    "Encore là ? Et le tchat aussi ? Vous êtes graves.",
+    "Je bâille, Fenysk. C'est un message.",
+    "{retard} de rab. Tu crois que je vois pas ?"
+  ],
+  "foxBedtimePhrases": ["Bon. Moi, je vais me coucher."],
+  "foxLateAfter": "23:30",
+  "foxLateYawnMin": 300000,
+  "foxLateYawnMax": 600000,
   "foxPronunciations": [
     "wtf = what the fuck",
     "omg = oh my god",
@@ -224,6 +278,14 @@
     "{bits} bits qui tombent du ciel ! Merci {user} !",
     "{user} lâche {bits} bits. Je fais semblant d'être blasé. Raté."
   ],
+  "foxThanksLurk": [
+    "Merci pour le lurk, {user}. Je garde ta place au chaud.",
+    "{user} passe en mode fantôme. Respect.",
+    "{user} lurke. Moi aussi, j'aimerais bien, mais on m'oblige à parler.",
+    "{user} reste dans l'ombre. Comme un vrai renard.",
+    "Un lurk de {user} ! Fenysk, fais semblant d'être intéressant."
+  ],
+  "foxThanksLurkGeneric": ["Merci pour le lurk !"],
   "foxEmoteNames": [
     "OMEGALUL",
     "LULW",

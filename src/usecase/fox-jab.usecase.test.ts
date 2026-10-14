@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ADDRESS_MODE } from "../domain/fox-mode.rules";
 import type { Settings } from "../domain/settings.schema";
+import type { Slot } from "../domain/timetable.rules";
 import type { ChatSourceEvent } from "./chat.usecase";
 import { createFoxJab } from "./fox-jab.usecase";
 import type { QueueItem } from "./fox-queue.usecase";
@@ -24,6 +25,8 @@ const setup = (custom: Settings = settings) => {
     tick: (): void => undefined,
     chat: (_event: ChatSourceEvent): void => undefined,
     subscribers: 0,
+    // Le prochain live d'Alexis dans sa timetable ; aucun au départ.
+    slot: null as Slot | null,
   };
   const pushed: QueueItem[] = [];
   const logs: string[] = [];
@@ -51,6 +54,7 @@ const setup = (custom: Settings = settings) => {
       },
     },
     fox: { getPresence: () => state.presence },
+    timetable: { getNext: () => state.slot },
     settings: custom,
     clock: () => state.now,
     random: () => 0,
@@ -196,5 +200,130 @@ describe("createFoxJab", () => {
     expect(state.subscribers).toBe(2);
     jab.stop();
     expect(state.subscribers).toBe(0);
+  });
+});
+
+describe("createFoxJab : les rappels", () => {
+  const withReminders: Settings = { ...settings, foxReminders: ["R1", "R2"] };
+  const DAY = 86_400_000;
+
+  // Dit `count` fois quelque chose dans le silence, une fois l'écart passé à chaque fois.
+  const speakTimes = (harness: ReturnType<typeof setup>, count: number) => {
+    harness.state.now += 180_000;
+    harness.state.tick();
+    for (let time = 1; time < count; time += 1) {
+      harness.state.now += 600_000;
+      harness.state.tick();
+    }
+  };
+
+  it("alterne une pique et un rappel, en commençant par la pique, chaque liste sans répéter", () => {
+    const harness = setup(withReminders);
+    speakTimes(harness, 6);
+    expect(harness.pushed.map(({ text }) => text)).toEqual(["A", "R1", "B", "R2", "C", "R1"]);
+    expect(harness.pushed.map(({ kind }) => kind)).toEqual([
+      "jab",
+      "reminder",
+      "jab",
+      "reminder",
+      "jab",
+      "reminder",
+    ]);
+  });
+
+  it("tourne le rappel vers le tchat : coupé si Fenysk parle, jamais devant les messages, sans retournement", () => {
+    const harness = setup(withReminders);
+    speakTimes(harness, 2);
+    expect(harness.pushed[1]).toMatchObject({
+      kind: "reminder",
+      label: "rappel",
+      text: "R1",
+      isCuttable: true,
+      isUrgent: false,
+    });
+    expect(harness.pushed[1]?.toShow()).toBeNull();
+    expect(harness.pushed[0]?.toShow()).toEqual(ADDRESS_MODE);
+  });
+
+  it("écrit le rappel au journal", () => {
+    const harness = setup(withReminders);
+    speakTimes(harness, 2);
+    expect(harness.logs).toEqual([
+      "Renard : il revient piquer Fenysk : « A »",
+      "Renard : il revient faire un rappel au tchat : « R1 »",
+    ]);
+  });
+
+  it("suit les mêmes règles que la pique : un seul des deux par écart de 10 min", () => {
+    const harness = setup(withReminders);
+    harness.state.now += 180_000;
+    harness.state.tick();
+    harness.state.now += 599_999;
+    harness.state.tick();
+    expect(harness.pushed).toHaveLength(1);
+    harness.state.now += 1;
+    harness.state.tick();
+    expect(harness.pushed.map(({ text }) => text)).toEqual(["A", "R1"]);
+  });
+
+  it("garde la pique seule quand il n'y a aucun rappel ni aucun live à venir, comme avant", () => {
+    const harness = setup();
+    speakTimes(harness, 4);
+    expect(harness.pushed.map(({ text }) => text)).toEqual(["A", "B", "C", "A"]);
+  });
+
+  it("dit les rappels seuls quand il n'y a aucune pique", () => {
+    const harness = setup({ ...withReminders, foxJabs: [] });
+    speakTimes(harness, 3);
+    expect(harness.pushed.map(({ text }) => text)).toEqual(["R1", "R2", "R1"]);
+  });
+
+  it("ne dit rien sans pique, sans rappel et sans live à venir", () => {
+    const harness = setup({ ...settings, foxJabs: [], foxReminders: [] });
+    speakTimes(harness, 3);
+    expect(harness.pushed).toEqual([]);
+  });
+
+  it("met le prochain live dans le tirage des rappels, avec son titre", () => {
+    const harness = setup({ ...settings, foxReminders: ["R1"] });
+    harness.state.slot = { start: harness.state.now + 2 * DAY, title: "Soirée jeux" };
+    speakTimes(harness, 6);
+    const reminders = harness.pushed.filter(({ kind }) => kind === "reminder").map(({ text }) => text);
+    // Deux phrases au tirage : chacune une fois avant que la première reparte.
+    expect(reminders).toHaveLength(3);
+    expect(reminders[0]).toBe("R1");
+    expect(reminders[2]).toBe("R1");
+    const live = reminders[1];
+    expect(live).toMatch(/^Prochain live : \p{L}+ à .+\. Au programme : Soirée jeux\.$/u);
+  });
+
+  it("dit le prochain live sans « Au programme » quand il n'a pas de titre", () => {
+    const harness = setup({ ...settings, foxJabs: [], foxReminders: [] });
+    harness.state.slot = { start: harness.state.now + 3 * DAY, title: null };
+    speakTimes(harness, 1);
+    expect(harness.pushed).toHaveLength(1);
+    expect(harness.pushed[0]?.text).toMatch(/^Prochain live : .+ à .+\.$/);
+    expect(harness.pushed[0]?.text).not.toContain("Au programme");
+  });
+
+  it("dit le prochain live seul, quand aucune liste n'a rien, puisqu'il entre dans le tirage", () => {
+    const harness = setup({ ...settings, foxJabs: [], foxReminders: [] });
+    harness.state.slot = { start: harness.state.now + DAY, title: null };
+    speakTimes(harness, 2);
+    expect(harness.pushed.map(({ kind }) => kind)).toEqual(["reminder", "reminder"]);
+  });
+
+  it("n'en dit pas un live qui n'est plus à venir : il sort du tirage", () => {
+    const harness = setup({ ...settings, foxJabs: [], foxReminders: [] });
+    harness.state.slot = null;
+    speakTimes(harness, 2);
+    expect(harness.pushed).toEqual([]);
+  });
+
+  it("suit les rappels changés en direct", () => {
+    const harness = setup(withReminders);
+    harness.jab.update({ ...withReminders, foxReminders: ["Z"] });
+    speakTimes(harness, 2);
+    expect(harness.pushed.map(({ text }) => text)).toEqual(["A", "Z"]);
   });
 });

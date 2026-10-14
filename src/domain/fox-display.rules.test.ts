@@ -10,7 +10,7 @@ import {
   YAWN_IMAGE,
 } from "./fox.rules";
 import type { FoxMode, FoxRules } from "./fox.schema";
-import { LISTENING_MODE, WAVE_MODE, YAWN_MODE } from "./fox-mode.rules";
+import { FLINCH_MODE, LISTENING_MODE, STARTLE_MODE, WAVE_MODE, YAWN_MODE } from "./fox-mode.rules";
 
 const rules: FoxRules = {
   smallThreshold: -38,
@@ -254,6 +254,68 @@ describe("F : le bâillement (mode yawn)", () => {
       rules,
       random: constant(0.5),
       mode: YAWN_MODE,
+    });
+    expect(toFoxDisplay(state, 0, rules).image.startsWith("left-")).toBe(true);
+  });
+});
+
+describe("K : le sursaut d'un cri (mode flinch)", () => {
+  it("montre left-large-rest, la tête choquée, tant que le mode dure, sans cligner ni changer de regard", () => {
+    const { frames } = run(FOX_START, 0, 5000, FLINCH_MODE, seeded(4));
+    for (const { image } of frames) expect(image).toBe("left-large-rest");
+  });
+
+  it("revient au regard après le sursaut", () => {
+    const { frames } = run(
+      FOX_START,
+      0,
+      4000,
+      (now) => (now < 1000 ? FLINCH_MODE : { kind: "idle" }),
+      seeded(8),
+    );
+    expect(frames.find(({ now }) => now < 1000)?.image).toBe("left-large-rest");
+    expect(frames.find(({ now }) => now > 1500)?.image).not.toBe("left-large-rest");
+  });
+
+  it("laisse la bouche gagner sur le sursaut", () => {
+    const state = toNextFox({
+      previous: FOX_START,
+      now: 0,
+      level: -15,
+      rules,
+      random: constant(0.5),
+      mode: FLINCH_MODE,
+    });
+    expect(toFoxDisplay(state, 0, rules).image.startsWith("left-")).toBe(true);
+  });
+});
+
+describe("S : le sursaut du jeu (mode startle)", () => {
+  it("montre left-large-rest, la tête choquée, tant que le mode dure, sans cligner ni changer de regard", () => {
+    const { frames } = run(FOX_START, 0, 5000, STARTLE_MODE, seeded(5));
+    for (const { image } of frames) expect(image).toBe("left-large-rest");
+  });
+
+  it("revient au regard après le sursaut", () => {
+    const { frames } = run(
+      FOX_START,
+      0,
+      4000,
+      (now) => (now < 1000 ? STARTLE_MODE : { kind: "idle" }),
+      seeded(9),
+    );
+    expect(frames.find(({ now }) => now < 1000)?.image).toBe("left-large-rest");
+    expect(frames.find(({ now }) => now > 1500)?.image).not.toBe("left-large-rest");
+  });
+
+  it("laisse la bouche gagner sur le sursaut", () => {
+    const state = toNextFox({
+      previous: FOX_START,
+      now: 0,
+      level: -15,
+      rules,
+      random: constant(0.5),
+      mode: STARTLE_MODE,
     });
     expect(toFoxDisplay(state, 0, rules).image.startsWith("left-")).toBe(true);
   });

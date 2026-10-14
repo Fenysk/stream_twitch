@@ -8,7 +8,7 @@ import {
   type FoxPlace,
   type FoxRules,
 } from "../domain/fox.schema";
-import { IDLE_MODE } from "../domain/fox-mode.rules";
+import { IDLE_MODE, isFacingFenysk } from "../domain/fox-mode.rules";
 import { toFoxTransform } from "../domain/fox-transform.rules";
 import { NO_JOY, toJoyBody } from "../domain/joy.rules";
 import { MIRROR_START, toMirrorScale, toNextMirror } from "../domain/mirror.rules";
@@ -45,7 +45,7 @@ const startFox = ({ place, body, onImage, onMuted }: FoxLoopDeps): (() => void) 
   let rules: FoxRules | undefined;
   let state = FOX_START;
   let mode: FoxMode = IDLE_MODE;
-  // Tourné vers Fenysk (mode `address`) : le corps se retourne, toutes les images en miroir.
+  // Tourné vers Fenysk (modes `address` et `flinch`) : le corps se retourne, toutes les images en miroir.
   let mirror = MIRROR_START;
   // La phase de présence et l'instant de la page où elle a commencé (moins le temps déjà écoulé côté serveur).
   let pose: PresencePose = { kind: "visible", elapsed: 0, from: { offset: 0, angle: 0 } };
@@ -125,7 +125,7 @@ const startFox = ({ place, body, onImage, onMuted }: FoxLoopDeps): (() => void) 
     const presence = toPresenceBody(currentPose(now), rules);
     // Le saut de joie d'un sub : il part du moment où la page a reçu le mode.
     const joy = mode.kind === "joy" ? toJoyBody(now - (state.modeAt ?? now), rules.joyMs) : NO_JOY;
-    mirror = toNextMirror(mirror, mode.kind === "address", now);
+    mirror = toNextMirror(mirror, isFacingFenysk(mode), now);
     if (display.image !== shown) {
       shown = display.image;
       onImage(display.image);

@@ -4,28 +4,46 @@ import type { Settings } from "./settings.schema";
 
 export const IDLE_MODE: FoxMode = { kind: "idle" };
 export const LISTENING_MODE: FoxMode = { kind: "listening" };
-export const YAWN_MODE: FoxMode = { kind: "yawn" };
 
 // Ce que le renard montre avant de lire : une réaction à un mot-clé, le coucou à un viewer qu'il lit pour la première fois,
-// le retournement vers Fenysk (qui dure jusqu'à la fin de la phrase), ou le saut de joie d'un sub.
-export type Show = Extract<FoxMode, { kind: "reaction" | "wave" | "address" | "joy" }>;
+// le retournement vers Fenysk (qui dure jusqu'à la fin de la phrase), le saut de joie d'un sub, le sursaut d'un cri, ou le
+// bâillement d'un monologue, ou le sursaut du jeu.
+export type Show = Extract<
+  FoxMode,
+  { kind: "reaction" | "wave" | "address" | "joy" | "flinch" | "yawn" | "startle" }
+>;
 
 export const WAVE_MODE: Show = { kind: "wave" };
 export const ADDRESS_MODE: Show = { kind: "address" };
 export const JOY_MODE: Show = { kind: "joy" };
+export const FLINCH_MODE: Show = { kind: "flinch" };
+export const YAWN_MODE: Show = { kind: "yawn" };
+export const STARTLE_MODE: Show = { kind: "startle" };
 export const SMILE_MODE: Show = { kind: "reaction", image: "front-smile-rest" };
 
-// Combien de temps il se montre avant que la phrase parte : la durée d'une réaction ou du coucou, le retournement vers Fenysk.
+// Combien de temps il se montre avant que la phrase parte : la durée d'une réaction, du coucou ou du sursaut, du saut de
+// joie ou du bâillement, ou le retournement vers Fenysk.
 export const toShowMs = (
   { kind }: Show,
-  { reactionMs, joyMs }: Pick<FoxModeRules, "reactionMs" | "joyMs">,
+  { reactionMs, joyMs, yawnMs }: Pick<FoxModeRules, "reactionMs" | "joyMs" | "yawnMs">,
 ): number => {
-  if (kind === "address") return FLIP_MS;
-  return kind === "joy" ? joyMs : reactionMs;
+  switch (kind) {
+    case "address":
+      return FLIP_MS;
+    case "joy":
+      return joyMs;
+    case "yawn":
+      return yawnMs;
+    default:
+      return reactionMs;
+  }
 };
 
 // Le retournement vers Fenysk reste jusqu'à la fin de la phrase ; une réaction ou un coucou cède la place à la phrase.
 export const isHeldShow = ({ kind }: Show): boolean => kind === "address";
+
+// Tourné vers Fenysk, à droite de l'écran : toutes les images en miroir.
+export const isFacingFenysk = ({ kind }: FoxMode): boolean => kind === "address" || kind === "flinch";
 
 export const isSameMode = (first: FoxMode, second: FoxMode): boolean =>
   first.kind === second.kind &&

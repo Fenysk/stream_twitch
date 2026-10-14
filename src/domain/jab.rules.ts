@@ -9,6 +9,20 @@ export function toJabRules({ foxJabAfter, foxJabGap }: Settings): JabRules | und
   return { after: foxJabAfter, gap: foxJabGap };
 }
 
+// Ce que le silence donne : une pique (tournée vers Fenysk) ou un rappel (tourné vers le chat).
+export type SilenceKind = "jab" | "reminder";
+
+// Tour à tour une pique puis un rappel, en commençant par la pique. Quand une seule sorte a quelque chose à dire, c'est toujours
+// elle ; `null` : rien à dire. `last` : ce qu'il a dit la fois d'avant (`null` : rien encore).
+export function toNextSilenceKind(
+  last: SilenceKind | null,
+  { hasJab, hasReminder }: { hasJab: boolean; hasReminder: boolean },
+): SilenceKind | null {
+  if (hasJab && hasReminder) return last === "jab" ? "reminder" : "jab";
+  if (hasJab) return "jab";
+  return hasReminder ? "reminder" : null;
+}
+
 // Depuis combien de ms (infini : jamais) il est parti, Fenysk ne dit rien, le tchat ne dit rien, et la dernière pique a été
 // dite. `awayFor` est `null` tant qu'il n'est pas parti.
 export type JabSilence = {
