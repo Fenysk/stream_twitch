@@ -11,6 +11,14 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-15 — Un plugin Stream Deck affiche le nombre de viewers : `streamdeck/`, `@elgato/streamdeck` et `@elgato/cli` entrent au dépôt
+
+**Contexte.** La touche « Viewers » de BarRaider marchait mal ; Alexis veut le nombre lu sur `/api/twitch/viewers`, sans confondre zéro, hors ligne et inconnu. Aucun connecteur ne règle une touche, aucun plugin installé ne lit une URL.
+**Décision.** Le plugin vit dans `streamdeck/` : source `streamdeck/src/`, dossier `com.fenysk.stream-twitch.sdPlugin/`, sortie `bin/` construite, hors de git et de Biome. `@elgato/streamdeck` tourne sur le Node 20 de l'appli, le seul installé ici (Node 22 suffit pour construire) ; `@elgato/cli` sert à `link`, `validate` et `restart`. Le Vite du dépôt fait le bundle pour `node20` (`streamdeck/vite.config.ts`, SDK et zod dedans). Le manifest vise le SDK 3, Stream Deck 7.1 au moins (comportement des réglages du SDK 3) et Node 20. La lecture de la réponse et le texte de chaque état connu vivent dans `src/domain` (`viewers.schema.ts`, `viewers.rules.ts`), sous tout le gate ; `tsconfig.json` et `vitest.config.ts` couvrent aussi `streamdeck/src/` (types, lint, tests), mais architecture, lexique et duplication ne lisent que `src/`. Les textes « Serveur éteint » et « Serveur à relancer » vivent dans `streamdeck/src/viewers-title.ts`. Le port se fixe à la construction (`PORT`, 4747 par défaut, comme pour `pnpm start`) et entre par `define` sous le nom `serverPortAtBuild`.
+**Renoncement.** Node 24 : l'appli de ce poste ne l'a pas installé, et un plugin qui l'exige ne démarre pas (aucun processus, aucun `logs/`). API Ninja : rien de lisible pour `offline` ni `unknown`. Le Rollup du gabarit Elgato : cinq dépendances pour ce que Vite fait déjà. Un inspecteur de propriétés pour le port : une page de plus pour un réglage qui ne bouge pas.
+
+---
+
 ## 2026-10-15 — Jean-Renard parle contre des points de chaîne : toute récompense de la chaîne peut recevoir des phrases, gardées dans `data/reward-phrases.json`
 
 **Contexte.** Alexis a fait « À boire ! » et « Étirement ! » sur Twitch (l'app ne les gère pas) et veut que le renard dise « Bois un coup de la part de {user} ! » quand un viewer les dépense. Une récompense a un son, des phrases, ou les deux.
@@ -40,6 +48,7 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 **Contexte.** Alexis veut des sons déclenchés par les points de chaîne, réglés depuis l'onglet « Points de chaîne » (jusqu'ici grisé) et joués dans OBS comme la voix du renard. Cette tranche n'a pas Twitch : elle pose le son, sa lecture et son onglet ; les récompenses viennent ensuite.
 **Décision.** Un `sound` est un dossier `data/sounds/<id>/` (`sound.json` écrit en dernier, `audio.mp3|wav|ogg`, 5 Mo au plus, type lu dans les premiers octets et jamais dans l'extension) avec un titre (45 caractères, unique), un coût en points, une `pace` en secondes (0 = aucune) et un `fader` de 0 à 100 %. Le serveur tient la queue (`sound-queue.usecase.ts`) : il donne UN son à la fois à UNE seule page `/sounds` (la plus ancienne connectée), qui répond « fini » ou « raté » (`POST /api/sounds/played`) ; une page qui se ferme ou « Couper le son » arrête le son et vide la queue. « Écouter » joue dans la page des réglages, sans le serveur. `lexique.json` : nouveaux noms `sound` (bannis : son, sfx) et `fader` (banni : volume) ; `queue` couvre aussi les sons en attente, `pace` aussi le temps en secondes avant qu'un son soit rejouable (cooldown est déjà son synonyme banni).
 **Renoncement.** La queue dans la page `/sounds` : le serveur ne saurait pas quand un son finit, donc quand rendre les points (tranche suivante). Nommer `fader` « volume » : `volume` est déjà un synonyme banni de `level` (des dB, pas un pourcentage). Un nom `gap` ou `cooldown` pour la `pace` : le lexique a déjà son mot.
+
 ## 2026-10-14 — Le renard démarre caché et une page `/fox` qui se connecte ne change plus sa présence : l'évènement `reset` disparaît
 
 **Contexte.** Visible au démarrage et rendu visible (3 min de plus) à chaque connexion d'OBS, il se montrait sans raison dès qu'Alexis rafraîchissait la source.

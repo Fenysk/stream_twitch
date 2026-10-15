@@ -18,6 +18,9 @@ settings.local.json.tmp
 # Les expressions de la tête qu'Alexis enregistre (data/heads/<id>/) : elles restent sur son PC, comme ses réglages.
 data/
 
+# Le code construit du plugin Stream Deck (`pnpm streamdeck:build`).
+streamdeck/*.sdPlugin/bin/
+
 # Un worktree par chantier, créé par `tools/worktree.sh` seulement (JOURNAL 2026-10-07).
 .claude/worktrees/
 

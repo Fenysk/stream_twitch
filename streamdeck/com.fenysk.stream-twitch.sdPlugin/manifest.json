@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "UUID": "com.fenysk.stream-twitch",
+  "Name": "Stream Twitch",
+  "Version": "0.1.0.0",
+  "Author": "Fenysk",
+  "Description": "Affiche sur une touche le nombre de viewers du live, lu sur le serveur local de Stream Twitch.",
+  "Icon": "imgs/plugin/icon",
+  "Category": "Stream Twitch",
+  "CategoryIcon": "imgs/plugin/category",
+  "CodePath": "bin/plugin.js",
+  "SDKVersion": 3,
+  "Software": { "MinimumVersion": "7.1" },
+  "Nodejs": { "Version": "20" },
+  "OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
+  "Actions": [
+    {
+      "UUID": "com.fenysk.stream-twitch.viewers",
+      "Name": "Viewers",
+      "Tooltip": "Nombre de viewers du live, relu toutes les 10 s ; appuyer le relit tout de suite.",
+      "Icon": "imgs/actions/viewers/icon",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/viewers/key",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#f6e8e0",
+          "FontSize": 13,
+          "FontStyle": "Bold"
+        }
+      ]
+    }
+  ]
+}

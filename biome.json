@@ -11,7 +11,8 @@
       "!**/dist",
       "!**/.output",
       "!**/*.gen.ts",
-      "!tete-south-park"
+      "!tete-south-park",
+      "!streamdeck/*.sdPlugin/bin"
     ]
   },
 
