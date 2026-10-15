@@ -12,7 +12,8 @@
       "!**/.output",
       "!**/*.gen.ts",
       "!tete-south-park",
-      "!streamdeck/*.sdPlugin/bin"
+      "!streamdeck/*.sdPlugin/bin",
+      "!streamdeck/*.sdPlugin/ui"
     ]
   },
 

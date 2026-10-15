@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node tools/start.mjs",
-    "streamdeck:build": "vite build --config streamdeck/vite.config.ts",
+    "streamdeck:build": "vite build --config streamdeck/vite.config.ts && vite build --config streamdeck/vite.inspector.config.ts",
     "typecheck": "tsc --noEmit",
     "check": "biome check .",
     "format": "biome format --write .",

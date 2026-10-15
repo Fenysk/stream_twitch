@@ -1,5 +1,13 @@
 {
-  "include": ["src/**/*.ts", "src/**/*.tsx", "*.ts", "streamdeck/src/**/*.ts", "streamdeck/vite.config.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "*.ts",
+    "streamdeck/src/**/*.ts",
+    "streamdeck/src/**/*.tsx",
+    "streamdeck/vite.config.ts",
+    "streamdeck/vite.inspector.config.ts"
+  ],
   "exclude": ["node_modules", ".agent", ".claude/worktrees", "dist", ".output"],
   "compilerOptions": {
     "target": "ES2023",

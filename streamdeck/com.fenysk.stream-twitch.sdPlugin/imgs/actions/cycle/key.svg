@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+  <title>Cycle de valeurs</title>
+  <rect width="72" height="72" fill="#10121c"/>
+  <rect x="3" y="3" width="66" height="66" rx="12" fill="#181a24" stroke="#2e3040" stroke-width="2"/>
+  <g transform="translate(21 2) scale(1.25)" fill="none" stroke="#f6e8e0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m17 2 4 4-4 4"/>
+    <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
+    <path d="m7 22-4-4 4-4"/>
+    <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
+  </g>
+</svg>

@@ -1,0 +1,46 @@
+/* Le panneau de l'appli Stream Deck est étroit : les contrôles gardent la taille d'une souris (tokens.css les agrandit sous 640 px). */
+:root {
+  --control-size: 36px;
+}
+
+.inspector {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-3);
+}
+
+.inspector-status {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.inspector p {
+  margin: 0;
+}
+
+/* Des cases à cocher sur les valeurs d'un réglage : autant par ligne que le panneau en tient */
+.inspector-values {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.inspector-values legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+}
+
+/* Un réglage du préréglage : sa case, puis sa valeur dessous quand elle est cochée */
+.inspector-pair {
+  display: grid;
+  gap: var(--space-2);
+  padding-bottom: var(--space-1);
+}
+
+.inspector-values-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-4);
+}

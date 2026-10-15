@@ -2,9 +2,9 @@
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "UUID": "com.fenysk.stream-twitch",
   "Name": "Stream Twitch",
-  "Version": "0.1.0.0",
+  "Version": "0.2.0.0",
   "Author": "Fenysk",
-  "Description": "Affiche sur une touche le nombre de viewers du live, lu sur le serveur local de Stream Twitch.",
+  "Description": "Pilote le serveur local de Stream Twitch depuis des touches : le nombre de viewers, des interrupteurs, des cycles de valeurs et des préréglages qui montrent l'état réel des réglages, et des phrases pour Jean-Renard.",
   "Icon": "imgs/plugin/icon",
   "Category": "Stream Twitch",
   "CategoryIcon": "imgs/plugin/category",
@@ -26,6 +26,98 @@
           "TitleAlignment": "bottom",
           "TitleColor": "#f6e8e0",
           "FontSize": 13,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "UUID": "com.fenysk.stream-twitch.toggle",
+      "Name": "Interrupteur",
+      "Tooltip": "Active ou coupe un réglage du serveur. La touche montre l'état réel, relu toutes les 10 s et après chaque appui.",
+      "Icon": "imgs/actions/toggle/icon",
+      "Controllers": ["Keypad"],
+      "PropertyInspectorPath": "ui/inspector.html",
+      "DisableAutomaticStates": true,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Name": "Coupé",
+          "Image": "imgs/actions/toggle/key-off",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#a3a5b3",
+          "FontSize": 12,
+          "FontStyle": "Bold"
+        },
+        {
+          "Name": "Actif",
+          "Image": "imgs/actions/toggle/key-on",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#f6e8e0",
+          "FontSize": 12,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "UUID": "com.fenysk.stream-twitch.cycle",
+      "Name": "Cycle de valeurs",
+      "Tooltip": "Passe un réglage à la valeur suivante d'une liste. La touche montre la valeur réelle, relue toutes les 10 s et après chaque appui.",
+      "Icon": "imgs/actions/cycle/icon",
+      "Controllers": ["Keypad"],
+      "PropertyInspectorPath": "ui/inspector.html",
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/cycle/key",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#f6e8e0",
+          "FontSize": 12,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "UUID": "com.fenysk.stream-twitch.preset",
+      "Name": "Préréglage",
+      "Tooltip": "Applique d'un coup plusieurs réglages du serveur. La touche est active quand le serveur applique déjà toutes ses valeurs.",
+      "Icon": "imgs/actions/preset/icon",
+      "Controllers": ["Keypad"],
+      "PropertyInspectorPath": "ui/inspector.html",
+      "DisableAutomaticStates": true,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Name": "Inactif",
+          "Image": "imgs/actions/preset/key-idle",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#a3a5b3",
+          "FontSize": 12,
+          "FontStyle": "Bold"
+        },
+        {
+          "Name": "Actif",
+          "Image": "imgs/actions/preset/key-active",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#f6e8e0",
+          "FontSize": 12,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "UUID": "com.fenysk.stream-twitch.phrase",
+      "Name": "Phrase",
+      "Tooltip": "Fait dire une phrase à Jean-Renard, ou le bilan du live. La coche confirme, l'alerte signale un refus du serveur.",
+      "Icon": "imgs/actions/phrase/icon",
+      "Controllers": ["Keypad"],
+      "PropertyInspectorPath": "ui/inspector.html",
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/phrase/key",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#f6e8e0",
+          "FontSize": 12,
           "FontStyle": "Bold"
         }
       ]

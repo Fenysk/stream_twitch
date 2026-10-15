@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+  <title>Interrupteur actif</title>
+  <rect width="72" height="72" fill="#10121c"/>
+  <rect x="3" y="3" width="66" height="66" rx="12" fill="#181a24" stroke="#5ab552" stroke-width="2"/>
+  <g transform="translate(18 4) scale(1.5)" fill="none" stroke="#5ab552" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="15" cy="12" r="3"/>
+    <rect width="20" height="14" x="2" y="5" rx="7"/>
+  </g>
+</svg>
