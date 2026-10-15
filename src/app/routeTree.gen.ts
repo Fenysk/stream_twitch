@@ -21,6 +21,7 @@ import { Route as SettingsCutRouteImport } from './routes/settings.cut'
 import { Route as SettingsFoxRouteImport } from './routes/settings.fox'
 import { Route as SettingsHeadRouteImport } from './routes/settings.head'
 import { Route as SettingsRewardsRouteImport } from './routes/settings.rewards'
+import { Route as SettingsTwitchRouteImport } from './routes/settings.twitch'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -82,6 +83,11 @@ const SettingsRewardsRoute = SettingsRewardsRouteImport.update({
   path: '/rewards',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsTwitchRoute = SettingsTwitchRouteImport.update({
+  id: '/twitch',
+  path: '/twitch',
+  getParentRoute: () => SettingsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/rewards': typeof SettingsRewardsRoute
+  '/settings/twitch': typeof SettingsTwitchRoute
   '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -108,6 +115,7 @@ export interface FileRoutesByTo {
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/rewards': typeof SettingsRewardsRoute
+  '/settings/twitch': typeof SettingsTwitchRoute
   '/settings': typeof SettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -123,6 +131,7 @@ export interface FileRoutesById {
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/rewards': typeof SettingsRewardsRoute
+  '/settings/twitch': typeof SettingsTwitchRoute
   '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -139,6 +148,7 @@ export interface FileRouteTypes {
     | '/settings/fox'
     | '/settings/head'
     | '/settings/rewards'
+    | '/settings/twitch'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -152,6 +162,7 @@ export interface FileRouteTypes {
     | '/settings/fox'
     | '/settings/head'
     | '/settings/rewards'
+    | '/settings/twitch'
     | '/settings'
   id:
     | '__root__'
@@ -166,6 +177,7 @@ export interface FileRouteTypes {
     | '/settings/fox'
     | '/settings/head'
     | '/settings/rewards'
+    | '/settings/twitch'
     | '/settings/'
   fileRoutesById: FileRoutesById
 }
@@ -264,6 +276,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRewardsRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/twitch': {
+      id: '/settings/twitch'
+      path: '/twitch'
+      fullPath: '/settings/twitch'
+      preLoaderRoute: typeof SettingsTwitchRouteImport
+      parentRoute: typeof SettingsRoute
+    }
   }
 }
 
@@ -273,6 +292,7 @@ interface SettingsRouteChildren {
   SettingsFoxRoute: typeof SettingsFoxRoute
   SettingsHeadRoute: typeof SettingsHeadRoute
   SettingsRewardsRoute: typeof SettingsRewardsRoute
+  SettingsTwitchRoute: typeof SettingsTwitchRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
@@ -282,6 +302,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsFoxRoute: SettingsFoxRoute,
   SettingsHeadRoute: SettingsHeadRoute,
   SettingsRewardsRoute: SettingsRewardsRoute,
+  SettingsTwitchRoute: SettingsTwitchRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
 

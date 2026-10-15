@@ -30,51 +30,89 @@ export const useShownWhileClosing = <T,>(value: T | null): T | null => {
 // Enveloppe un onglet : la cible d'une bulle d'aide (Écart §8.1, JOURNAL 2026-10-09).
 type WrapTab<Id extends string> = (id: Id, tab: ReactNode) => ReactNode;
 
-type WindowNavProps<Id extends string> = {
+// Un groupe d'onglets sous un petit titre. Vide, il n'est pas dessiné : il attend ses premiers onglets.
+export type WindowSectionGroup<Id extends string> = {
+  id: string;
+  label: string;
   sections: readonly WindowSection<Id>[];
+};
+
+type NavTabsProps<Id extends string> = {
   currentId: Id | undefined;
   onSelect: (id: Id) => void;
   wrapTab?: WrapTab<Id> | undefined;
 };
 
-// La barre latérale, ou la rangée d'onglets sur mobile : un bouton par section.
-export const WindowNav = <Id extends string>({
+// Une liste à plat (`sections`) ou des groupes (`groups`) : jamais les deux.
+type WindowNavProps<Id extends string> = NavTabsProps<Id> &
+  (
+    | { sections: readonly WindowSection<Id>[]; groups?: undefined }
+    | { groups: readonly WindowSectionGroup<Id>[]; sections?: undefined }
+  );
+
+// Un bouton par section ; dans un groupe, la liste est nommée par le titre du groupe.
+const NavList = <Id extends string>({
   sections,
+  labelledBy,
   currentId,
   onSelect,
   wrapTab,
-}: WindowNavProps<Id>) => {
+}: NavTabsProps<Id> & { sections: readonly WindowSection<Id>[]; labelledBy?: string }) => {
   const t = DESIGN_TEXTS;
-  const selection = useSelectionGlide<HTMLElement>();
   return (
-    <nav ref={selection} className="lp-window-nav lp-selection" aria-label={t.sections}>
-      <ul>
-        {sections.map(({ id, label, icon: Icon, isSoon = false }) => {
-          if (isSoon) {
-            return (
-              <li key={id}>
-                <button type="button" className="lp-btn lp-type-body" aria-disabled="true">
-                  <Icon aria-hidden="true" />
-                  {label}
-                  <Badge label={t.soon} />
-                </button>
-              </li>
-            );
-          }
-          const tab = (
-            <button
-              type="button"
-              className={classNames("lp-btn lp-type-body", id === currentId && "is-selected")}
-              aria-current={id === currentId ? "page" : undefined}
-              onClick={blurAfterClick(() => onSelect(id))}
-            >
-              <Icon aria-hidden="true" />
-              {label}
-            </button>
+    <ul aria-labelledby={labelledBy}>
+      {sections.map(({ id, label, icon: Icon, isSoon = false }) => {
+        if (isSoon) {
+          return (
+            <li key={id}>
+              <button type="button" className="lp-btn lp-type-body" aria-disabled="true">
+                <Icon aria-hidden="true" />
+                {label}
+                <Badge label={t.soon} />
+              </button>
+            </li>
           );
-          return <li key={id}>{wrapTab ? wrapTab(id, tab) : tab}</li>;
-        })}
-      </ul>
+        }
+        const tab = (
+          <button
+            type="button"
+            className={classNames("lp-btn lp-type-body", id === currentId && "is-selected")}
+            aria-current={id === currentId ? "page" : undefined}
+            onClick={blurAfterClick(() => onSelect(id))}
+          >
+            <Icon aria-hidden="true" />
+            {label}
+          </button>
+        );
+        return <li key={id}>{wrapTab ? wrapTab(id, tab) : tab}</li>;
+      })}
+    </ul>
+  );
+};
+
+// La barre latérale, ou la rangée d'onglets sur mobile. Une seule barre même en groupes : le fond de l'onglet choisi
+// glisse d'un groupe à l'autre (use-selection-glide.ts).
+export const WindowNav = <Id extends string>({ groups, sections, ...tabs }: WindowNavProps<Id>) => {
+  const selection = useSelectionGlide<HTMLElement>();
+  const titleId = useId();
+  return (
+    <nav ref={selection} className="lp-window-nav lp-selection" aria-label={DESIGN_TEXTS.sections}>
+      {groups ? (
+        <ul className="lp-window-nav-groups">
+          {groups
+            .filter((group) => group.sections.length > 0)
+            .map((group) => (
+              <li key={group.id} className="lp-window-nav-group">
+                <p id={`${titleId}-${group.id}`} className="lp-window-nav-title lp-type-caption lp-muted">
+                  {group.label}
+                </p>
+                <NavList sections={group.sections} labelledBy={`${titleId}-${group.id}`} {...tabs} />
+              </li>
+            ))}
+        </ul>
+      ) : (
+        <NavList sections={sections} {...tabs} />
+      )}
     </nav>
   );
 };

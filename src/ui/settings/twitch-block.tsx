@@ -1,4 +1,4 @@
-// Le bloc « Connexion à Twitch » de l'onglet Renard : l'état (connecté en tant que …, ou non connecté), « Se connecter à Twitch »
+// Le bloc « Connexion à Twitch » de l'onglet Twitch : l'état (connecté en tant que …, ou non connecté), « Se connecter à Twitch »
 // (ouvre l'autorisation de Twitch dans un autre onglet), « Se reconnecter à Twitch » quand le jeton gardé ne couvre pas tout, et
 // « Se déconnecter ». Les follows, les récompenses de points de chaîne et les prédictions ont besoin de cette connexion ; les
 // subs, les cheers et les raids non.
@@ -6,7 +6,8 @@
 import { TWITCH_REDIRECT_URI, toTopicsText } from "../../domain/twitch.rules";
 import type { TwitchStatus } from "../../domain/twitch.schema";
 import { Button } from "../design/button";
-import { DESIGN_TEXTS } from "../design/design-texts";
+import { SettingsCard } from "./settings-page";
+import { toTwitchStatusText } from "./twitch-status-text";
 
 type TwitchBlockProps = {
   status: TwitchStatus | null;
@@ -16,23 +17,10 @@ type TwitchBlockProps = {
   onDisconnect: () => void;
 };
 
-const toStatusText = (status: TwitchStatus | null): string => {
-  if (status === null) return DESIGN_TEXTS.loading;
-  switch (status.kind) {
-    case "unavailable":
-      return "Indisponible : TWITCH_CLIENT_ID et TWITCH_CLIENT_SECRET manquent dans .env.";
-    case "connected":
-      return `Connecté en tant que ${status.login}.`;
-    case "disconnected":
-      return "Non connecté.";
-  }
-};
-
 export const TwitchBlock = ({ status, error, isBusy, onDisconnect }: TwitchBlockProps) => (
-  <section className="fox-group">
-    <h2 className="lp-type-heading">Connexion à Twitch</h2>
+  <SettingsCard title="Connexion à Twitch">
     <p className="lp-type-body" role="status">
-      {toStatusText(status)}
+      {toTwitchStatusText(status)}
     </p>
     {status?.kind === "disconnected" && status.lastError && (
       <p role="alert" className="lp-type-caption lp-danger">
@@ -72,5 +60,5 @@ export const TwitchBlock = ({ status, error, isBusy, onDisconnect }: TwitchBlock
       Les follows, les récompenses de points de chaîne et les prédictions se lisent avec cette connexion. Les
       subs, les resubs, les subs offerts, les cheers et les raids n'en ont pas besoin.
     </p>
-  </section>
+  </SettingsCard>
 );

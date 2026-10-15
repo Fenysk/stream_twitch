@@ -1,16 +1,16 @@
-// L'onglet « Tête South Park » : les vignettes des expressions, l'aperçu en direct, le vumètre du micro, six curseurs, un
-// bouton pour revenir aux valeurs par défaut. Chaque choix s'applique en direct sur la page `/head` et se garde dans
-// settings.local.json : rien à enregistrer.
+// L'onglet « Tête South Park » : l'aperçu en direct à gauche ; à droite, les vignettes des expressions, puis le vumètre du micro
+// et six curseurs ; en haut, un bouton pour revenir aux valeurs par défaut. Chaque choix s'applique en direct sur la page
+// `/head` et se garde dans settings.local.json : rien à enregistrer.
 
-import { PHOTO_ID } from "../../domain/expression.schema";
 import { Button } from "../design/button";
-import { DESIGN_TEXTS } from "../design/design-texts";
-import { ExpressionThumbs } from "./expression-thumbs";
+import { ExpressionCard } from "./expression-card";
 import { SLIDER_KEYS, SLIDERS } from "./head-fields";
 import { HeadPreview } from "./head-preview";
 import { MicMeter } from "./mic-meter";
 import { SettingSlider } from "./setting-slider";
 import { isDefaultTab } from "./settings-changes";
+import { SettingsCard, SettingsLoading, SettingsPage } from "./settings-page";
+import { toSectionLabel } from "./settings-sections";
 import { useExpressions } from "./use-expressions";
 import { useMicLevel } from "./use-mic-level";
 import { useSettings } from "./use-settings";
@@ -18,47 +18,41 @@ import { useSettings } from "./use-settings";
 // Les réglages de cet onglet : revenir aux valeurs par défaut ne touche pas à ceux du tchat ni du renard.
 const HEAD_KEYS = [...SLIDER_KEYS, "expression"];
 
+const TITLE = toSectionLabel("head");
+
 export const HeadSettingsTab = () => {
   const settings = useSettings();
   const mic = useMicLevel();
   const { expressions } = useExpressions();
   const { view } = settings;
-  if (!view) return <p className="lp-type-body lp-muted">{DESIGN_TEXTS.loading}</p>;
+  if (!view) return <SettingsLoading title={TITLE} />;
   const { effective } = view;
   const isDefault = isDefaultTab(HEAD_KEYS, settings.drafts, view.local, effective);
   return (
-    <div className="settings-tab">
-      {expressions && expressions.length > 1 && (
-        <ExpressionThumbs
-          label="Expression"
-          expressions={expressions}
-          currentId={effective.expression ?? PHOTO_ID}
-          onPick={(id) => void settings.choose(id === PHOTO_ID ? null : id)}
+    <SettingsPage
+      title={TITLE}
+      errors={settings.errors.general}
+      preview={<HeadPreview />}
+      actions={
+        <Button
+          label="Revenir aux valeurs par défaut"
+          isDisabled={isDefault}
+          onPress={() => void settings.reset(HEAD_KEYS)}
         />
-      )}
-      <div className="head-tab-body">
-        <div className="head-preview">
-          <HeadPreview />
-        </div>
-        <div className="head-controls">
-          <MicMeter level={mic.level} isLinked={mic.isLinked} threshold={effective.threshold} />
-          {settings.errors.general.map((message) => (
-            <p key={message} role="alert" className="lp-type-body lp-danger">
-              {message}
-            </p>
-          ))}
-          {SLIDERS.map((spec) => (
-            <SettingSlider key={spec.key} spec={spec} settings={settings} effective={effective} />
-          ))}
-          <div className="settings-actions">
-            <Button
-              label="Revenir aux valeurs par défaut"
-              isDisabled={isDefault}
-              onPress={() => void settings.reset(HEAD_KEYS)}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
+      }
+    >
+      <ExpressionCard
+        title="Expression"
+        expressions={expressions}
+        settings={settings}
+        effective={effective}
+      />
+      <SettingsCard title="Micro et mouvements">
+        <MicMeter level={mic.level} isLinked={mic.isLinked} threshold={effective.threshold} />
+        {SLIDERS.map((spec) => (
+          <SettingSlider key={spec.key} spec={spec} settings={settings} effective={effective} />
+        ))}
+      </SettingsCard>
+    </SettingsPage>
   );
 };

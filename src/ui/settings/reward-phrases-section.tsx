@@ -2,6 +2,7 @@
 
 import { DESIGN_TEXTS } from "../design/design-texts";
 import { RewardPhrasesRow } from "./reward-phrases-row";
+import { SettingsCard } from "./settings-page";
 import type { UseRewardPhrases } from "./use-reward-phrases";
 
 type RewardPhrasesSectionProps = { phrases: UseRewardPhrases };
@@ -9,8 +10,7 @@ type RewardPhrasesSectionProps = { phrases: UseRewardPhrases };
 export const RewardPhrasesSection = ({ phrases }: RewardPhrasesSectionProps) => {
   const { rewards, error, isLoading, save, test } = phrases;
   return (
-    <section className="sound-group">
-      <h2 className="lp-type-heading">Phrases de Jean-Renard</h2>
+    <SettingsCard title="Phrases de Jean-Renard">
       <p className="lp-type-caption lp-muted">
         Chaque récompense de la chaîne, qu'elle ait un son ou non, peut faire parler Jean-Renard : à chaque
         rachat, il dit une phrase tirée au hasard, {"{user}"} devient le nickname du viewer. Elle se dit même
@@ -35,6 +35,6 @@ export const RewardPhrasesSection = ({ phrases }: RewardPhrasesSectionProps) => 
           ))}
         </ul>
       )}
-    </section>
+    </SettingsCard>
   );
 };

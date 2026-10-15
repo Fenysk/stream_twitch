@@ -1,17 +1,10 @@
-/* L'onglet « Points de chaîne » : la liste des sons, chacun avec ses boutons, puis le formulaire d'ajout */
-
-.sound-group {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.sound-group h2,
-.sound-group p {
-  margin: 0;
-}
+/* L'onglet « Points de chaîne » : la liste des sons, chacun avec ses boutons, puis le formulaire d'ajout. Les cartes sont celles
+   de la page commune (settings-page.css). */
 
 .sound-global {
   display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .sound-list {
@@ -58,8 +51,15 @@
 
 .sound-form {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   min-width: 0;
+}
+
+/* Les deux choix de la récompense, plus longs que la carte sur un écran étroit : la piste défile au lieu de dépasser */
+.sound-form .lp-segmented {
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 /* Le titre, le coût et le cooldown d'une récompense faite sur Twitch : lus, pas réglés ici */

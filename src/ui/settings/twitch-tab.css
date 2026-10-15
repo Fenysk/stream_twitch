@@ -1,0 +1,6 @@
+/* L'onglet « Twitch » : les boutons du bloc « Connexion à Twitch » */
+
+.twitch-actions {
+  display: flex;
+  gap: var(--space-2);
+}

@@ -1,20 +1,17 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { APPEARANCE_SCRIPT } from "../../ui/design/appearance";
 import designSystemCss from "../../ui/design/design-system.css?url";
-import { SECTIONS } from "../../ui/settings/settings-sections";
+import { SECTION_GROUPS, SECTIONS, toCurrentSectionId } from "../../ui/settings/settings-sections";
 import { SettingsShell } from "../../ui/settings/settings-shell";
 import settingsShellCss from "../../ui/settings/settings-shell.css?url";
-
-type SectionId = (typeof SECTIONS)[number]["id"];
 
 const SettingsLayout = () => {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const currentId: SectionId =
-    SECTIONS.find((section) => "path" in section && pathname.startsWith(section.path))?.id ?? "head";
+  const currentId = toCurrentSectionId(pathname);
   return (
     <SettingsShell
-      sections={SECTIONS}
+      groups={SECTION_GROUPS}
       currentId={currentId}
       onSelect={(id) => {
         const section = SECTIONS.find((candidate) => candidate.id === id);

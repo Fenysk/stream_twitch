@@ -1,4 +1,5 @@
-// L'onglet « Points de chaîne » : les sons de la soundboard. On ajoute un son (fichier, titre, coût, cooldown, volume) : l'app
+// L'onglet « Points de chaîne » : les sons de la soundboard, en trois cartes sur la page commune (Sons, Ajouter un son, Phrases
+// de Jean-Renard), une seule colonne. On ajoute un son (fichier, titre, coût, cooldown, volume) : l'app
 // crée sa récompense sur Twitch ; on l'écoute dans cette page, on le joue dans OBS (page /sounds), on le modifie ou on le
 // supprime (sa récompense suit) ; « Couper le son » arrête le son en cours dans OBS et vide la queue. Les refus de Twitch
 // (chaîne non affiliée, titre pris, 50 récompenses) se lisent tels quels. Dessous, chaque récompense de la chaîne peut recevoir
@@ -11,6 +12,8 @@ import { Button } from "../design/button";
 import { DESIGN_TEXTS } from "../design/design-texts";
 import { createSound, deleteSound, playSound, stopSounds, updateSound } from "../sounds-api";
 import { RewardPhrasesSection } from "./reward-phrases-section";
+import { SettingsCard, SettingsPage } from "./settings-page";
+import { toSectionLabel } from "./settings-sections";
 import { SoundForm } from "./sound-form";
 import { SoundRow } from "./sound-row";
 import { toTwitchHint } from "./twitch-hint";
@@ -19,6 +22,8 @@ import { useRewardPhrases } from "./use-reward-phrases";
 import { useSoundPreview } from "./use-sound-preview";
 import { useSounds } from "./use-sounds";
 import { useTwitch } from "./use-twitch";
+
+const TITLE = toSectionLabel("rewards");
 
 // Ce que l'onglet dit après une action : une confirmation, ou le refus.
 type Notice = { text: string; isError: boolean };
@@ -81,9 +86,8 @@ export const RewardsSettingsTab = () => {
   };
 
   return (
-    <div className="settings-tab">
-      <section className="sound-group">
-        <h2 className="lp-type-heading">Sons</h2>
+    <SettingsPage title={TITLE}>
+      <SettingsCard title="Sons">
         <div className="sound-global">
           <Button label="Couper le son" icon={VolumeX} variant="danger" onPress={() => void stop()} />
         </div>
@@ -160,12 +164,11 @@ export const RewardsSettingsTab = () => {
             )}
           </ul>
         )}
-      </section>
-      <section className="sound-group">
-        <h2 className="lp-type-heading">Ajouter un son</h2>
+      </SettingsCard>
+      <SettingsCard title="Ajouter un son">
         <SoundForm initial={null} choices={choices} onSubmit={create} />
-      </section>
+      </SettingsCard>
       <RewardPhrasesSection phrases={rewardPhrases} />
-    </div>
+    </SettingsPage>
   );
 };

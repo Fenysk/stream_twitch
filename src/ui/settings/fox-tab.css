@@ -1,5 +1,18 @@
-/* L'onglet « Renard » : « Faire parler », puis un groupe de curseurs par comportement. La mise en page de l'aperçu et des
-   contrôles est celle de l'onglet de la tête (head-preview.css). */
+/* L'onglet « Renard » : « Faire parler » sous l'aperçu, puis une carte par comportement. La mise en page de la page et des
+   cartes est celle de settings-page.css. */
+
+/* Les sous-onglets : sur un écran étroit, la rangée défile d'elle-même (la piste suit la largeur des cinq choix) au lieu
+   d'élargir la page. La marge de 2 px laisse voir l'anneau de focus des bouts. */
+.fox-sections {
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px;
+  margin: -2px;
+}
+
+.fox-sections .lp-segmented {
+  max-width: none;
+}
 
 .fox-speak {
   display: grid;
@@ -7,21 +20,6 @@
 }
 
 .fox-speak-actions {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.fox-group {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.fox-group h2 {
-  margin: 0;
-}
-
-/* Les boutons du bloc « Connexion à Twitch » */
-.twitch-actions {
   display: flex;
   gap: var(--space-2);
 }

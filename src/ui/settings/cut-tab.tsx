@@ -14,6 +14,8 @@ import { usePartPreviews } from "../cut/use-part-previews";
 import { useWindowImport } from "../cut/use-window-import";
 import { Button } from "../design/button";
 import { ExpressionThumbs } from "./expression-thumbs";
+import { SettingsCard, SettingsPage } from "./settings-page";
+import { toSectionLabel } from "./settings-sections";
 import { useExpressions } from "./use-expressions";
 
 export const CutTab = () => {
@@ -33,89 +35,93 @@ export const CutTab = () => {
   const saved = (expressions ?? []).filter(({ isBuiltIn }) => !isBuiltIn);
 
   return (
-    <div className="cut-tab">
-      <div className="cut-import">
-        <Button
-          label="Importer une image"
-          icon={Upload}
-          variant="primary"
-          isDisabled={isBusy}
-          onPress={() => fileInput.current?.click()}
-        />
-        <input
-          ref={fileInput}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) void openFile(file);
-          }}
-        />
-        <p className="lp-type-caption lp-muted">Glisse ou colle une image.</p>
-      </div>
-      {refusal && (
-        <p role="alert" className="lp-type-body lp-danger">
-          {refusal}
-        </p>
-      )}
-      {notice && !draft && (
-        <p role="status" className="lp-type-body">
-          {notice}
-        </p>
-      )}
-      {saved.length > 0 && (
-        <ExpressionThumbs
-          label="Expressions enregistrées"
-          expressions={saved}
-          currentId={draft?.expressionId ?? null}
-          onPick={(id) => void editor.reopen(id)}
-        />
-      )}
-      {draft && head && (
-        <>
-          <div className="cut-work">
-            <div className="cut-board-column">
-              <CutBoard
-                sourceUrl={draft.sourceUrl}
-                size={draft.size}
-                cut={draft.cut}
-                selected={selected}
-                onSelect={setSelected}
-                onCutChange={(cut) => editor.adjust({ cut })}
-              />
-              {draft.expressionId === null && (
-                <p className="lp-type-caption lp-muted">
-                  {draft.isGapFound ? "Coupe trouvée dans l'image." : "Coupe devinée : ajuste-la."}
-                </p>
-              )}
-            </div>
-            <CutSide
-              sourceUrl={draft.sourceUrl}
-              size={draft.size}
-              cut={draft.cut}
-              selected={selected}
-              lips={draft.lips}
-              closing={draft.closing}
-              onLipsChange={(lips) => editor.adjust({ lips })}
-              onClosingChange={(closing) => editor.adjust({ closing })}
+    <SettingsPage title={toSectionLabel("cut")}>
+      <SettingsCard>
+        <div className="cut-tab">
+          <div className="cut-import">
+            <Button
+              label="Importer une image"
+              icon={Upload}
+              variant="primary"
+              isDisabled={isBusy}
+              onPress={() => fileInput.current?.click()}
             />
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void openFile(file);
+              }}
+            />
+            <p className="lp-type-caption lp-muted">Glisse ou colle une image.</p>
           </div>
-          {previews && <CutPreview head={head} images={previews} />}
-          <CutSave
-            name={draft.name}
-            isRetouch={draft.expressionId !== null}
-            isBusy={isBusy}
-            isReady={image !== null && draft.name.trim().length > 0}
-            notice={notice}
-            onNameChange={(name) => editor.adjust({ name })}
-            onSubmit={() => void editor.submit()}
-            onDelete={() => void editor.deleteCurrent()}
-            onClose={editor.startOver}
-          />
-        </>
-      )}
-    </div>
+          {refusal && (
+            <p role="alert" className="lp-type-body lp-danger">
+              {refusal}
+            </p>
+          )}
+          {notice && !draft && (
+            <p role="status" className="lp-type-body">
+              {notice}
+            </p>
+          )}
+          {saved.length > 0 && (
+            <ExpressionThumbs
+              label="Expressions enregistrées"
+              expressions={saved}
+              currentId={draft?.expressionId ?? null}
+              onPick={(id) => void editor.reopen(id)}
+            />
+          )}
+          {draft && head && (
+            <>
+              <div className="cut-work">
+                <div className="cut-board-column">
+                  <CutBoard
+                    sourceUrl={draft.sourceUrl}
+                    size={draft.size}
+                    cut={draft.cut}
+                    selected={selected}
+                    onSelect={setSelected}
+                    onCutChange={(cut) => editor.adjust({ cut })}
+                  />
+                  {draft.expressionId === null && (
+                    <p className="lp-type-caption lp-muted">
+                      {draft.isGapFound ? "Coupe trouvée dans l'image." : "Coupe devinée : ajuste-la."}
+                    </p>
+                  )}
+                </div>
+                <CutSide
+                  sourceUrl={draft.sourceUrl}
+                  size={draft.size}
+                  cut={draft.cut}
+                  selected={selected}
+                  lips={draft.lips}
+                  closing={draft.closing}
+                  onLipsChange={(lips) => editor.adjust({ lips })}
+                  onClosingChange={(closing) => editor.adjust({ closing })}
+                />
+              </div>
+              {previews && <CutPreview head={head} images={previews} />}
+              <CutSave
+                name={draft.name}
+                isRetouch={draft.expressionId !== null}
+                isBusy={isBusy}
+                isReady={image !== null && draft.name.trim().length > 0}
+                notice={notice}
+                onNameChange={(name) => editor.adjust({ name })}
+                onSubmit={() => void editor.submit()}
+                onDelete={() => void editor.deleteCurrent()}
+                onClose={editor.startOver}
+              />
+            </>
+          )}
+        </div>
+      </SettingsCard>
+    </SettingsPage>
   );
 };

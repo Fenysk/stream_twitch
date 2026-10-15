@@ -1,23 +1,4 @@
-/* L'aperçu de la tête : un cadre sur damier à gauche des réglages, qui reste en vue pendant qu'on les change ; au-dessus
-   d'eux sur écran étroit */
-
-.head-tab-body {
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: var(--space-4);
-  align-items: start;
-}
-
-.head-controls {
-  display: grid;
-  gap: var(--space-4);
-  min-width: 0;
-}
-
-.head-preview {
-  position: sticky;
-  top: 24px;
-}
+/* Le cadre de l'aperçu de la tête et du renard : un damier, dans la colonne de gauche de la page (settings-page.css) */
 
 .head-preview-stage {
   box-sizing: border-box;
@@ -27,14 +8,6 @@
 }
 
 @media (max-width: 640px) {
-  .head-tab-body {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .head-preview {
-    position: static;
-  }
-
   .head-preview-stage {
     width: min(100%, 240px);
   }

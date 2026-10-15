@@ -4,23 +4,26 @@
 @import "./head-settings-tab.css";
 @import "./cut-tab.css";
 @import "./expression-thumbs.css";
+@import "./settings-page.css";
 @import "./head-preview.css";
 @import "./fox-tab.css";
+@import "./twitch-tab.css";
+@import "./live-tab.css";
 @import "./rewards-tab.css";
 @import "../chat/chat.css";
 @import "./chat-settings-tab.css";
 
-/* Le texte sur le fond des pills : le `body` reste sur --void, la page le couvre. */
+/* La page sur le fond du design : le menu et les cartes sont des surfaces posées dessus, comme les pills de LivePlace */
 .settings-page {
   box-sizing: border-box;
   min-height: 100dvh;
-  background: var(--pill-surface);
+  background: var(--void);
   color: var(--ink);
 }
 
 .settings-shell {
   box-sizing: border-box;
-  max-width: 1100px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 24px 24px 96px;
   display: flex;
@@ -28,7 +31,18 @@
   gap: 32px;
 }
 
-/* Le menu : collé en haut, sur le fond des contrôles, comme la barre latérale de la fenêtre de LivePlace */
+/* La surface des pills : le fond, le contour (visible en sombre) et l'ombre (visible en clair). Les contrôles posés dessus
+   gardent le fond --chip, le sélecteur son fond --pill-surface. */
+.settings-card,
+.settings-side {
+  background: var(--pill-surface);
+  border-radius: calc(var(--control-size) / 2 + var(--space-2));
+  box-shadow:
+    0 0 0 1px var(--pill-border),
+    var(--pill-shadow);
+}
+
+/* Le menu : collé en haut, une surface comme les cartes */
 .settings-side {
   flex: none;
   width: 304px; /* de quoi loger Auto, Clair et Sombre côte à côte */
@@ -37,8 +51,6 @@
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
   padding: var(--space-2);
-  border-radius: var(--radius-sm);
-  background: var(--chip);
   position: sticky;
   top: 24px;
 }
@@ -48,16 +60,14 @@
   padding: var(--space-2) 10px 0;
 }
 
+/* Les onglets sur le fond des contrôles, comme la barre latérale de la fenêtre de LivePlace : l'onglet choisi y prend le fond des pills */
 .settings-side .lp-window-nav {
   width: auto;
-  padding: 0;
-  background: transparent;
+  border-radius: calc(var(--control-size) / 2);
 }
 
-/* L'apparence, sous le menu, séparée par un filet */
 .settings-appearance {
-  padding: var(--space-3) 2px 4px;
-  border-top: 1px solid var(--chip-hover);
+  padding: 0 2px 4px;
 }
 
 /* Le damier : une image transparente laisse voir ce qu'elle laisse passer (le plateau, les aperçus) */
@@ -75,13 +85,6 @@
 .settings-main {
   flex: 1;
   min-width: 0;
-  max-width: 760px;
-  display: grid;
-  gap: var(--space-4);
-}
-
-.settings-heading {
-  margin: 0;
 }
 
 /* Écran étroit : le menu passe au-dessus, ses entrées en rangée d'onglets (window.css) */

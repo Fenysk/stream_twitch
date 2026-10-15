@@ -1,0 +1,18 @@
+/* La page « Direct » : les quatre états en grille. Elle passe en une colonne quand la page est étroite, ce que dit la largeur
+   de chaque carte, pas celle de l'écran : le menu en prend une part. */
+
+.live-states {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--space-4);
+}
+
+/* L'état, sa phrase d'aide et son refus : un bloc, plus serré que les groupes de la carte */
+.live-state {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.live-actions {
+  display: flex;
+}

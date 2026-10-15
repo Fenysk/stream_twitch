@@ -22,7 +22,7 @@ const REWARDS_PATH = "/helix/channel_points/custom_rewards";
 const REDEMPTIONS_PATH = `${REWARDS_PATH}/redemptions`;
 // Twitch rend 50 redemptions au plus par page : un reward qui en a plus sera remboursé au démarrage suivant.
 const PENDING_PAGE_SIZE = "50";
-const NOT_READY = "Twitch n'est pas prêt : connecte-toi (ou reconnecte-toi) depuis l'onglet Renard.";
+const NOT_READY = "Twitch n'est pas prêt : connecte-toi (ou reconnecte-toi) depuis l'onglet Twitch.";
 const MISSING_CHANNEL = "l'identifiant de la chaîne (chatChannelId) manque dans settings.json.";
 
 // Twitch écrit `broadcaster_id`, `reward_id`, `global_cooldown_seconds`… en snake_case : ces champs se lisent dans l'objet,

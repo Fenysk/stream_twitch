@@ -1,0 +1,87 @@
+/* La page commune de chaque onglet (settings-page.tsx) : l'en-tête, puis l'aperçu et les réglages. La surface des cartes est
+   dans settings-shell.css, avec celle du menu. */
+
+.settings-view {
+  /* La mise en page suit la largeur de la page, pas celle de l'écran : le menu en prend une part */
+  container-type: inline-size;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.settings-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-height: var(--control-size);
+}
+
+.settings-head h1 {
+  margin: 0;
+}
+
+.settings-head-status {
+  min-width: 0;
+}
+
+/* À droite, qu'il y ait un statut ou non */
+.settings-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* Étroit : l'aperçu au-dessus des réglages */
+.settings-layout {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.settings-controls {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.settings-card {
+  box-sizing: border-box;
+  display: grid;
+  /* Une carte plus haute que son contenu (la grille de la page Direct) garde ses lignes serrées, en haut */
+  align-content: start;
+  /* Une seule colonne, jamais plus large que la carte : un champ ou une rangée de choix ne la déborde pas */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.settings-card > h2 {
+  margin: 0;
+}
+
+/* Un texte seul dans une carte : l'écart est celui de la grille, pas celui du navigateur en plus */
+.settings-card p {
+  margin: 0;
+}
+
+.settings-errors {
+  gap: var(--space-2);
+}
+
+.settings-errors p {
+  margin: 0;
+}
+
+/* Large : l'aperçu à gauche, fixe pendant qu'on défile les réglages */
+@container (min-width: 760px) {
+  .settings-layout {
+    grid-template-columns: 380px minmax(0, 1fr);
+  }
+
+  .settings-preview {
+    position: sticky;
+    top: 24px;
+  }
+}

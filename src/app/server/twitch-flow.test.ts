@@ -218,7 +218,7 @@ describe("la connexion à Twitch, de bout en bout contre un faux Twitch", () => 
     await connection.start();
     expect(connection.getStatus()).toEqual({ kind: "disconnected", lastError: null });
     expect(logs).toEqual([
-      "Twitch : pas encore connecté, les follows attendent (onglet Renard, « Se connecter à Twitch »).",
+      "Twitch : pas encore connecté, les follows attendent (onglet Twitch, « Se connecter à Twitch »).",
     ]);
 
     const { begun, result } = await login();
@@ -698,7 +698,7 @@ describe("les points de chaîne contre le faux Twitch : les rewards des sons", (
       issues: [
         {
           path: "",
-          message: "Twitch n'est pas prêt : connecte-toi (ou reconnecte-toi) depuis l'onglet Renard.",
+          message: "Twitch n'est pas prêt : connecte-toi (ou reconnecte-toi) depuis l'onglet Twitch.",
         },
       ],
     });

@@ -1,7 +1,7 @@
 import { TWITCH_TOPICS, type TwitchToken, type TwitchTopic } from "./twitch.schema";
 
 // Chaque abonnement EventSub du renard : son type et sa version chez Twitch, le droit du jeton qu'il demande, et son nom au
-// pluriel pour le journal et l'onglet Renard (« aux follows », « les follows »).
+// pluriel pour le journal et l'onglet Twitch (« aux follows », « les follows »).
 export const TWITCH_TOPIC_SPECS: Readonly<
   Record<TwitchTopic, { type: string; version: string; scope: string; text: string }>
 > = {

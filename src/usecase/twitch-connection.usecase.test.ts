@@ -201,7 +201,7 @@ describe("au démarrage", () => {
     await connection.start();
     expect(connection.getStatus()).toEqual({ kind: "disconnected", lastError: null });
     expect(logs).toEqual([
-      "Twitch : pas encore connecté, les follows attendent (onglet Renard, « Se connecter à Twitch »).",
+      "Twitch : pas encore connecté, les follows attendent (onglet Twitch, « Se connecter à Twitch »).",
     ]);
     expect(calls.opens).toEqual([]);
   });
@@ -248,7 +248,7 @@ describe("au démarrage", () => {
     });
     expect(logs).toEqual([
       "Twitch : connecté en tant que fenysk, les follows sont écoutés.",
-      "Twitch : le jeton n'a pas le droit de voir les récompenses de points de chaîne et les prédictions : reconnecte-toi depuis l'onglet Renard.",
+      "Twitch : le jeton n'a pas le droit de voir les récompenses de points de chaîne et les prédictions : reconnecte-toi depuis l'onglet Twitch.",
     ]);
   });
 
@@ -259,7 +259,7 @@ describe("au démarrage", () => {
     expect(connection.getStatus()).toEqual({ kind: "connected", login: "fenysk", missing: ["prediction"] });
     expect(logs).toEqual([
       "Twitch : connecté en tant que fenysk, les follows et les récompenses de points de chaîne sont écoutés.",
-      "Twitch : le jeton n'a pas le droit de voir les prédictions : reconnecte-toi depuis l'onglet Renard.",
+      "Twitch : le jeton n'a pas le droit de voir les prédictions : reconnecte-toi depuis l'onglet Twitch.",
     ]);
   });
 
@@ -316,7 +316,7 @@ describe("les droits : follows et gestion des récompenses", () => {
     await connection.start();
     expect(connection.getStatus()).toMatchObject({ kind: "connected", missing: ["reward", "prediction"] });
     expect(logs.at(-1)).toBe(
-      "Twitch : le jeton n'a pas le droit de voir les récompenses de points de chaîne et les prédictions : reconnecte-toi depuis l'onglet Renard.",
+      "Twitch : le jeton n'a pas le droit de voir les récompenses de points de chaîne et les prédictions : reconnecte-toi depuis l'onglet Twitch.",
     );
     feed().onEvent({ kind: "follow", user: "Alice" });
     expect(calls.events).toEqual([{ kind: "follow", user: "Alice" }]);

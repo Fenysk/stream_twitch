@@ -7,15 +7,15 @@ describe("toTwitchHint : ce que l'onglet Points de chaîne dit de la connexion",
     expect(toTwitchHint(null)).toBeNull();
   });
 
-  it("dit d'aller dans l'onglet Renard quand Twitch n'est pas connecté", () => {
+  it("dit d'aller dans l'onglet Twitch quand Twitch n'est pas connecté", () => {
     expect(toTwitchHint({ kind: "disconnected", lastError: null })).toBe(
-      "Twitch n'est pas connecté : connecte-le dans l'onglet Renard pour créer les récompenses des sons.",
+      "Twitch n'est pas connecté : connecte-le dans l'onglet Twitch pour créer les récompenses des sons.",
     );
   });
 
   it("dit de se reconnecter quand il manque le droit de gérer les récompenses, pas pour un autre droit", () => {
     expect(toTwitchHint({ kind: "connected", login: "fenysk", missing: ["reward"] })).toContain(
-      "reconnecte-toi dans l'onglet Renard",
+      "reconnecte-toi dans l'onglet Twitch",
     );
     expect(toTwitchHint({ kind: "connected", login: "fenysk", missing: ["prediction"] })).toBeNull();
   });

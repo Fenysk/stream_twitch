@@ -2,7 +2,7 @@ import { defineHandler } from "nitro";
 import { getRuntime } from "./runtime";
 
 // GET /auth/twitch/callback : Twitch y renvoie Alexis après l'autorisation, avec le code et le state (ou une erreur). Le serveur
-// vérifie le state, échange le code contre un jeton et le garde, puis ramène Alexis sur l'onglet Renard, qui montre
+// vérifie le state, échange le code contre un jeton et le garde, puis ramène Alexis sur l'onglet Twitch, qui montre
 // « Connecté en tant que … » ou la raison de l'échec. Rien du code ni du jeton ne passe dans l'adresse de retour.
 export default defineHandler(async (event) => {
   const { searchParams } = new URL(event.req.url, "http://localhost");
@@ -13,6 +13,6 @@ export default defineHandler(async (event) => {
   });
   return new Response(null, {
     status: 302,
-    headers: { location: "/settings/fox", "cache-control": "no-store" },
+    headers: { location: "/settings/twitch", "cache-control": "no-store" },
   });
 });

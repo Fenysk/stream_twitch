@@ -136,7 +136,7 @@ export function createTwitchConnection({
   const lose = (reason: string) => {
     forget();
     lastError = "La connexion à Twitch a expiré : reconnecte-toi.";
-    log(`Twitch : connexion perdue (${reason}), reconnecte-toi depuis l'onglet Renard.`);
+    log(`Twitch : connexion perdue (${reason}), reconnecte-toi depuis l'onglet Twitch.`);
   };
 
   const refresh = async (): Promise<string | null> => {
@@ -192,7 +192,7 @@ export function createTwitchConnection({
     const missing = toMissingTopics(token.scope);
     if (missing.length > 0) {
       log(
-        `Twitch : le jeton n'a pas le droit de voir ${toTopicsText(missing)} : reconnecte-toi depuis l'onglet Renard.`,
+        `Twitch : le jeton n'a pas le droit de voir ${toTopicsText(missing)} : reconnecte-toi depuis l'onglet Twitch.`,
       );
     }
     if (topics.length === 0) return;
@@ -248,7 +248,7 @@ export function createTwitchConnection({
       token = store.get();
       if (!token) {
         log(
-          "Twitch : pas encore connecté, les follows attendent (onglet Renard, « Se connecter à Twitch »).",
+          "Twitch : pas encore connecté, les follows attendent (onglet Twitch, « Se connecter à Twitch »).",
         );
         return;
       }

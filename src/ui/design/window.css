@@ -62,6 +62,16 @@
   gap: 2px;
 }
 
+/* Des groupes d'onglets : une liste de groupes, chacun son petit titre au-dessus de sa liste, un peu d'air entre deux groupes */
+.lp-window-nav-group + .lp-window-nav-group {
+  margin-top: var(--space-3);
+}
+
+.lp-window-nav-title {
+  margin: 0;
+  padding: 0 14px var(--space-1);
+}
+
 .lp-window-nav .lp-btn {
   width: 100%;
   justify-content: flex-start;
@@ -290,6 +300,23 @@
 
   .lp-window-nav ul {
     flex-direction: row;
+  }
+
+  /* Des groupes : une seule rangée, sans leurs titres (chaque groupe garde son nom pour les lecteurs d'écran) */
+  .lp-window-nav .lp-window-nav-groups {
+    gap: var(--space-2);
+  }
+
+  .lp-window-nav-group {
+    flex: none;
+  }
+
+  .lp-window-nav-group + .lp-window-nav-group {
+    margin-top: 0;
+  }
+
+  .lp-window-nav-title {
+    display: none;
   }
 
   .lp-window-nav .lp-btn {

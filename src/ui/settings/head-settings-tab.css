@@ -1,11 +1,5 @@
-/* L'onglet « Tête South Park » : le vumètre, cinq curseurs, un bouton, les uns sous les autres */
+/* Un curseur ou une case des réglages, et sa phrase d'aide dessous */
 
-.settings-tab {
-  display: grid;
-  gap: var(--space-4);
-}
-
-/* Un curseur ou une case, et sa phrase d'aide dessous */
 .settings-slider,
 .settings-toggle {
   display: grid;
@@ -15,10 +9,4 @@
 .settings-slider p,
 .settings-toggle p {
   margin: 0;
-}
-
-.settings-actions {
-  display: flex;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--chip-hover);
 }

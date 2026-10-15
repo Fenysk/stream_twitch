@@ -230,7 +230,7 @@ describe("le jeton et le réseau", () => {
     expect(await client.delete("reward-abc")).toEqual({
       ok: false,
       status: 401,
-      message: "Twitch n'est pas prêt : connecte-toi (ou reconnecte-toi) depuis l'onglet Renard.",
+      message: "Twitch n'est pas prêt : connecte-toi (ou reconnecte-toi) depuis l'onglet Twitch.",
     });
     expect(requests).toEqual([]);
   });

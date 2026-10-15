@@ -25,7 +25,7 @@ const MAX_REASON_LENGTH = 120;
 
 // Le refus de Twitch (son code HTTP, et sa raison s'il en donne une) dit en français, pour l'onglet.
 export function toRewardRefusal(status: number, reason: string): string {
-  if (status === 401) return "Twitch ne reconnaît plus la connexion : reconnecte-toi depuis l'onglet Renard.";
+  if (status === 401) return "Twitch ne reconnaît plus la connexion : reconnecte-toi depuis l'onglet Twitch.";
   if (status === 403 && /client/i.test(reason)) {
     return "Twitch refuse : cette récompense n'a pas été créée par cette application, elle seule peut la gérer.";
   }
