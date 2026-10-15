@@ -11,6 +11,14 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-15 — Biome ne lit plus les fichiers ignorés par git : `vcs.useIgnoreFile`
+
+**Contexte.** Le gate échouait au lint dès que le serveur réécrivait `settings.local.json` (tableau `foxEmoteReactions` sur plusieurs lignes, Biome le veut sur une ligne). Le lint lisait aussi les JSON de `data/`, écrits comme lui par `src/infra` avec `JSON.stringify(…, null, 2)` : le vert dépendait des réglages du poste, pas du code.
+**Décision.** `biome.json` : `vcs` activé (`clientKind: "git"`, `useIgnoreFile: true`), Biome saute ce que `.gitignore` ignore ; `files.includes` ne change pas. Mesuré avec `biome check --verbose` : 510 fichiers lus avant, 499 après, les 11 retirés sont dans `data/` ou `settings.local.json`, aucun n'est versionné. Un fichier ajouté de force malgré `.gitignore` sortirait aussi du lint : `git ls-files -ci --exclude-standard` les liste (vide ce jour).
+**Renoncement.** Écrire le JSON au format Biome : six dépôts de `src/infra` à toucher, et la largeur de 110 colonnes à reproduire à la main. `!settings.local.json` dans `files.includes` : `data/` resterait lu, et chaque nouveau fichier local demanderait sa ligne.
+
+---
+
 ## 2026-10-15 — Le plugin Stream Deck pilote les réglages du serveur : quatre actions génériques (Interrupteur, Cycle de valeurs, Phrase, Préréglage) et un inspecteur de propriétés React
 
 **Contexte.** Alexis veut couper la lecture du tchat, passer la taille du texte à 32 px, changer d'expression, lancer un préréglage ou faire dire une phrase au renard depuis une touche, sans ouvrir `localhost:4747` en plein live. Une action par réglage ferait des dizaines d'entrées au manifest ; chaque touche choisit donc son réglage, ce qui demande une interface : l'entrée précédente renonçait à un inspecteur pour un port qui ne bouge pas, ici chaque touche a un réglage et des valeurs à choisir.
