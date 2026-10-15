@@ -207,7 +207,7 @@ describe("createFoxHours : la fin prévue", () => {
     expect(texts().at(-1)).toBe("Je vais me coucher.");
     expect(pushed.at(-1)?.toShow()).toEqual(ADDRESS_MODE);
     expect(leaves.count).toBe(0);
-    pushed.at(-1)?.onDone?.();
+    pushed.at(-1)?.onDone?.(true);
     expect(leaves.count).toBe(1);
     const before = pushed.length;
     goTo(at(15, 0, 40));
@@ -274,13 +274,13 @@ describe("createFoxHours : la fin prévue", () => {
   it("se couche de nouveau à la diffusion suivante : le coucher d'un live ne vaut pas pour le suivant", () => {
     const { state, goTo, leaves, pushed } = setup(withoutHours);
     goTo(at(15, 0, 30));
-    pushed.at(-1)?.onDone?.();
+    pushed.at(-1)?.onDone?.(true);
     expect(leaves.count).toBe(1);
     state.broadcast({ isLive: false, duration: 0 });
     state.now = at(15, 21);
     state.broadcast({ isLive: true, duration: 0 });
     goTo(at(16, 0, 30));
-    pushed.at(-1)?.onDone?.();
+    pushed.at(-1)?.onDone?.(true);
     expect(leaves.count).toBe(2);
     expect(pushed.filter(({ text }) => text === "Je vais me coucher.")).toHaveLength(2);
   });
@@ -417,7 +417,7 @@ describe("createFoxHours : le bilan du live suit l'annonce de la fin prévue", (
     ] as const) {
       goTo(at(day, hours, minutes));
       for (const item of pushed.filter(({ text }) => !text.startsWith("Minuit"))) {
-        (item as { onDone?: () => void }).onDone?.();
+        (item as { onDone?: (isSaid: boolean) => void }).onDone?.(true);
       }
     }
     expect(reviews.count).toBe(0);
@@ -437,7 +437,7 @@ describe("createFoxHours : le bilan du live suit l'annonce de la fin prévue", (
     goTo(at(15, 1));
     const second = pushed.filter(({ text }) => text.endsWith("Le live est fini."));
     expect(second).toHaveLength(2);
-    (second[1] as { onDone?: () => void }).onDone?.();
+    (second[1] as { onDone?: (isSaid: boolean) => void }).onDone?.(true);
     expect(reviews.count).toBe(1);
   });
 
@@ -456,7 +456,7 @@ describe("createFoxHours : le bilan du live suit l'annonce de la fin prévue", (
   it("n'en lance aucun sans fin prévue", () => {
     const { goTo, pushed, reviews } = setup({ ...withoutHours, foxEndTime: "" });
     goTo(at(15, 0, 30));
-    for (const item of pushed) (item as { onDone?: () => void }).onDone?.();
+    for (const item of pushed) (item as { onDone?: (isSaid: boolean) => void }).onDone?.(true);
     expect(reviews.count).toBe(0);
   });
 });

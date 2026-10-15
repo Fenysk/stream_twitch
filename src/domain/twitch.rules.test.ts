@@ -32,8 +32,8 @@ describe("toAuthorizeUrl : l'adresse où Alexis autorise l'application", () => {
     expect(TWITCH_REDIRECT_URI).toBe("http://localhost:4747/auth/twitch/callback");
   });
 
-  it("demande un droit par abonnement, séparés par des espaces : les follows, les récompenses de points de chaîne, les prédictions", () => {
-    const scope = "moderator:read:followers channel:read:redemptions channel:read:predictions";
+  it("demande un droit par abonnement, séparés par des espaces : les follows, gérer les récompenses de points de chaîne, les prédictions", () => {
+    const scope = "moderator:read:followers channel:manage:redemptions channel:read:predictions";
     expect(url.searchParams.get("scope")).toBe(scope);
     expect(TWITCH_SCOPE).toBe(scope);
   });
@@ -70,6 +70,11 @@ describe("hasTwitchScope", () => {
     expect(hasTwitchScope("")).toBe(false);
     expect(hasTwitchScope("moderator:read:followers:extra")).toBe(false);
   });
+
+  it("accepte un jeton d'avant les récompenses (il suit les follows), pas celui qui n'a que les récompenses", () => {
+    expect(hasTwitchScope("moderator:read:followers")).toBe(true);
+    expect(hasTwitchScope("channel:manage:redemptions")).toBe(false);
+  });
 });
 
 describe("les abonnements EventSub du renard", () => {
@@ -82,7 +87,7 @@ describe("les abonnements EventSub du renard", () => {
     expect(TWITCH_TOPIC_SPECS.reward).toMatchObject({
       type: "channel.channel_points_custom_reward_redemption.add",
       version: "1",
-      scope: "channel:read:redemptions",
+      scope: "channel:manage:redemptions",
     });
     expect(TWITCH_TOPIC_SPECS.prediction).toMatchObject({
       type: "channel.prediction.end",
@@ -92,18 +97,27 @@ describe("les abonnements EventSub du renard", () => {
   });
 
   it("se déduisent des droits du jeton : ceux qu'il permet, et ceux qui lui manquent", () => {
-    const all = "chat:read moderator:read:followers channel:read:redemptions channel:read:predictions";
+    const all = "chat:read moderator:read:followers channel:manage:redemptions channel:read:predictions";
     expect(toGrantedTopics(all)).toEqual(["follow", "reward", "prediction"]);
     expect(toMissingTopics(all)).toEqual([]);
     expect(toGrantedTopics("moderator:read:followers")).toEqual(["follow"]);
     expect(toMissingTopics("moderator:read:followers")).toEqual(["reward", "prediction"]);
-    expect(toMissingTopics("moderator:read:followers channel:read:redemptions")).toEqual(["prediction"]);
+    expect(toMissingTopics("moderator:read:followers channel:manage:redemptions")).toEqual(["prediction"]);
     expect(toGrantedTopics("")).toEqual([]);
     expect(toMissingTopics("")).toEqual(["follow", "reward", "prediction"]);
-    expect(toMissingTopics("channel:read:redemptions:extra moderator:read:followers")).toEqual([
+    expect(toMissingTopics("channel:manage:redemptions:extra moderator:read:followers")).toEqual([
       "reward",
       "prediction",
     ]);
+  });
+
+  it("disent « reconnecte-toi » à un jeton qui n'a que le droit de lire les rachats : la soundboard veut gérer les récompenses", () => {
+    const withoutManage = "moderator:read:followers channel:read:redemptions channel:read:predictions";
+    expect(toMissingTopics(withoutManage)).toEqual(["reward"]);
+    expect(toGrantedTopics(withoutManage)).toEqual(["follow", "prediction"]);
+    expect(
+      toMissingTopics("moderator:read:followers channel:manage:redemptions channel:read:predictions"),
+    ).toEqual([]);
   });
 
   it("s'écrivent en français, reliés par « et »", () => {
@@ -175,6 +189,13 @@ describe("l'état que les pages reçoivent", () => {
       TwitchStatusSchema.safeParse({ kind: "connected", login: "fenysk", missing: ["droit"] }).success,
     ).toBe(false);
     expect(TwitchStatusSchema.safeParse({ kind: "connected" }).success).toBe(false);
+  });
+
+  it("dit quel abonnement manque (les récompenses) quand le jeton gardé date d'avant la gestion des récompenses", () => {
+    expect(
+      TwitchStatusSchema.safeParse({ kind: "connected", login: "fenysk", missing: ["reward"] }).success,
+    ).toBe(true);
+    expect(TwitchStatusSchema.safeParse({ kind: "reconnect", login: "fenysk" }).success).toBe(false);
   });
 
   it("n'a aucune place pour un jeton : un champ en plus est écarté du schéma lu", () => {

@@ -219,6 +219,19 @@ describe("createFoxQueue : l'ordre", () => {
     expect(done).toEqual(["un"]);
   });
 
+  it("dit à l'entrée si sa phrase a été dite : vrai une fois finie, faux quand la synthèse a échoué", async () => {
+    const { queue, spoken, finishSynthesis, advance, flush } = setup();
+    const wasSaid: boolean[] = [];
+    queue.push(item("un", { onDone: (isSaid) => wasSaid.push(isSaid) }));
+    queue.push(item("deux", { onDone: (isSaid) => wasSaid.push(isSaid) }));
+    await finishSynthesis(0, 1000);
+    await advance(1400);
+    expect(wasSaid).toEqual([true]);
+    spoken[1]?.settle({ ok: false, status: 502, message: "la synthèse a échoué" });
+    await flush();
+    expect(wasSaid).toEqual([true, false]);
+  });
+
   it("ne rend jamais la main à une entrée retirée ou coupée par la voix d'Alexis", async () => {
     const { queue, voice, spoken, finishSynthesis, tick } = setup();
     const done: string[] = [];

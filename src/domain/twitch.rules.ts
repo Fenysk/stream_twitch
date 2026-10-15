@@ -9,7 +9,9 @@ export const TWITCH_TOPIC_SPECS: Readonly<
   reward: {
     type: "channel.channel_points_custom_reward_redemption.add",
     version: "1",
-    scope: "channel:read:redemptions",
+    // `manage` couvre la lecture des redemptions, et la soundboard en a besoin pour créer, modifier, supprimer ses rewards et
+    // marquer un rachat (FULFILLED, CANCELED).
+    scope: "channel:manage:redemptions",
     text: "récompenses de points de chaîne",
   },
   prediction: {

@@ -112,8 +112,11 @@ const EVENTS: Readonly<Record<TwitchTopic, (event: Fields) => LiveEvent | null>>
   },
   reward: (event) => {
     const user = toNickname(event);
-    const title = getText(getFields(event.reward), "title");
-    return user && title ? { kind: "reward", user, title } : null;
+    const reward = getFields(event.reward);
+    const title = getText(reward, "title");
+    const id = getText(event, "id");
+    const rewardId = getText(reward, "id");
+    return user && title && id && rewardId ? { kind: "reward", user, title, id, rewardId } : null;
   },
   prediction: toPrediction,
 };

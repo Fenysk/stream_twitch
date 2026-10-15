@@ -1409,7 +1409,13 @@ describe("Les remerciements, de bout en bout", () => {
     const harness = build({ overrides: { foxThanksWakeAsleep: ["Quoi ?! Je dormais, moi !"] } });
     await harness.run(AWAY_AT);
     const since = harness.events.length;
-    await harness.live({ kind: "reward", user: "Alice", title: "Réveiller Jean-Renard" });
+    await harness.live({
+      kind: "reward",
+      user: "Alice",
+      title: "Réveiller Jean-Renard",
+      id: "red-1",
+      rewardId: "reward-1",
+    });
     await harness.run(4000);
     const timeline = harness.timeline(since).map((entry) => ({ ...entry, at: entry.at - AWAY_AT }));
     expect(timeline).toContainEqual({ at: 0, label: "presence:returning" });
@@ -1420,7 +1426,13 @@ describe("Les remerciements, de bout en bout", () => {
 
   it("réveiller le renard visible : il dit « Je dors pas » tout de suite", async () => {
     const harness = build();
-    await harness.live({ kind: "reward", user: "Alice", title: "Réveiller Jean-Renard" });
+    await harness.live({
+      kind: "reward",
+      user: "Alice",
+      title: "Réveiller Jean-Renard",
+      id: "red-1",
+      rewardId: "reward-1",
+    });
     await harness.run(3000);
     expect(harness.timeline().map(({ label: name }) => name)).toEqual(["speech"]);
     expect(harness.synthesized).toEqual(["Je dors pas, Alice. Je réfléchis."]);
@@ -1606,7 +1618,13 @@ describe("X : « Clasher Fenysk »", () => {
     const harness = build({ jabs: ["Une seule pique."], seconds: 2 });
     await harness.run(AWAY_AT);
     const since = harness.events.length;
-    await harness.live({ kind: "reward", user: "Alice", title: "Clasher Fenysk" });
+    await harness.live({
+      kind: "reward",
+      user: "Alice",
+      title: "Clasher Fenysk",
+      id: "red-1",
+      rewardId: "reward-1",
+    });
     await harness.run(6000);
     const timeline = harness.timeline(since).map((entry) => ({ ...entry, at: entry.at - AWAY_AT }));
     expect(timeline).toContainEqual({ at: 0, label: "presence:returning" });
@@ -1618,7 +1636,13 @@ describe("X : « Clasher Fenysk »", () => {
   it("attend le silence de Fenysk : rien tant qu'il parle, la pique 1 s après", async () => {
     const harness = build({ jabs: ["Une seule pique."], seconds: 2 });
     await harness.talk(1000);
-    await harness.live({ kind: "reward", user: "Alice", title: "Clasher Fenysk" });
+    await harness.live({
+      kind: "reward",
+      user: "Alice",
+      title: "Clasher Fenysk",
+      id: "red-1",
+      rewardId: "reward-1",
+    });
     await harness.talk(2000);
     expect(harness.speeches()).toHaveLength(0);
     expect(harness.logs.some((line) => line.includes("lecture abandonnée"))).toBe(false);
@@ -1628,7 +1652,13 @@ describe("X : « Clasher Fenysk »", () => {
 
   it("s'arrête, pour ne pas reprendre, si Fenysk parle plus d'1 s pendant la pique", async () => {
     const harness = build({ jabs: ["Une seule pique."], seconds: 5 });
-    await harness.live({ kind: "reward", user: "Alice", title: "Clasher Fenysk" });
+    await harness.live({
+      kind: "reward",
+      user: "Alice",
+      title: "Clasher Fenysk",
+      id: "red-1",
+      rewardId: "reward-1",
+    });
     await harness.run(1000);
     await harness.talk(2500);
     await harness.run(8000);
@@ -1639,14 +1669,26 @@ describe("X : « Clasher Fenysk »", () => {
 
   it("ne dit pas le pseudo d'un viewer insultant : « quelqu'un m'a payé pour te dire ça »", async () => {
     const harness = build({ jabs: ["Une seule pique."] });
-    await harness.live({ kind: "reward", user: "connard42", title: "Clasher Fenysk" });
+    await harness.live({
+      kind: "reward",
+      user: "connard42",
+      title: "Clasher Fenysk",
+      id: "red-1",
+      rewardId: "reward-1",
+    });
     await harness.run(4000);
     expect(harness.synthesized).toEqual(["quelqu'un m'a payé pour te dire ça : Une seule pique."]);
   });
 
   it("ignore une autre récompense : rien ne bouge, rien ne se dit", async () => {
     const harness = build({ jabs: ["Une seule pique."] });
-    await harness.live({ kind: "reward", user: "Alice", title: "Hydrate-toi" });
+    await harness.live({
+      kind: "reward",
+      user: "Alice",
+      title: "Hydrate-toi",
+      id: "red-1",
+      rewardId: "reward-1",
+    });
     await harness.run(4000);
     expect(harness.speeches()).toHaveLength(0);
     expect(harness.timeline()).toEqual([]);

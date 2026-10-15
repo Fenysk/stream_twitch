@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RawMessage } from "./chat.types";
 import type { Settings } from "./settings.schema";
-import { isLurk, SOMEONE, toRewardKind, toThanksPlan, toThanksRules } from "./thanks.rules";
+import { isFoxReward, isLurk, SOMEONE, toRewardKind, toThanksPlan, toThanksRules } from "./thanks.rules";
 
 const message: RawMessage = {
   id: "m",
@@ -322,6 +322,20 @@ describe("toRewardKind : le titre d'une récompense", () => {
 
   it("donne le clash quand le même titre est dans les deux listes", () => {
     expect(toRewardKind("Les deux", { clash: ["Les deux"], wake: ["Les deux"] })).toBe("clash");
+  });
+});
+
+describe("isFoxReward : les récompenses du renard, d'après les réglages", () => {
+  const settings = { foxClashRewards: ["Clasher Fenysk"], foxWakeRewards: ["Réveiller Jean-Renard"] };
+
+  it("reconnaît un titre du clash ou du réveil, sans tenir compte des majuscules", () => {
+    expect(isFoxReward("Clasher Fenysk", settings)).toBe(true);
+    expect(isFoxReward(" réveiller jean-renard", settings)).toBe(true);
+  });
+
+  it("ne reconnaît pas une autre récompense, ni rien quand les listes manquent", () => {
+    expect(isFoxReward("À boire !", settings)).toBe(false);
+    expect(isFoxReward("Clasher Fenysk", {})).toBe(false);
   });
 });
 

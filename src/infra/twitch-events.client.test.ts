@@ -503,8 +503,8 @@ describe("les récompenses de points de chaîne", () => {
     last().emit(reward("r2", "Bob", "Réveiller Jean-Renard"));
     await flush();
     expect(events).toEqual([
-      { kind: "reward", user: "Alice", title: "Clasher Fenysk" },
-      { kind: "reward", user: "Bob", title: "Réveiller Jean-Renard" },
+      { kind: "reward", user: "Alice", title: "Clasher Fenysk", id: "r1", rewardId: "w1" },
+      { kind: "reward", user: "Bob", title: "Réveiller Jean-Renard", id: "r1", rewardId: "w1" },
     ]);
     expect(JSON.stringify(events)).not.toContain("texte");
   });
@@ -515,7 +515,9 @@ describe("les récompenses de points de chaîne", () => {
     last().emit(reward("r1", "Alice", "Clasher Fenysk", "", NOW, ["name"]));
     last().emit(reward("r2", "Alice", "Clasher Fenysk", "", NOW, ["reward"]));
     last().emit(reward("r3", "Alice", "Clasher Fenysk", "", NOW, ["name", "login"]));
-    expect(events).toEqual([{ kind: "reward", user: "alice", title: "Clasher Fenysk" }]);
+    expect(events).toEqual([
+      { kind: "reward", user: "alice", title: "Clasher Fenysk", id: "r1", rewardId: "w1" },
+    ]);
   });
 
   it("ne donne qu'une fois une récompense que Twitch répète, et ignore une rediffusion de plus de 10 min", async () => {
@@ -719,5 +721,121 @@ describe("close", () => {
   it("ne coupe rien par erreur quand il n'a jamais été ouvert", () => {
     const { feed } = setup();
     expect(() => feed.close()).not.toThrow();
+  });
+});
+
+// Un rachat tel que Twitch l'envoie, avec ses identifiants propres (le rachat, la récompense) : la soundboard marque le rachat
+// de ses récompenses, et pas un autre.
+const redemption = (
+  messageId: string,
+  { id, rewardId, user, at = NOW }: { id: string; rewardId: string; user: string; at?: number },
+  userInput = "",
+): string =>
+  `{"metadata":{"message_id":"${messageId}","message_type":"notification","message_timestamp":"${iso(at)}","subscription_type":"channel.channel_points_custom_reward_redemption.add"},"payload":{"event":{"id":"${id}","broadcaster_user_id":"68710381","user_id":"1","user_login":"${user.toLowerCase()}","user_name":"${user}","user_input":"${userInput}","status":"unfulfilled","reward":{"id":"${rewardId}","title":"Rire","cost":100,"prompt":""},"redeemed_at":"${iso(at)}"}}}`;
+
+describe("les rachats, sur la même session que les follows : de quoi les relier à une récompense", () => {
+  const withRewards: readonly TwitchTopic[] = ["follow", "reward"];
+
+  it("ne s'abonne pas aux rachats quand le jeton n'a pas ce droit : un seul abonnement, aux follows", async () => {
+    const { requests, subscribed } = setup();
+    await subscribed();
+    expect(requests).toHaveLength(1);
+  });
+
+  it("s'abonne aux rachats juste après les follows : version 1, la chaîne seule, la même session et le même jeton", async () => {
+    const { requests, logs, subscribed } = setup(undefined, undefined, withRewards);
+    await subscribed();
+    expect(requests).toHaveLength(2);
+    const body: Record<string, unknown> = JSON.parse(String(requests[1]?.init?.body));
+    expect(body.type).toBe("channel.channel_points_custom_reward_redemption.add");
+    expect(body.version).toBe("1");
+    expect(body.condition).toEqual(JSON.parse('{"broadcaster_user_id":"68710381"}'));
+    expect(body.transport).toEqual(JSON.parse('{"method":"websocket","session_id":"session-1"}'));
+    expect(new Headers(requests[1]?.init?.headers).get("authorization")).toBe("Bearer ACCESS-X");
+    expect(logs).toEqual([
+      "Twitch : abonné aux follows (EventSub).",
+      "Twitch : abonné aux récompenses de points de chaîne (EventSub).",
+    ]);
+  });
+
+  it("donne chaque rachat avec son identifiant et celui de sa récompense, le pseudo et le titre, jamais le texte saisi", async () => {
+    const { last, events, subscribed } = setup(undefined, undefined, withRewards);
+    await subscribed();
+    last().emit(redemption("m1", { id: "red-1", rewardId: "reward-1", user: "Alice" }, "bonjour"));
+    last().emit(redemption("m2", { id: "red-2", rewardId: "reward-2", user: "Bob" }));
+    expect(events).toEqual([
+      { kind: "reward", user: "Alice", title: "Rire", id: "red-1", rewardId: "reward-1" },
+      { kind: "reward", user: "Bob", title: "Rire", id: "red-2", rewardId: "reward-2" },
+    ]);
+    expect(JSON.stringify(events)).not.toContain("bonjour");
+  });
+
+  it("ne donne qu'une fois un message que Twitch répète, et ignore une rediffusion de plus de 10 min", async () => {
+    const { last, events, subscribed } = setup(undefined, undefined, withRewards);
+    await subscribed();
+    last().emit(redemption("m1", { id: "red-1", rewardId: "reward-1", user: "Alice" }));
+    last().emit(redemption("m1", { id: "red-1", rewardId: "reward-1", user: "Alice" }));
+    last().emit(
+      redemption("m2", { id: "red-2", rewardId: "reward-1", user: "Bob", at: NOW - 10 * 60_000 - 1 }),
+    );
+    expect(events.map((event) => (event.kind === "reward" ? event.id : null))).toEqual(["red-1"]);
+  });
+
+  it("ignore un rachat sans identifiant de rachat ou de récompense : la soundboard ne marque rien à demi", async () => {
+    const { last, events, subscribed } = setup(undefined, undefined, withRewards);
+    await subscribed();
+    const noReward = `{"metadata":{"message_id":"m1","message_type":"notification","message_timestamp":"${iso(NOW)}","subscription_type":"channel.channel_points_custom_reward_redemption.add"},"payload":{"event":{"id":"red-1","user_name":"Alice","reward":{"title":"Rire"}}}}`;
+    const noRedemption = `{"metadata":{"message_id":"m2","message_type":"notification","message_timestamp":"${iso(NOW)}","subscription_type":"channel.channel_points_custom_reward_redemption.add"},"payload":{"event":{"user_name":"Alice","reward":{"id":"reward-1","title":"Rire"}}}}`;
+    last().emit(noReward);
+    last().emit(noRedemption);
+    expect(events).toEqual([]);
+  });
+
+  it("garde les follows et la connexion quand l'abonnement aux rachats est refusé : il le dit, sans rien retenter", async () => {
+    const { last, logs, follows, sockets, pending, subscribed } = setup(
+      (body) => new Response(null, { status: body.type === "channel.follow" ? 202 : 403 }),
+      undefined,
+      withRewards,
+    );
+    await subscribed();
+    expect(logs).toEqual([
+      "Twitch : abonné aux follows (EventSub).",
+      "Twitch : abonnement aux récompenses de points de chaîne refusé (HTTP 403).",
+    ]);
+    last().emit(follow("n1", "Alice"));
+    expect(follows).toEqual(["Alice"]);
+    expect(sockets).toHaveLength(1);
+    // Une seule minuterie : la veille de Twitch, aucune nouvelle tentative.
+    expect(pending()).toBe(1);
+  });
+
+  it("reprend la connexion quand le réseau tombe au milieu des abonnements : il le dit", async () => {
+    const { logs, sockets, subscribed } = setup(
+      (body) => {
+        if (body.type !== "channel.follow") throw new Error("réseau coupé");
+        return new Response(null, { status: 202 });
+      },
+      undefined,
+      withRewards,
+    );
+    await subscribed();
+    expect(logs).toContain(
+      "Twitch : abonnement aux récompenses de points de chaîne impossible (réseau coupé).",
+    );
+    expect(sockets[0]?.isClosed).toBe(true);
+  });
+
+  it("dit quel abonnement Twitch retire : les récompenses de points de chaîne, ou les follows", async () => {
+    const { last, logs, flush, subscribed } = setup(undefined, undefined, withRewards);
+    await subscribed();
+    last().emit(
+      `{"metadata":{"message_id":"rv1","message_type":"revocation","message_timestamp":"${iso(NOW)}"},"payload":{"subscription":{"id":"s2","status":"authorization_revoked","type":"channel.channel_points_custom_reward_redemption.add"}}}`,
+    );
+    last().emit(revocationMessage);
+    await flush();
+    expect(logs.slice(-2)).toEqual([
+      "Twitch : l'abonnement aux récompenses de points de chaîne a été retiré par Twitch (authorization_revoked).",
+      "Twitch : l'abonnement aux follows a été retiré par Twitch (authorization_revoked).",
+    ]);
   });
 });

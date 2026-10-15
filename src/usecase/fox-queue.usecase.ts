@@ -20,8 +20,9 @@ export type QueueItem = {
   isUrgent: boolean;
   // Ce qu'il montre avant de parler, tiré au moment où la lecture commence.
   toShow: () => Show | null;
-  // Appelé quand la phrase est finie (ou qu'elle n'a pas pu être dite), jamais quand elle est coupée ou retirée.
-  onDone?: (() => void) | undefined;
+  // Appelé quand la phrase est finie (`isSaid`) ou qu'elle n'a pas pu être dite (la synthèse a échoué), jamais quand elle est
+  // coupée ou retirée.
+  onDone?: ((isSaid: boolean) => void) | undefined;
 };
 
 export type FoxQueueDeps = {
@@ -118,20 +119,20 @@ export function createFoxQueue({
         }
         if (!result.ok) {
           log(`Renard : ${item.label} non lu : ${result.message}`);
-          finish();
+          finish(false);
           return;
         }
         reading.isPlaying = true;
-        reading.cancelEnd = schedule(finish, result.durationMs + SILENCE_BETWEEN_MS);
+        reading.cancelEnd = schedule(() => finish(true), result.durationMs + SILENCE_BETWEEN_MS);
       });
   };
 
-  function finish() {
+  function finish(isSaid: boolean) {
     const item = current?.item;
     current?.intro.cancel();
     current = undefined;
     mode.noteSpoke();
-    item?.onDone?.();
+    item?.onDone?.(isSaid);
     startNext();
   }
 

@@ -61,6 +61,9 @@ export type TwitchConnectionDeps = {
   broadcasterId: string | undefined;
   // Un évènement du flux EventSub (un follow, une récompense) : il va aux remerciements.
   onEvent: (event: LiveEvent) => void;
+  // Le jeton a le droit de gérer les récompenses et le flux est ouvert : les rewards des sons peuvent se remettre en route.
+  // Absent sur un serveur d'essai.
+  onReady?: () => void;
   clock: () => number;
   // Programme `callback` dans `ms` ; rend de quoi l'annuler.
   schedule: (callback: () => void, ms: number) => () => void;
@@ -78,6 +81,9 @@ export type TwitchConnection = {
   start(): Promise<void>;
   stop(): void;
   getStatus(): TwitchStatus;
+  // Le jeton d'accès pour gérer les rewards des sons ; `null` : pas connecté, ou il manque le droit de gérer les récompenses
+  // (reconnecte-toi).
+  getRewardsToken(isForced: boolean): Promise<string | null>;
   // L'adresse où Alexis autorise l'application, avec un state neuf.
   beginLogin(): { ok: true; url: string } | { ok: false; message: string };
   // Le retour de Twitch : vérifie le state, échange le code, garde le jeton, écoute les évènements.
@@ -105,6 +111,7 @@ export function createTwitchConnection({
   store,
   broadcasterId,
   onEvent,
+  onReady,
   clock,
   schedule,
   createState,
@@ -192,6 +199,7 @@ export function createTwitchConnection({
     app.feed.close();
     app.feed.open({ broadcasterId, moderatorId: token.userId, topics, getAccessToken, onEvent });
     keepConfirming();
+    if (topics.includes("reward")) onReady?.();
   };
 
   const isKnownState = (state: string | null): boolean => {
@@ -259,6 +267,10 @@ export function createTwitchConnection({
       return token
         ? { kind: "connected", login: token.login, missing: toMissingTopics(token.scope) }
         : { kind: "disconnected", lastError };
+    },
+    async getRewardsToken(isForced) {
+      if (!token || toMissingTopics(token.scope).includes("reward")) return null;
+      return getAccessToken(isForced);
     },
     beginLogin() {
       if (!app) return { ok: false, message: MISSING_APP_MESSAGE };

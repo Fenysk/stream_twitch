@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { toChatChannel } from "../../domain/chat-settings.rules";
 import type { ExpressionRef } from "../../domain/head.types";
 import type { Settings } from "../../domain/settings.schema";
+import { isFoxReward } from "../../domain/thanks.rules";
 import { createChatClient } from "../../infra/chat.client";
 import { createEmoteClient } from "../../infra/emotes.client";
 import { createEmoteStore } from "../../infra/emotes.repository";
@@ -16,9 +17,12 @@ import {
 } from "../../infra/local-settings.repository";
 import { createObsClient, createObsSocket, type ObsClient } from "../../infra/obs.client";
 import { createRegularsStore } from "../../infra/regulars.repository";
+import { createRewardPhraseStore } from "../../infra/reward-phrase.repository";
 import { getSettings } from "../../infra/settings.repository";
+import { createSoundStore } from "../../infra/sound.repository";
 import { createTwitchAuthClient } from "../../infra/twitch-auth.client";
 import { createEventFeed } from "../../infra/twitch-events.client";
+import { createRewardsClient } from "../../infra/twitch-rewards.client";
 import { createTimetableClient } from "../../infra/twitch-timetable.client";
 import { createTwitchTokenStore } from "../../infra/twitch-token.repository";
 import { createViewersClient } from "../../infra/twitch-viewers.client";
@@ -36,13 +40,18 @@ import { createFoxMode, type FoxModeController } from "../../usecase/fox-mode.us
 import { createFoxQueue } from "../../usecase/fox-queue.usecase";
 import { createFoxRegulars } from "../../usecase/fox-regulars.usecase";
 import { createFoxReview, type FoxReview } from "../../usecase/fox-review.usecase";
+import { createFoxReward, type FoxReward } from "../../usecase/fox-reward.usecase";
 import { createFoxShout } from "../../usecase/fox-shout.usecase";
 import { createFoxStartle } from "../../usecase/fox-startle.usecase";
 import { createFoxTally } from "../../usecase/fox-tally.usecase";
 import { createFoxThanks, type FoxThanks } from "../../usecase/fox-thanks.usecase";
 import { createFoxTunnel } from "../../usecase/fox-tunnel.usecase";
 import { createHeadLoop, type HeadFeed } from "../../usecase/head.usecase";
+import { createRewardPhraseLibrary, type RewardPhraseLibrary } from "../../usecase/reward-phrase.usecase";
 import { createSettingsStore, type SettingsStore } from "../../usecase/settings.usecase";
+import { createShutdown } from "../../usecase/shutdown.usecase";
+import { createSoundLibrary, type SoundLibrary } from "../../usecase/sound.usecase";
+import { createSoundQueue, type SoundQueue } from "../../usecase/sound-queue.usecase";
 import { createTimetable } from "../../usecase/timetable.usecase";
 import { createTwitchConnection, type TwitchConnection } from "../../usecase/twitch-connection.usecase";
 import { createViewers, type Viewers, type ViewersPort } from "../../usecase/viewers.usecase";
@@ -66,15 +75,20 @@ export type Runtime = {
   review: FoxReview;
   // Le nombre de viewers du live, relu toutes les 60 s.
   viewers: Viewers;
+  // La soundboard : les sons enregistrés (data/sounds/), et leur queue vers la page /sounds d'OBS.
+  sounds: SoundLibrary;
+  soundQueue: SoundQueue;
+  // Les phrases de Jean-Renard de chaque récompense de la chaîne (data/reward-phrases.json), et ce qu'il fait d'un rachat.
+  rewardPhrases: RewardPhraseLibrary;
+  foxReward: FoxReward;
 };
 
 // Le plugin Nitro et les routes serveur partagent ce module : c'est le seul état du serveur.
 let current: Runtime | undefined;
 
-const exitServer = (reason: string): void => {
-  log(reason);
-  process.exit(0);
-};
+// Le port du serveur du stream, celui de la source OBS et de l'adresse de retour de Twitch. Un serveur d'essai tourne sur un
+// autre `PORT` : il ne lit pas les rachats et ne touche pas aux rewards, sinon il rendrait des points que le vrai serveur joue.
+const STREAM_PORT = "4747";
 
 // Le temps qui passe pour le renard et pour la lecture du tchat : un minuteur annulable.
 const schedule = (callback: () => void, ms: number): (() => void) => {
@@ -90,7 +104,20 @@ const isSame = (a: ExpressionRef, b: ExpressionRef): boolean => a.id === b.id &&
 // retouchée s'applique aussitôt. Le tchat se lit sans OBS : il démarre même quand OBS est fermé.
 export function startRuntime(): Runtime {
   const root = process.cwd();
-  const port = process.env.PORT ?? "4747";
+  const port = process.env.PORT ?? STREAM_PORT;
+  const isStreamServer = port === STREAM_PORT;
+  // L'arrêt (OBS se ferme, OBS ne revient pas, signal) met d'abord les rewards en pause : hors stream, personne ne les dépense.
+  const shutdown = createShutdown({
+    pauseRewards: async () => {
+      if (isStreamServer) await sounds.pauseRewards();
+    },
+    exit: () => process.exit(0),
+    schedule,
+    log,
+  });
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => void shutdown(`Signal ${signal} reçu : arrêt du serveur.`));
+  }
   const localPath = join(root, "settings.local.json");
   // La version de la photo change à chaque démarrage : OBS ne garde pas l'ancienne image de la photo en cache.
   const { head, geometry, images } = getHeadFiles(join(root, "tete-south-park"), String(Date.now()));
@@ -180,7 +207,7 @@ export function startRuntime(): Runtime {
       // Seules les sources qui pointent vers CE port sont rafraîchies : un serveur d'essai sur un autre port ne touche pas à celle du stream.
       pageHosts: [`localhost:${port}`, `127.0.0.1:${port}`],
       log,
-      onExit: exitServer,
+      onExit: (reason) => void shutdown(reason),
     },
     // Le mot de passe vient de .env (OBS_PASSWORD) ; absent ou vide = connexion sans mot de passe.
     createObsSocket({ address: initial.obsAddress, password: process.env.OBS_PASSWORD || undefined, log }),
@@ -358,7 +385,9 @@ export function startRuntime(): Runtime {
     log,
   });
   // La connexion d'Alexis : le jeton vit dans data/twitch-token.json (hors de git), les follows et les récompenses arrivent par
-  // EventSub et vont aux remerciements comme les évènements du tchat.
+  // EventSub et vont aux remerciements comme les évènements du tchat. Une récompense va aussi à la queue des sons et aux
+  // phrases du renard, sur le serveur du stream seulement ; dès que le jeton peut gérer les récompenses, les rewards des sons
+  // sortent de pause et leurs rachats restés UNFULFILLED sont remboursés.
   const twitch = createTwitchConnection({
     app: twitchApp && {
       clientId: twitchApp.clientId,
@@ -367,10 +396,61 @@ export function startRuntime(): Runtime {
     },
     store: createTwitchTokenStore(join(root, "data", "twitch-token.json"), log),
     broadcasterId: initial.chatChannelId,
-    onEvent: (event) => thanks.receive(event),
+    onEvent: (event) => {
+      thanks.receive(event);
+      if (event.kind === "reward" && isStreamServer) foxReward.redeem(event);
+    },
+    ...(isStreamServer ? { onReady: () => void sounds.openRewards() } : {}),
     clock: Date.now,
     schedule,
     createState: () => randomBytes(16).toString("hex"),
+    log,
+  });
+  // La soundboard : les sons vivent dans data/sounds/ (hors de git), chacun avec son reward de points de chaîne ; un seul
+  // son joue à la fois, dans la page /sounds d'OBS. Sans les identifiants de l'application, le client des rewards répond
+  // que Twitch n'est pas prêt.
+  const soundStore = createSoundStore(join(root, "data", "sounds"), log);
+  const rewards = createRewardsClient({
+    clientId: twitchApp?.clientId ?? "",
+    broadcasterId: initial.chatChannelId,
+    getAccessToken: (isForced) => twitch.getRewardsToken(isForced),
+  });
+  const sounds = createSoundLibrary({
+    store: soundStore,
+    rewards,
+    createId: () => {
+      let id = randomBytes(4).toString("hex");
+      while (soundStore.get(id)) id = randomBytes(4).toString("hex");
+      return id;
+    },
+    onDelete: (id) => soundQueue.forget(id),
+    log,
+  });
+  const soundQueue = createSoundQueue({
+    library: sounds,
+    rewards,
+    createId: () => randomBytes(8).toString("hex"),
+    schedule,
+    log,
+  });
+  // Les phrases de Jean-Renard pour une récompense : data/reward-phrases.json (hors de git). Les récompenses du renard (clash,
+  // wake) gardent leurs phrases de l'onglet Renard.
+  const isReserved = (title: string): boolean => isFoxReward(title, settings.getState().effective);
+  const rewardPhrases = createRewardPhraseLibrary({
+    store: createRewardPhraseStore(join(root, "data", "reward-phrases.json"), log),
+    rewards,
+    isReserved,
+    log,
+  });
+  const foxReward = createFoxReward({
+    queue,
+    mode,
+    sounds: soundQueue,
+    phrases: rewardPhrases,
+    jab,
+    insults,
+    isReserved,
+    random: Math.random,
     log,
   });
   log(`Renard : liste d'insultes chargée (${insults.parts.length + insults.words.size} entrées).`);
@@ -396,10 +476,27 @@ export function startRuntime(): Runtime {
   void twitch.start();
   chat.start();
   log(
-    `Serveur démarré : http://localhost:${port}/head, /chat et /fox (réglages : http://localhost:${port}/)`,
+    `Serveur démarré : http://localhost:${port}/head, /chat, /fox et /sounds (réglages : http://localhost:${port}/)`,
   );
+  log(`Sons : ${sounds.list().length} dans data/sounds/.`);
   log(`Réglages : micro « ${initial.micName} », seuil ${initial.threshold} dB, délai ${initial.delay} ms.`);
-  current = { feed: loop.feed, expressions, settings, obs, chat, fox, mode, thanks, twitch, review, viewers };
+  current = {
+    feed: loop.feed,
+    expressions,
+    settings,
+    obs,
+    chat,
+    fox,
+    mode,
+    thanks,
+    twitch,
+    review,
+    viewers,
+    sounds,
+    soundQueue,
+    rewardPhrases,
+    foxReward,
+  };
   return current;
 }
 

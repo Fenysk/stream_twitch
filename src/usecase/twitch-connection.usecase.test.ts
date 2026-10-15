@@ -11,10 +11,12 @@ import {
 
 const START = 1_000_000;
 // Les droits que le renard demande : un jeton neuf les a tous. Un jeton d'avant les récompenses n'a que les follows, un jeton
-// d'avant les prédictions n'a pas le dernier.
+// d'avant les prédictions n'a pas le dernier ; un jeton d'avant la gestion des récompenses n'a que le droit de les lire
+// (`channel:read:redemptions`) : la soundboard lui demande de se reconnecter.
 const SCOPE = TWITCH_SCOPE;
 const FOLLOWS_ONLY = "moderator:read:followers";
-const WITHOUT_PREDICTIONS = "moderator:read:followers channel:read:redemptions";
+const WITHOUT_PREDICTIONS = "moderator:read:followers channel:manage:redemptions";
+const WITHOUT_MANAGE = "moderator:read:followers channel:read:redemptions channel:read:predictions";
 
 const storedToken: TwitchToken = {
   accessToken: "ACCESS-STORED",
@@ -31,7 +33,13 @@ const outage = (message: string): AuthResult<never> => ({ ok: false, isRefused: 
 
 // Un faux Twitch à la main : les réponses sont celles que le test pose, chaque appel est noté.
 const setup = (
-  options: { token?: TwitchToken | null; isAvailable?: boolean; broadcasterId?: string | undefined } = {},
+  options: {
+    token?: TwitchToken | null;
+    isAvailable?: boolean;
+    broadcasterId?: string | undefined;
+    // Le serveur du stream (il remet les rewards en route) ; sans lui, un serveur d'essai.
+    isStreamServer?: boolean;
+  } = {},
 ) => {
   const state = {
     now: START,
@@ -57,6 +65,7 @@ const setup = (
     opens: [] as EventFeedTarget[],
     closes: 0,
     events: [] as LiveEvent[],
+    readies: 0,
   };
   const logs: string[] = [];
   const timers: { at: number; callback: () => void; isCancelled: boolean }[] = [];
@@ -114,6 +123,13 @@ const setup = (
     },
     broadcasterId: "broadcasterId" in options ? options.broadcasterId : "68710381",
     onEvent: (event) => calls.events.push(event),
+    ...(options.isStreamServer === false
+      ? {}
+      : {
+          onReady: () => {
+            calls.readies += 1;
+          },
+        }),
     clock: () => state.now,
     schedule(callback, ms) {
       const timer = { at: state.now + ms, callback, isCancelled: false };
@@ -206,11 +222,17 @@ describe("au démarrage", () => {
     const { connection, feed, calls } = setup({ token: storedToken });
     await connection.start();
     feed().onEvent({ kind: "follow", user: "Alice" });
-    feed().onEvent({ kind: "reward", user: "Bob", title: "Clasher Fenysk" });
+    feed().onEvent({
+      kind: "reward",
+      user: "Bob",
+      title: "Clasher Fenysk",
+      id: "red-1",
+      rewardId: "reward-1",
+    });
     feed().onEvent({ kind: "prediction", losers: 3, outcome: "Oui" });
     expect(calls.events).toEqual([
       { kind: "follow", user: "Alice" },
-      { kind: "reward", user: "Bob", title: "Clasher Fenysk" },
+      { kind: "reward", user: "Bob", title: "Clasher Fenysk", id: "red-1", rewardId: "reward-1" },
       { kind: "prediction", losers: 3, outcome: "Oui" },
     ]);
   });
@@ -267,6 +289,73 @@ describe("au démarrage", () => {
     await connection.start();
     expect(calls.opens).toEqual([]);
     expect(logs.some((line) => line.includes("chatChannelId"))).toBe(true);
+  });
+});
+
+describe("les droits : follows et gestion des récompenses", () => {
+  const reward: LiveEvent = {
+    kind: "reward",
+    user: "Alice",
+    title: "Rire",
+    id: "red-1",
+    rewardId: "reward-1",
+  };
+
+  it("avec tous les droits : connecté sans rien de manquant, le flux lit les récompenses, et les rewards sont prêts", async () => {
+    const { connection, feed, calls } = setup({ token: storedToken });
+    await connection.start();
+    expect(connection.getStatus()).toEqual({ kind: "connected", login: "fenysk", missing: [] });
+    expect(feed().topics).toContain("reward");
+    feed().onEvent(reward);
+    expect(calls.events).toEqual([reward]);
+    expect(calls.readies).toBe(1);
+  });
+
+  it("avec le jeton d'avant les récompenses : les follows marchent encore, rien d'autre ne démarre, il faut se reconnecter", async () => {
+    const { connection, feed, calls, logs } = setup({ token: { ...storedToken, scope: FOLLOWS_ONLY } });
+    await connection.start();
+    expect(connection.getStatus()).toMatchObject({ kind: "connected", missing: ["reward", "prediction"] });
+    expect(logs.at(-1)).toBe(
+      "Twitch : le jeton n'a pas le droit de voir les récompenses de points de chaîne et les prédictions : reconnecte-toi depuis l'onglet Renard.",
+    );
+    feed().onEvent({ kind: "follow", user: "Alice" });
+    expect(calls.events).toEqual([{ kind: "follow", user: "Alice" }]);
+    expect(feed().topics).not.toContain("reward");
+    expect(calls.readies).toBe(0);
+    expect(await connection.getRewardsToken(false)).toBeNull();
+  });
+
+  it("avec un jeton qui peut seulement lire les rachats : il manque la gestion, les rewards des sons attendent la reconnexion", async () => {
+    const { connection, feed, calls } = setup({ token: { ...storedToken, scope: WITHOUT_MANAGE } });
+    await connection.start();
+    expect(connection.getStatus()).toEqual({ kind: "connected", login: "fenysk", missing: ["reward"] });
+    expect(feed().topics).toEqual(["follow", "prediction"]);
+    expect(calls.readies).toBe(0);
+    expect(await connection.getRewardsToken(false)).toBeNull();
+  });
+
+  it("sur un serveur d'essai, sans onReady : rien n'est prêt pour les rewards", async () => {
+    const { connection, calls } = setup({ token: storedToken, isStreamServer: false });
+    await connection.start();
+    expect(connection.getStatus()).toMatchObject({ kind: "connected", missing: [] });
+    expect(calls.readies).toBe(0);
+  });
+
+  it("après une connexion réussie : les rewards sont prêts, une fois", async () => {
+    const { connection, query, calls } = setup();
+    connection.beginLogin();
+    await connection.completeLogin(query());
+    expect(calls.readies).toBe(1);
+  });
+
+  it("donne le jeton d'accès pour gérer les rewards, renouvelé s'il est près de sa fin, et rien sans jeton", async () => {
+    const { connection, state, advance } = setup({ token: storedToken });
+    expect(await connection.getRewardsToken(false)).toBeNull();
+    await connection.start();
+    expect(await connection.getRewardsToken(false)).toBe("ACCESS-STORED");
+    state.now = START + 3_600_000 - 30_000;
+    expect(await connection.getRewardsToken(false)).toBe("ACCESS-R1");
+    await advance(0);
   });
 });
 

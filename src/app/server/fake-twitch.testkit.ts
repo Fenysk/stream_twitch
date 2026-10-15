@@ -1,15 +1,31 @@
 import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { Duplex } from "node:stream";
+import {
+  createFakeRewards,
+  type FakeReward,
+  type FakeSpend,
+  REWARDS_PATH,
+} from "./fake-twitch-rewards.testkit";
 
-// Un faux Twitch pour les tests : un serveur HTTP (jeton, renouvellement, compte, révocation, abonnements EventSub) et un
-// WebSocket EventSub minimal, sur 127.0.0.1. Il joue le rôle de id.twitch.tv, api.twitch.tv et eventsub.wss.twitch.tv.
+// Un faux Twitch pour les tests : un serveur HTTP (jeton, renouvellement, compte, révocation, abonnements EventSub, rewards de
+// points de chaîne et leurs redemptions) et un WebSocket EventSub minimal, sur 127.0.0.1. Il joue le rôle de id.twitch.tv,
+// api.twitch.tv et eventsub.wss.twitch.tv.
 export const FAKE_CODE = "FAKE-CODE";
 export const FAKE_SECRET = "le-secret-de-l-app";
 export const FAKE_CLIENT_ID = "mon-client";
 export const FAKE_REDIRECT = "http://localhost:4747/auth/twitch/callback";
 
-export type FakeRequest = { method: string; path: string; headers: Record<string, string>; body: string };
+export type { FakeReward, FakeSpend };
+
+// `query` : la partie de l'adresse après « ? » (`id=reward-1&broadcaster_id=68710381`).
+export type FakeRequest = {
+  method: string;
+  path: string;
+  query: string;
+  headers: Record<string, string>;
+  body: string;
+};
 
 export type FakeTwitch = {
   httpUrl: string;
@@ -27,6 +43,20 @@ export type FakeTwitch = {
   // Envoie un follow, ou une récompense de points de chaîne (avec le texte que le viewer y joint), à toutes les connexions EventSub.
   sendFollow(user: string): void;
   sendReward(user: string, title: string, userInput?: string): void;
+  // Les rewards que Twitch connaît (ceux de l'application et ceux qu'Alexis a faits à la main), et leurs redemptions.
+  rewards(): FakeReward[];
+  redemptions(): FakeSpend[];
+  // Un viewer dépense ses points sur ce reward : la spend est UNFULFILLED chez Twitch et part en notification EventSub, avec
+  // ses vrais identifiants. Rend l'identifiant de la spend.
+  sendRedemption(spend: { rewardId: string; user: string; input?: string }): string;
+  // Un reward qu'Alexis a fait à la main : l'application ne le gère pas (pas de statut, pas de pause), et son titre est pris.
+  addForeignReward(title: string, options?: { cost?: number; cooldownSeconds?: number }): string;
+  // Twitch retire un reward sans que l'application le sache.
+  removeReward(id: string): void;
+  // La chaîne n'est plus (ou redevient) affiliée : les appels des points de chaîne répondent 403.
+  setAffiliate(isAffiliate: boolean): void;
+  // Le nombre de rewards au-delà duquel Twitch refuse d'en créer (50 chez Twitch).
+  setMaxRewards(count: number): void;
   // Une prédiction qui se termine : ses issues (titre, viewers), laquelle gagne (son rang, `null` : annulée).
   sendPredictionEnd(outcomes: readonly { title: string; users: number }[], winner: number | null): void;
   // Les droits que Twitch donne aux prochains jetons et dit à /validate (un jeton d'avant les récompenses n'a que les follows).
@@ -49,7 +79,7 @@ const INVALID_CODE = '{ "status": 400, "message": "Invalid authorization code" }
 const INVALID_REFRESH = '{ "status": 400, "message": "Invalid refresh token" }';
 const INVALID_SECRET = '{ "status": 403, "message": "invalid client secret" }';
 const INVALID_ACCESS = '{ "status": 401, "message": "invalid access token" }';
-const DEFAULT_SCOPES = ["moderator:read:followers", "channel:read:redemptions", "channel:read:predictions"];
+const DEFAULT_SCOPES = ["moderator:read:followers", "channel:manage:redemptions", "channel:read:predictions"];
 const FOLLOW_TYPE = "channel.follow";
 const REWARD_TYPE = "channel.channel_points_custom_reward_redemption.add";
 const PREDICTION_TYPE = "channel.prediction.end";
@@ -86,6 +116,8 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
   const revoked = new Set<string>();
   const sockets = new Set<Duplex>();
   const subscribed: string[] = [];
+  const fakeRewards = createFakeRewards();
+  let spendNotifications = 0;
   const refusedTypes = new Set<string>();
   let scopes: readonly string[] = DEFAULT_SCOPES;
   let lifetime = 14_400;
@@ -129,11 +161,29 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
     return grant === "refresh_token" ? answerRefresh(form) : { status: 400, body: INVALID_REFRESH };
   };
 
+  // Un appel de l'API Helix : le dernier jeton donné et pas retiré, avec le client-id de l'application.
+  const isAuthorized = (headers: Record<string, string>): boolean =>
+    isCurrent(headers.authorization?.replace(/^Bearer /, ""), accessTokens) &&
+    headers["client-id"] === FAKE_CLIENT_ID;
+
+  const unauthorized = (): Reply => ({
+    status: 401,
+    body: '{ "status": 401, "message": "Invalid OAuth token" }',
+  });
+
+  const answerRewards = (request: FakeRequest): Reply | undefined => {
+    if (!request.path.startsWith(REWARDS_PATH)) return undefined;
+    if (!isAuthorized(request.headers)) return unauthorized();
+    return fakeRewards.answer({
+      method: request.method,
+      path: request.path,
+      query: new URLSearchParams(request.query),
+      body: request.body,
+    });
+  };
+
   const answerSubscription = ({ headers, body }: FakeRequest): Reply => {
-    const token = headers.authorization?.replace(/^Bearer /, "");
-    if (!isCurrent(token, accessTokens) || headers["client-id"] !== FAKE_CLIENT_ID) {
-      return { status: 401, body: '{ "status": 401, "message": "Invalid OAuth token" }' };
-    }
+    if (!isAuthorized(headers)) return unauthorized();
     const type: unknown = JSON.parse(body || "{}").type;
     if (typeof type !== "string" || refusedTypes.has(type)) {
       return {
@@ -145,26 +195,32 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
     return { status: 202, body: '{ "data": [], "total": 1 }' };
   };
 
+  const answerIdentity = (headers: Record<string, string>): Reply => {
+    const isValid = isCurrent(headers.authorization?.replace(/^OAuth /, ""), accessTokens);
+    const identity = `{ "client_id": "mon-client", "login": "fenysk", "scopes": ${JSON.stringify(scopes)}, "user_id": "68710381", "expires_in": 14000 }`;
+    return isValid ? { status: 200, body: identity } : { status: 401, body: INVALID_ACCESS };
+  };
+
+  const answerRevoke = (body: string): Reply => {
+    revoked.add(new URLSearchParams(body).get("token") ?? "");
+    return { status: 200, body: "" };
+  };
+
   const answer = (request: FakeRequest): Reply => {
     const route = `${request.method} ${request.path}`;
     if (route === "POST /oauth2/token") return answerToken(request.body);
-    if (route === "GET /oauth2/validate") {
-      const isValid = isCurrent(request.headers.authorization?.replace(/^OAuth /, ""), accessTokens);
-      const identity = `{ "client_id": "mon-client", "login": "fenysk", "scopes": ${JSON.stringify(scopes)}, "user_id": "68710381", "expires_in": 14000 }`;
-      return isValid ? { status: 200, body: identity } : { status: 401, body: INVALID_ACCESS };
-    }
-    if (route === "POST /oauth2/revoke") {
-      revoked.add(new URLSearchParams(request.body).get("token") ?? "");
-      return { status: 200, body: "" };
-    }
+    if (route === "GET /oauth2/validate") return answerIdentity(request.headers);
+    if (route === "POST /oauth2/revoke") return answerRevoke(request.body);
     if (route === "POST /helix/eventsub/subscriptions") return answerSubscription(request);
-    return { status: 404, body: '{ "message": "inconnu" }' };
+    return answerRewards(request) ?? { status: 404, body: '{ "message": "inconnu" }' };
   };
 
   const server: Server = createServer(async (incoming, response) => {
+    const url = new URL(incoming.url ?? "/", "http://fake");
     const request: FakeRequest = {
       method: incoming.method ?? "GET",
-      path: new URL(incoming.url ?? "/", "http://fake").pathname,
+      path: url.pathname,
+      query: url.search.replace(/^\?/, ""),
       headers: toHeaders(incoming),
       body: await getBody(incoming),
     };
@@ -178,6 +234,7 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
     requests.push({
       method: "GET",
       path: new URL(incoming.url ?? "/", "http://fake").pathname,
+      query: "",
       headers: toHeaders(incoming),
       body: "",
     });
@@ -229,9 +286,24 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
     },
     sendReward(user, title, userInput = "") {
       rewardCount += 1;
-      const message = `{"metadata":{"message_id":"reward-${rewardCount}","message_type":"notification","message_timestamp":"${new Date().toISOString()}","subscription_type":"${REWARD_TYPE}"},"payload":{"event":{"id":"redemption-${rewardCount}","user_id":"${rewardCount}","user_login":"${user.toLowerCase()}","user_name":"${user}","broadcaster_user_id":"68710381","user_input":"${userInput}","status":"unfulfilled","reward":{"id":"reward-id","title":"${title}","cost":100,"prompt":""}}}}`;
+      const message = `{"metadata":{"message_id":"reward-${rewardCount}","message_type":"notification","message_timestamp":"${new Date().toISOString()}","subscription_type":"${REWARD_TYPE}"},"payload":{"event":{"id":"spend-${rewardCount}","user_id":"${rewardCount}","user_login":"${user.toLowerCase()}","user_name":"${user}","broadcaster_user_id":"68710381","user_input":"${userInput}","status":"unfulfilled","reward":{"id":"reward-id","title":"${title}","cost":100,"prompt":""}}}}`;
       for (const socket of sockets) socket.write(toPacket(message));
     },
+    rewards: () => [...fakeRewards.rewards.values()],
+    redemptions: () => [...fakeRewards.redemptions.values()],
+    sendRedemption({ rewardId, user, input = "" }) {
+      const spend = fakeRewards.createRedemption(rewardId, user, input);
+      spendNotifications += 1;
+      const title = JSON.stringify(fakeRewards.rewards.get(rewardId)?.title ?? "");
+      const event = `{"id":"${spend.id}","broadcaster_user_id":"68710381","user_id":"2","user_login":"${user.toLowerCase()}","user_name":"${user}","user_input":${JSON.stringify(input)},"status":"unfulfilled","reward":{"id":"${rewardId}","title":${title},"cost":100,"prompt":""},"redeemed_at":"${new Date().toISOString()}"}`;
+      const message = `{"metadata":{"message_id":"spend-message-${spendNotifications}","message_type":"notification","message_timestamp":"${new Date().toISOString()}","subscription_type":"${REWARD_TYPE}"},"payload":{"event":${event}}}`;
+      for (const socket of sockets) socket.write(toPacket(message));
+      return spend.id;
+    },
+    addForeignReward: (title, options) => fakeRewards.addForeignReward(title, options),
+    removeReward: (id) => fakeRewards.removeReward(id),
+    setAffiliate: (isAffiliate) => fakeRewards.setAffiliate(isAffiliate),
+    setMaxRewards: (count) => fakeRewards.setMaxRewards(count),
     sendPredictionEnd(outcomes, winner) {
       predictionCount += 1;
       const lines = outcomes.map(

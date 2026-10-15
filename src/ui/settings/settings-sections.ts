@@ -18,7 +18,7 @@ export const SECTIONS = [
   { id: "chat", label: "Tchat", icon: MessageSquare, path: "/settings/chat" },
   { id: "fox", label: "Renard", icon: PawPrint, path: "/settings/fox" },
   { id: "events", label: "Évènements", icon: CalendarDays, isSoon: true },
-  { id: "rewards", label: "Points de chaîne", icon: Coins, isSoon: true },
+  { id: "rewards", label: "Points de chaîne", icon: Coins, path: "/settings/rewards" },
   { id: "scenes", label: "Scènes", icon: Clapperboard, isSoon: true },
   { id: "twitch", label: "Twitch", icon: Tv, isSoon: true },
 ] as const;

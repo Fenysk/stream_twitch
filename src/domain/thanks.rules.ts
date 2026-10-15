@@ -145,6 +145,13 @@ export function toRewardKind(title: string, { clash, wake }: RewardTitles): Rewa
   return isTitled(wake) ? "wake" : null;
 }
 
+// La récompense est l'une de celles du renard (clash, wake) : ses phrases se règlent dans l'onglet Renard, pas avec celles d'une
+// autre récompense.
+export const isFoxReward = (
+  title: string,
+  { foxClashRewards, foxWakeRewards }: Pick<Settings, "foxClashRewards" | "foxWakeRewards">,
+): boolean => toRewardKind(title, { clash: foxClashRewards ?? [], wake: foxWakeRewards ?? [] }) !== null;
+
 // Les réglages des remerciements : la case, le délai entre deux remerciements nominatifs de follow (ms), le nombre de messages
 // d'un viewer très impliqué, les titres des récompenses, et les phrases de chaque sorte d'évènement.
 export type ThanksRules = {

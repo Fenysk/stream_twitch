@@ -12,8 +12,9 @@ export type LiveEvent =
   | { kind: "cheer"; user: string; bits: number; message: RawMessage | null }
   // Un raid entrant : le streamer qui arrive, et combien de viewers il amène (au moins 1).
   | { kind: "raid"; user: string; viewers: number }
-  // Une récompense de points de chaîne dépensée (EventSub) : son titre seulement, jamais le texte que le viewer y joint.
-  | { kind: "reward"; user: string; title: string }
+  // Une récompense de points de chaîne dépensée (EventSub) : son titre, jamais le texte que le viewer y joint. L'identifiant du
+  // rachat et celui de la récompense servent à la soundboard : elle marque le rachat de ses propres récompenses seulement.
+  | { kind: "reward"; user: string; title: string; id: string; rewardId: string }
   // Une prédiction résolue (EventSub) : combien de viewers ont perdu, et le titre de l'issue perdante la plus suivie (`null` quand
   // personne n'a perdu).
   | { kind: "prediction"; losers: number; outcome: string | null };

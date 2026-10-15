@@ -231,7 +231,13 @@ describe("un évènement du live donne une phrase de sa liste, avec ses variable
 });
 
 describe("les récompenses de points de chaîne", () => {
-  const reward = (user: string, title: string): LiveEvent => ({ kind: "reward", user, title });
+  const reward = (user: string, title: string): LiveEvent => ({
+    kind: "reward",
+    user,
+    title,
+    id: "red-1",
+    rewardId: "reward-1",
+  });
 
   it("« Clasher Fenysk » : une pique tout de suite, donnée à la relance avec le pseudo ; aucune phrase de remerciement", () => {
     const { thanks, state, pushed } = setup();

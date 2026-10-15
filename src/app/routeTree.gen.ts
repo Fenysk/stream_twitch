@@ -14,11 +14,13 @@ import { Route as ChatRouteImport } from './routes/chat'
 import { Route as FoxRouteImport } from './routes/fox'
 import { Route as HeadRouteImport } from './routes/head'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SoundsRouteImport } from './routes/sounds'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsChatRouteImport } from './routes/settings.chat'
 import { Route as SettingsCutRouteImport } from './routes/settings.cut'
 import { Route as SettingsFoxRouteImport } from './routes/settings.fox'
 import { Route as SettingsHeadRouteImport } from './routes/settings.head'
+import { Route as SettingsRewardsRouteImport } from './routes/settings.rewards'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -43,6 +45,11 @@ const HeadRoute = HeadRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoundsRoute = SoundsRouteImport.update({
+  id: '/sounds',
+  path: '/sounds',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
@@ -70,6 +77,11 @@ const SettingsHeadRoute = SettingsHeadRouteImport.update({
   path: '/head',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsRewardsRoute = SettingsRewardsRouteImport.update({
+  id: '/rewards',
+  path: '/rewards',
+  getParentRoute: () => SettingsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -77,10 +89,12 @@ export interface FileRoutesByFullPath {
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/sounds': typeof SoundsRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
+  '/settings/rewards': typeof SettingsRewardsRoute
   '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -88,10 +102,12 @@ export interface FileRoutesByTo {
   '/chat': typeof ChatRoute
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
+  '/sounds': typeof SoundsRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
+  '/settings/rewards': typeof SettingsRewardsRoute
   '/settings': typeof SettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -101,10 +117,12 @@ export interface FileRoutesById {
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/sounds': typeof SoundsRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
+  '/settings/rewards': typeof SettingsRewardsRoute
   '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -115,10 +133,12 @@ export interface FileRouteTypes {
     | '/fox'
     | '/head'
     | '/settings'
+    | '/sounds'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
     | '/settings/head'
+    | '/settings/rewards'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -126,10 +146,12 @@ export interface FileRouteTypes {
     | '/chat'
     | '/fox'
     | '/head'
+    | '/sounds'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
     | '/settings/head'
+    | '/settings/rewards'
     | '/settings'
   id:
     | '__root__'
@@ -138,10 +160,12 @@ export interface FileRouteTypes {
     | '/fox'
     | '/head'
     | '/settings'
+    | '/sounds'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
     | '/settings/head'
+    | '/settings/rewards'
     | '/settings/'
   fileRoutesById: FileRoutesById
 }
@@ -151,6 +175,7 @@ export interface RootRouteChildren {
   FoxRoute: typeof FoxRoute
   HeadRoute: typeof HeadRoute
   SettingsRoute: typeof SettingsRouteWithChildren
+  SoundsRoute: typeof SoundsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -190,6 +215,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sounds': {
+      id: '/sounds'
+      path: '/sounds'
+      fullPath: '/sounds'
+      preLoaderRoute: typeof SoundsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings/': {
       id: '/settings/'
       path: '/'
@@ -225,6 +257,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsHeadRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/rewards': {
+      id: '/settings/rewards'
+      path: '/rewards'
+      fullPath: '/settings/rewards'
+      preLoaderRoute: typeof SettingsRewardsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
   }
 }
 
@@ -233,6 +272,7 @@ interface SettingsRouteChildren {
   SettingsCutRoute: typeof SettingsCutRoute
   SettingsFoxRoute: typeof SettingsFoxRoute
   SettingsHeadRoute: typeof SettingsHeadRoute
+  SettingsRewardsRoute: typeof SettingsRewardsRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
@@ -241,6 +281,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsCutRoute: SettingsCutRoute,
   SettingsFoxRoute: SettingsFoxRoute,
   SettingsHeadRoute: SettingsHeadRoute,
+  SettingsRewardsRoute: SettingsRewardsRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
 
@@ -254,6 +295,7 @@ const rootRouteChildren: RootRouteChildren = {
   FoxRoute: FoxRoute,
   HeadRoute: HeadRoute,
   SettingsRoute: SettingsRouteWithChildren,
+  SoundsRoute: SoundsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
