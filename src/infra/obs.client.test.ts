@@ -20,12 +20,16 @@ const createFakeSocket = (connections: ObsConnection[]) => {
   const exitListeners: Array<() => void> = [];
   const closedListeners: Array<() => void> = [];
   const streamListeners: Array<(isLive: boolean) => void> = [];
+  const muteListeners: Array<(name: string, isMuted: boolean) => void> = [];
   const state = {
     attempts: 0,
     pages: [] as ObsPage[],
     listError: undefined as Error | undefined,
     stream: { isLive: false, durationMs: 0 },
     streamError: undefined as Error | undefined,
+    // Les entrées coupées dans OBS ; `muteError` : OBS refuse de dire (entrée inconnue).
+    muted: new Set<string>(),
+    muteError: undefined as Error | undefined,
   };
   const refreshed: string[] = [];
   const socket: ObsSocket = {
@@ -40,6 +44,11 @@ const createFakeSocket = (connections: ObsConnection[]) => {
     async refreshPage(name) {
       refreshed.push(name);
     },
+    async getInputMute(name) {
+      if (state.muteError) throw state.muteError;
+      return state.muted.has(name);
+    },
+    onInputMute: (listener) => muteListeners.push(listener),
     async getStreamStatus() {
       if (state.streamError) throw state.streamError;
       return state.stream;
@@ -58,6 +67,9 @@ const createFakeSocket = (connections: ObsConnection[]) => {
     },
     sendStreamState: (isLive: boolean) => {
       for (const listener of streamListeners) listener(isLive);
+    },
+    sendInputMute: (name: string, isMuted: boolean) => {
+      for (const listener of muteListeners) listener(name, isMuted);
     },
     sendExitStarted: () => {
       for (const listener of exitListeners) listener();
@@ -349,6 +361,123 @@ describe("createObsClient : niveau du son du PC", () => {
     client.updateDesktopName(undefined);
     fake.sendLevels([{ name: "Musique", peaks: [0.1] }]);
     expect(levels).toHaveLength(1);
+  });
+});
+
+describe("createObsClient : une entrée coupée dans OBS", () => {
+  const withDesktop = { desktopName: "Audio du bureau" };
+
+  it("rend le level plancher (-100 dB) tant que le mic est coupé, même si OBS envoie encore des pics", async () => {
+    const { fake, client } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    const levels: number[] = [];
+    client.mic.subscribe((level) => levels.push(level));
+    fake.sendInputMute("Mic/Aux", true);
+    fake.sendLevels([{ name: "Mic/Aux", peaks: [0.5, 1] }]);
+    expect(levels).toEqual([-100]);
+  });
+
+  it("reprend les pics du mic dès qu'il est rouvert", async () => {
+    const { fake, client } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    const levels: number[] = [];
+    client.mic.subscribe((level) => levels.push(level));
+    fake.sendInputMute("Mic/Aux", true);
+    fake.sendLevels([{ name: "Mic/Aux", peaks: [1] }]);
+    fake.sendInputMute("Mic/Aux", false);
+    fake.sendLevels([{ name: "Mic/Aux", peaks: [0.1] }]);
+    expect(levels[0]).toBe(-100);
+    expect(levels[1]).toBeCloseTo(-20, 6);
+  });
+
+  it("lit la coupure à la connexion : un mic déjà coupé quand le serveur démarre est muet", async () => {
+    const fake = createFakeSocket([connected]);
+    fake.state.muted.add("Mic/Aux");
+    const client = createObsClient(
+      {
+        address: "ws://x",
+        micName: "Mic/Aux",
+        pageHosts: [],
+        log: () => undefined,
+        onExit: () => undefined,
+      },
+      fake.socket,
+    );
+    const levels: number[] = [];
+    client.mic.subscribe((level) => levels.push(level));
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendLevels([{ name: "Mic/Aux", peaks: [1] }]);
+    expect(levels).toEqual([-100]);
+  });
+
+  it("ne coupe que l'entrée annoncée : le desktop garde ses pics quand le mic est coupé, et inversement", async () => {
+    const { fake, client } = setup([connected], withDesktop);
+    await vi.advanceTimersByTimeAsync(0);
+    const mic: number[] = [];
+    const desktop: number[] = [];
+    client.mic.subscribe((level) => mic.push(level));
+    client.desktop.subscribe((level) => desktop.push(level));
+    fake.sendInputMute("Mic/Aux", true);
+    fake.sendInputMute("Tête", true);
+    fake.sendLevels([
+      { name: "Mic/Aux", peaks: [1] },
+      { name: "Audio du bureau", peaks: [0.1] },
+    ]);
+    expect(mic).toEqual([-100]);
+    expect(desktop[0]).toBeCloseTo(-20, 6);
+    fake.sendInputMute("Audio du bureau", true);
+    fake.sendLevels([{ name: "Audio du bureau", peaks: [0.1] }]);
+    expect(desktop[1]).toBe(-100);
+  });
+
+  it("garde ses pics quand OBS refuse de dire si l'entrée est coupée", async () => {
+    const fake = createFakeSocket([connected]);
+    fake.state.muteError = new Error("ResourceNotFound");
+    const messages: string[] = [];
+    const client = createObsClient(
+      {
+        address: "ws://x",
+        micName: "Mic/Aux",
+        pageHosts: [],
+        log: (message) => messages.push(message),
+        onExit: () => undefined,
+      },
+      fake.socket,
+    );
+    const levels: number[] = [];
+    client.mic.subscribe((level) => levels.push(level));
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendLevels([{ name: "Mic/Aux", peaks: [0.1] }]);
+    expect(levels[0]).toBeCloseTo(-20, 6);
+    expect(messages.some((message) => message.startsWith("Connecté à OBS"))).toBe(true);
+  });
+
+  it("dit dans le journal quand le mic est coupé puis rouvert, une fois par changement", async () => {
+    const { fake, messages } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendInputMute("Mic/Aux", true);
+    fake.sendInputMute("Mic/Aux", true);
+    fake.sendInputMute("Mic/Aux", false);
+    expect(messages.filter((message) => message.includes("coupée dans OBS"))).toHaveLength(1);
+    expect(messages.filter((message) => message.includes("rouverte dans OBS"))).toHaveLength(1);
+  });
+
+  it("relit la coupure de la nouvelle entrée quand le mic change en direct", async () => {
+    const { fake, client } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    fake.state.muted.add("Autre mic");
+    const levels: number[] = [];
+    client.mic.subscribe((level) => levels.push(level));
+    fake.sendInputMute("Mic/Aux", true);
+    client.updateMicName("Autre mic");
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendLevels([{ name: "Autre mic", peaks: [1] }]);
+    client.updateMicName("Mic/Aux");
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendLevels([{ name: "Mic/Aux", peaks: [1] }]);
+    expect(levels).toEqual([-100, 0]);
   });
 });
 

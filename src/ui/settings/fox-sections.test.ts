@@ -63,6 +63,7 @@ describe("les sous-onglets du renard", () => {
       "Humeur du tchat",
       "Quand tu cries",
       "Quand tu parles longtemps",
+      "Quand tu reviens",
       "Balance du son",
       "Quand le jeu explose",
     ]);

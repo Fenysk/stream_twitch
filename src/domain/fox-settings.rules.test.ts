@@ -47,6 +47,10 @@ const fox = {
   foxTunnelGap: 600_000,
   foxTunnelToFenysk: ["Tu respires, des fois ?"],
   foxTunnelToChat: ["Je crois que Fenysk nous tunnel."],
+  foxShouldHailComeback: true,
+  foxComebackAfter: 300_000,
+  foxComebackToFenysk: ["Re, Fenysk. Tu t'es perdu en route ?"],
+  foxComebackToChat: ["Ah, il est de retour le boug !"],
   foxBalanceMargin: 0,
   foxBalanceAfter: 10_000,
   foxBalanceGap: 300_000,
@@ -304,6 +308,28 @@ describe("les réglages fox*", () => {
       expect(issuesOf(toEffectiveSettings(defaults, { [key]: 0 }))[0]?.path, key).toBe(key);
     }
     expect(toEffectiveSettings(defaults, { foxTunnelAfter: 30_000, foxTunnelPause: 1000 }).ok).toBe(true);
+  });
+
+  it("règlent le retour : une durée d'absence strictement positive, une case vrai ou faux", () => {
+    expect(issuesOf(toEffectiveSettings(defaults, { foxComebackAfter: 0 }))[0]?.path).toBe(
+      "foxComebackAfter",
+    );
+    expect(toEffectiveSettings(defaults, { foxComebackAfter: 60_000 }).ok).toBe(true);
+    expect(toNextLocal({}, { foxShouldHailComeback: "oui" }).ok).toBe(false);
+    const local = toNextLocal({}, { foxShouldHailComeback: false });
+    expect(local).toEqual({ ok: true, value: { foxShouldHailComeback: false } });
+  });
+
+  it("changent les deux listes du retour dans settings.local.json, chacune pouvant être vide", () => {
+    const local = toNextLocal({}, { foxComebackToFenysk: ["T'étais où ?"], foxComebackToChat: [] });
+    expect(local).toEqual({
+      ok: true,
+      value: { foxComebackToFenysk: ["T'étais où ?"], foxComebackToChat: [] },
+    });
+    const empty = toNextLocal({}, { foxComebackToChat: [""] });
+    expect(empty.ok ? [] : empty.issues).toEqual([
+      { path: "foxComebackToChat.0", message: "ne peut pas être vide" },
+    ]);
   });
 
   it("règlent la balance : un écart de -20 à 20 dB, une durée et un écart strictement positifs", () => {

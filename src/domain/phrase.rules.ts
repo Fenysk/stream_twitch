@@ -6,6 +6,8 @@ export const PHRASE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   foxShouts: [],
   foxTunnelToFenysk: [],
   foxTunnelToChat: [],
+  foxComebackToFenysk: ["absence"],
+  foxComebackToChat: ["absence"],
   foxBalanceAlerts: [],
   foxHourPhrases: ["heures"],
   foxEndWarningPhrases: ["minutes", "fin"],

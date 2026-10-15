@@ -237,6 +237,18 @@ describe("l'onglet Renard", () => {
     }
   });
 
+  it("range « Quand tu reviens » dans Réactions : la case cochée, la durée d'absence à 5 min, les deux listes de phrases", () => {
+    const card = toCard(renderFox("reactions"), "Quand tu reviens");
+    expect(card).toContain("Saluer mon retour");
+    expect(card.match(/<input[^>]*type="checkbox"[^>]*>/)?.[0]).toContain('checked=""');
+    expect(card).toContain(escapeApostrophes("Durée d'absence"));
+    expect(card).toContain("5 min");
+    expect(card).toContain("Phrases pour Fenysk");
+    expect(card).toContain("Phrases pour le tchat");
+    expect(card).toContain("Ah, il est de retour le boug !");
+    expect(card).toContain("{absence}");
+  });
+
   it("propose les cinq sous-onglets en haut des réglages, celui d'adresse coché", () => {
     const html = renderFox("events");
     const start = html.indexOf('class="fox-sections"');

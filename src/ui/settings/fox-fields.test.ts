@@ -17,7 +17,7 @@ import { SLIDER_KEYS } from "./head-fields";
 import { isDefaultTab, toChanges, toFieldErrors } from "./settings-changes";
 
 // Les réglages de chaque onglet, comme les onglets les désignent à « Revenir aux valeurs par défaut » : la tête (ses six
-// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses cinquante-neuf curseurs, ses trente-huit listes, ses deux heures, la voix et cinq cases).
+// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses soixante curseurs, ses quarante listes, ses deux heures, la voix et six cases).
 const HEAD_KEYS = [...SLIDER_KEYS, "expression"];
 const CHAT_KEYS = [
   ...CHAT_SLIDERS.map(({ key }) => key),
@@ -37,7 +37,7 @@ const labelsOf = (key: string): string[] => spec(key).steps.map(({ label }) => l
 const valuesOf = (key: string): number[] => spec(key).steps.map(({ value }) => value);
 
 describe("les curseurs de l'onglet Renard", () => {
-  it("sont cinquante-neuf : cinquante-quatre pour l'animation en seize groupes, cinq pour la lecture du tchat", () => {
+  it("sont soixante : cinquante-cinq pour l'animation en dix-huit groupes, cinq pour la lecture du tchat", () => {
     expect(FOX_GROUPS.map(({ title }) => title)).toEqual([
       "Quand il parle",
       "Au repos",
@@ -52,6 +52,7 @@ describe("les curseurs de l'onglet Renard", () => {
       "Récompenses de points de chaîne",
       "Quand tu cries",
       "Quand tu parles longtemps",
+      "Quand tu reviens",
       "Balance du son",
       "Quand le jeu explose",
       "Heure du live",
@@ -101,6 +102,7 @@ describe("les curseurs de l'onglet Renard", () => {
       "foxTunnelAfter",
       "foxTunnelPause",
       "foxTunnelGap",
+      "foxComebackAfter",
       "foxBalanceMargin",
       "foxBalanceAfter",
       "foxBalanceGap",
@@ -193,6 +195,7 @@ describe("les curseurs de l'onglet Renard", () => {
       "Durée avant qu'il bâille",
       "Silence qui coupe ce monologue",
       "Écart entre deux monologues",
+      "Durée d'absence",
       "Écart du jeu sur ta voix",
       "Durée du jeu trop fort",
       "Écart entre deux alertes",
@@ -319,6 +322,8 @@ describe("les listes de phrases de l'onglet Renard", () => {
       "foxShouts",
       "foxTunnelToFenysk",
       "foxTunnelToChat",
+      "foxComebackToFenysk",
+      "foxComebackToChat",
       "foxBalanceAlerts",
       "foxHourPhrases",
       "foxEndWarningPhrases",
@@ -377,6 +382,9 @@ describe("les listes de phrases de l'onglet Renard", () => {
     expect(
       FOX_GROUPS.find(({ title }) => title === "Quand tu parles longtemps")?.lists?.map(({ key }) => key),
     ).toEqual(["foxTunnelToFenysk", "foxTunnelToChat"]);
+    expect(
+      FOX_GROUPS.find(({ title }) => title === "Quand tu reviens")?.lists?.map(({ key }) => key),
+    ).toEqual(["foxComebackToFenysk", "foxComebackToChat"]);
     expect(FOX_GROUPS.find(({ title }) => title === "Balance du son")?.lists?.map(({ key }) => key)).toEqual([
       "foxBalanceAlerts",
     ]);
@@ -421,8 +429,8 @@ describe("les listes de phrases de l'onglet Renard", () => {
 });
 
 describe("les clés de chaque onglet", () => {
-  it("sont cent cinq pour le renard : ses cinquante-neuf curseurs, ses trente-huit listes, ses deux heures, les cases de l'accueil, des remerciements et du bilan, la voix et les deux cases de la lecture du tchat", () => {
-    expect(FOX_KEYS).toHaveLength(105);
+  it("sont cent neuf pour le renard : ses soixante curseurs, ses quarante listes, ses deux heures, les cases de l'accueil, des remerciements, du retour et du bilan, la voix et les deux cases de la lecture du tchat", () => {
+    expect(FOX_KEYS).toHaveLength(109);
     expect(FOX_KEYS).toContain("chatBots");
     expect(FOX_KEYS).toContain("foxThanksPrediction");
     expect(FOX_KEYS).toContain("foxThanksPredictionNoLoser");
@@ -447,8 +455,13 @@ describe("les clés de chaque onglet", () => {
     expect(FOX_TOGGLES.map(({ key }) => key)).toEqual([
       "foxShouldWelcome",
       "foxShouldThank",
+      "foxShouldHailComeback",
       "foxShouldReviewAtEnd",
     ]);
+    expect(FOX_KEYS).toContain("foxShouldHailComeback");
+    expect(FOX_KEYS).toContain("foxComebackAfter");
+    expect(FOX_KEYS).toContain("foxComebackToFenysk");
+    expect(FOX_KEYS).toContain("foxComebackToChat");
     expect(FOX_KEYS).toContain("foxShouldReviewAtEnd");
     expect(FOX_KEYS).toContain("foxShouldWelcome");
     expect(FOX_KEYS).toContain("foxShouldThank");

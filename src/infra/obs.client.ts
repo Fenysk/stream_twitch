@@ -22,6 +22,10 @@ export type ObsSocket = {
   listPages(): Promise<ObsPage[]>;
   refreshPage(name: string): Promise<void>;
   onLevels(listener: (inputs: ObsInputPeaks[]) => void): void;
+  // L'entrée est-elle coupée à l'instant ? Une entrée inconnue d'OBS fait échouer la demande.
+  getInputMute(name: string): Promise<boolean>;
+  // Une entrée est coupée (`true`) ou rouverte (`false`).
+  onInputMute(listener: (name: string, isMuted: boolean) => void): void;
   // L'état de la diffusion à l'instant : en direct ou non, et depuis combien de ms.
   getStreamStatus(): Promise<{ isLive: boolean; durationMs: number }>;
   // La diffusion démarre (`true`) ou s'arrête (`false`) ; ses autres états (démarrage, coupure réseau) ne comptent pas.
@@ -33,6 +37,10 @@ export type ObsSocket = {
 const MetersSchema = z.object({
   inputs: z.array(z.object({ inputName: z.string(), inputLevelsMul: z.array(z.array(z.number())) })),
 });
+
+// GetInputMute et InputMuteStateChanged : `inputMuted` dit si l'entrée est coupée.
+const InputMuteSchema = z.object({ inputMuted: z.boolean() });
+const InputMuteEventSchema = z.object({ inputName: z.string(), inputMuted: z.boolean() });
 
 // GetStreamStatus : `outputDuration` est en ms. StreamStateChanged : OBS_WEBSOCKET_OUTPUT_STARTED, _STOPPED (et _STARTING,
 // _STOPPING, _RECONNECTING, _RECONNECTED, que le renard laisse de côté : une coupure réseau garde la durée).
@@ -93,6 +101,15 @@ export function createObsSocket(options: {
           isMalformedLogged = true;
           options.log(`Évènement InputVolumeMeters illisible, ignoré : ${parsed.error.message}`);
         }
+      });
+    },
+    async getInputMute(name) {
+      return InputMuteSchema.parse(await obs.call("GetInputMute", { inputName: name })).inputMuted;
+    },
+    onInputMute(listener) {
+      obs.on("InputMuteStateChanged", (data) => {
+        const parsed = InputMuteEventSchema.safeParse(data);
+        if (parsed.success) listener(parsed.data.inputName, parsed.data.inputMuted);
       });
     },
     async getStreamStatus() {
@@ -163,7 +180,29 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
     const listeners = new Set<(level: number) => void>();
     let isSeen = false;
     let isWarned = false;
+    let isMuted = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+
+    // L'entrée est coupée ou rouverte dans OBS (`inputName` d'une autre entrée : ignoré).
+    const mute = (inputName: string, isMutedNow: boolean) => {
+      if (inputName !== name || isMutedNow === isMuted) return;
+      isMuted = isMutedNow;
+      log(
+        isMuted
+          ? `Entrée ${label} « ${name} » coupée dans OBS : son level reste à -100 dB.`
+          : `Entrée ${label} « ${name} » rouverte dans OBS.`,
+      );
+    };
+
+    // L'état de coupure à l'instant. Une entrée inconnue d'OBS refuse la demande : l'avertissement des 5 s le dit déjà.
+    const refreshMute = () => {
+      const target = name;
+      if (target === undefined) return;
+      socket.getInputMute(target).then(
+        (isMutedNow) => mute(target, isMutedNow),
+        () => undefined,
+      );
+    };
 
     const warnIfUnseen = () => {
       if (name === undefined || isSeen || isWarned) return;
@@ -188,6 +227,7 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
         if (name === undefined) return;
         log(`Abonné au niveau ${label} « ${name} » (InputVolumeMeters, toutes les 50 ms).`);
         timer = setTimeout(warnIfUnseen, MIC_UNSEEN_MS);
+        refreshMute();
       },
       disarm() {
         clearTimeout(timer);
@@ -198,18 +238,23 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
           isSeen = true;
           log(`Niveau ${label} « ${name} » reçu.`);
         }
-        const level = toLevel(input.peaks);
+        // Coupée dans OBS, une entrée est muette même si OBS envoie encore des pics : aucun canal, le plancher.
+        const level = toLevel(isMuted ? [] : input.peaks);
         for (const listener of listeners) listener(level);
       },
+      mute,
       rename(next: string | undefined) {
         if (next === name) return;
         name = next;
         isSeen = false;
         isWarned = false;
+        isMuted = false;
         clearTimeout(timer);
         if (next === undefined) return;
         log(`Entrée ${label} changée : « ${next} ».`);
-        if (isLinked) timer = setTimeout(warnIfUnseen, MIC_UNSEEN_MS);
+        if (!isLinked) return;
+        timer = setTimeout(warnIfUnseen, MIC_UNSEEN_MS);
+        refreshMute();
       },
     };
   };
@@ -295,6 +340,11 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
   socket.onExitStarted(() => exit("OBS se ferme : arrêt du serveur."));
 
   socket.onStreamState((isLive) => emitBroadcast({ isLive, duration: 0 }));
+
+  socket.onInputMute((inputName, isMuted) => {
+    mic.mute(inputName, isMuted);
+    desktop.mute(inputName, isMuted);
+  });
 
   socket.onClosed(() => {
     // Un essai de connexion qui échoue ferme aussi le socket : c'est `connect` qui le traite, pas ici.

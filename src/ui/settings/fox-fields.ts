@@ -613,6 +613,40 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
     ],
   },
   {
+    title: "Quand tu reviens",
+    toggles: [
+      {
+        key: "foxShouldHailComeback",
+        label: "Saluer mon retour",
+        help: "Quand tu reparles après une absence, il te salue d'une phrase tirée dans les deux listes. Un micro coupé dans OBS compte comme muet.",
+        fallback: true,
+      },
+    ],
+    sliders: [
+      {
+        key: "foxComebackAfter",
+        label: "Durée d'absence",
+        help: "Ta voix muette, micro coupé compris.",
+        steps: toSteps(60_000, 1_800_000, 60_000, toDelay),
+        fallback: 300_000,
+      },
+    ],
+    lists: [
+      {
+        key: "foxComebackToFenysk",
+        label: "Phrases pour Fenysk",
+        help: "Dites à ton retour, tournées vers Fenysk. Tirées avec les phrases pour le tchat, sans répéter. {absence} s'écrit « 12 minutes », « 1 heure 10 ».",
+        rows: 5,
+      },
+      {
+        key: "foxComebackToChat",
+        label: "Phrases pour le tchat",
+        help: "Dites à ton retour, tournées vers le tchat. {absence} s'écrit de même.",
+        rows: 5,
+      },
+    ],
+  },
+  {
     title: "Balance du son",
     sliders: [
       {

@@ -106,6 +106,10 @@ const FOX_KEYS: readonly string[] = [
   "foxTunnelGap",
   "foxTunnelToFenysk",
   "foxTunnelToChat",
+  "foxShouldHailComeback",
+  "foxComebackAfter",
+  "foxComebackToFenysk",
+  "foxComebackToChat",
   "foxBalanceMargin",
   "foxBalanceAfter",
   "foxBalanceGap",
@@ -347,6 +351,12 @@ export const SettingsFieldsSchema = z
     foxTunnelGap: positiveWhole().optional(),
     foxTunnelToFenysk: phraseList(false).optional(),
     foxTunnelToChat: phraseList(false).optional(),
+    // Le retour de Fenysk : la case « Saluer mon retour », le silence de sa voix (ms, mic coupé compris) qui fait une absence, et
+    // les phrases tournées vers lui, et celles tournées vers le tchat ({absence} : la durée dite).
+    foxShouldHailComeback: z.boolean("doit être true ou false").optional(),
+    foxComebackAfter: positiveWhole().optional(),
+    foxComebackToFenysk: phraseList(false).optional(),
+    foxComebackToChat: phraseList(false).optional(),
     // La balance du son : l'écart toléré du desktop sur la voix (dB), la durée de parole cumulée (ms) où il la couvre avant
     // d'alerter, l'écart (ms) entre deux alertes, et les phrases d'alerte.
     foxBalanceMargin: decibelGap().optional(),
@@ -579,6 +589,10 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxTunnelGap: true,
   foxTunnelToFenysk: true,
   foxTunnelToChat: true,
+  foxShouldHailComeback: true,
+  foxComebackAfter: true,
+  foxComebackToFenysk: true,
+  foxComebackToChat: true,
   foxBalanceMargin: true,
   foxBalanceAfter: true,
   foxBalanceGap: true,

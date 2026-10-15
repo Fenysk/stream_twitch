@@ -141,6 +141,20 @@
     "Et la fin de l'histoire, c'est pour ce soir ?"
   ],
   "foxTunnelToChat": ["Je crois que Fenysk nous tunnel.", "Quelqu'un a le bouton pour couper Fenysk ?"],
+  "foxShouldHailComeback": true,
+  "foxComebackAfter": 300000,
+  "foxComebackToFenysk": [
+    "Ah, te revoilà ! On a failli lancer un avis de recherche.",
+    "T'étais où, Fenysk ? Non, me dis pas, je veux pas savoir.",
+    "{absence} d'absence, Fenysk. Tu nous racontes ?",
+    "Re, Fenysk. Tu t'es perdu en route ?"
+  ],
+  "foxComebackToChat": [
+    "Ah, il est de retour le boug !",
+    "Tiens, revoilà Fenysk. On commençait à s'organiser sans lui.",
+    "Le boug est de retour. Faites comme si vous l'aviez attendu !",
+    "Il revient comme si de rien n'était. Classique."
+  ],
   "foxBalanceMargin": 0,
   "foxBalanceAfter": 10000,
   "foxBalanceGap": 300000,

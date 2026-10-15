@@ -27,6 +27,7 @@ export const FOX_SECTIONS: Record<FoxSectionId, FoxSection> = {
       "Humeur du tchat",
       "Quand tu cries",
       "Quand tu parles longtemps",
+      "Quand tu reviens",
       "Balance du son",
       "Quand le jeu explose",
     ],

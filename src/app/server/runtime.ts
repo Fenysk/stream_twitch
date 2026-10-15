@@ -34,6 +34,7 @@ import { createFox, type Fox } from "../../usecase/fox.usecase";
 import { createFoxAttitude } from "../../usecase/fox-attitude.usecase";
 import { createFoxBalance } from "../../usecase/fox-balance.usecase";
 import { createFoxChat } from "../../usecase/fox-chat.usecase";
+import { createFoxComeback } from "../../usecase/fox-comeback.usecase";
 import { createFoxHours } from "../../usecase/fox-hours.usecase";
 import { createFoxJab } from "../../usecase/fox-jab.usecase";
 import { createFoxMode, type FoxModeController } from "../../usecase/fox-mode.usecase";
@@ -165,6 +166,7 @@ export function startRuntime(): Runtime {
       jab.update(effective);
       shout.update(effective);
       tunnel.update(effective);
+      comeback.update(effective);
       balance.update(effective);
       startle.update(effective);
       hours.update(effective);
@@ -325,6 +327,15 @@ export function startRuntime(): Runtime {
     random: Math.random,
     log,
   });
+  // Le retour : Fenysk reparle après des minutes de silence (mic coupé compris), le renard le salue d'une phrase.
+  const comeback = createFoxComeback({
+    queue,
+    mode,
+    settings: initial,
+    clock: Date.now,
+    random: Math.random,
+    log,
+  });
   // La balance du son : pendant que Fenysk parle, le son du PC ne doit pas couvrir sa voix.
   const balance = createFoxBalance({
     mic: obs.mic,
@@ -467,6 +478,7 @@ export function startRuntime(): Runtime {
   jab.start();
   shout.start();
   tunnel.start();
+  comeback.start();
   balance.start();
   startle.start();
   hours.start();

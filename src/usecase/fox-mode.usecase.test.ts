@@ -22,6 +22,7 @@ import { createFox, type VoicePort } from "./fox.usecase";
 import { createFoxAttitude } from "./fox-attitude.usecase";
 import { createFoxBalance } from "./fox-balance.usecase";
 import { createFoxChat } from "./fox-chat.usecase";
+import { createFoxComeback } from "./fox-comeback.usecase";
 import { type Broadcast, createFoxHours } from "./fox-hours.usecase";
 import { createFoxJab } from "./fox-jab.usecase";
 import { createFoxMode } from "./fox-mode.usecase";
@@ -76,6 +77,8 @@ const settings: Settings = {
   foxTunnelAfter: 180_000,
   foxTunnelPause: 5000,
   foxTunnelGap: 600_000,
+  foxShouldHailComeback: true,
+  foxComebackAfter: 300_000,
   foxBalanceMargin: 0,
   foxBalanceAfter: 10_000,
   foxBalanceGap: 300_000,
@@ -171,6 +174,8 @@ const build = (
     shouts?: string[];
     tunnelToFenysk?: string[];
     tunnelToChat?: string[];
+    comebackToFenysk?: string[];
+    comebackToChat?: string[];
     balanceAlerts?: string[];
     viewers?: number | null;
     overrides?: Partial<Settings>;
@@ -191,6 +196,8 @@ const build = (
     foxShouts: options.shouts ?? [],
     foxTunnelToFenysk: options.tunnelToFenysk ?? [],
     foxTunnelToChat: options.tunnelToChat ?? [],
+    foxComebackToFenysk: options.comebackToFenysk ?? [],
+    foxComebackToChat: options.comebackToChat ?? [],
     foxBalanceAlerts: options.balanceAlerts ?? [],
     foxHourPhrases: [],
     foxEndWarningPhrases: [],
@@ -389,6 +396,14 @@ const build = (
     random: seeded(9),
     log: (line) => logs.push(line),
   });
+  const comeback = createFoxComeback({
+    queue,
+    mode,
+    settings: serverSettings,
+    clock: () => sim.now,
+    random: seeded(19),
+    log: (line) => logs.push(line),
+  });
   const broadcastListeners = new Set<(broadcast: Broadcast) => void>();
   const broadcast = {
     subscribe(listener: (broadcast: Broadcast) => void) {
@@ -456,6 +471,7 @@ const build = (
   jab.start();
   shout.start();
   tunnel.start();
+  comeback.start();
   balance.start();
   startle.start();
   hours.start();
@@ -531,6 +547,7 @@ const build = (
     thanks,
     shout,
     tunnel,
+    comeback,
     balance,
     startle,
     hours,
@@ -2011,6 +2028,149 @@ describe("L : Fenysk parle trop longtemps", () => {
     await harness.talk(200_000);
     expect(harness.timeline().map(({ label: name }) => name)).not.toContain("mode:yawn");
     expect(tunnelLines(harness)).toEqual([]);
+  });
+});
+
+const BACK_TO_FENYSK = ["{absence} d'absence, Fenysk. Tu nous racontes ?"];
+const BACK_TO_CHAT = ["Ah, il est de retour le boug !"];
+
+const comebackLines = (harness: ReturnType<typeof build>): string[] =>
+  harness.logs.filter((line) => line.startsWith("Renard : Fenysk revient après"));
+
+describe("T : Fenysk revient d'une absence", () => {
+  it("ne salue pas sa première parole après le démarrage, même après 10 min sans l'entendre", async () => {
+    const harness = build({ comebackToFenysk: BACK_TO_FENYSK });
+    await harness.run(600_000);
+    await harness.talk(3000);
+    await harness.run(6000);
+    expect(comebackLines(harness)).toEqual([]);
+    expect(harness.speeches()).toHaveLength(0);
+  });
+
+  it("le salue à son retour après 5 min de silence, en disant la durée de l'absence", async () => {
+    const harness = build({ comebackToFenysk: BACK_TO_FENYSK });
+    await harness.talk(3000);
+    await harness.run(300_000);
+    expect(comebackLines(harness)).toEqual([]);
+    await harness.talk(2000);
+    await harness.run(6000);
+    expect(comebackLines(harness)).toHaveLength(1);
+    expect(harness.synthesized).toEqual(["5 minutes d'absence, Fénisque. Tu nous racontes ?"]);
+  });
+
+  it("ne le salue pas pour une toux : l'absence continue jusqu'à 1 s de voix, et dit toute sa durée", async () => {
+    const harness = build({ comebackToFenysk: BACK_TO_FENYSK });
+    await harness.talk(3000);
+    await harness.run(300_000);
+    await harness.talk(100);
+    await harness.run(120_000);
+    expect(comebackLines(harness)).toEqual([]);
+    expect(harness.speeches()).toHaveLength(0);
+    await harness.talk(2000);
+    await harness.run(6000);
+    expect(comebackLines(harness)).toHaveLength(1);
+    expect(harness.synthesized).toEqual(["7 minutes d'absence, Fénisque. Tu nous racontes ?"]);
+  });
+
+  it("ne le salue pas après 4 min 59 de silence", async () => {
+    const harness = build({ comebackToFenysk: BACK_TO_FENYSK });
+    await harness.talk(3000);
+    await harness.run(298_000);
+    await harness.talk(2000);
+    await harness.run(6000);
+    expect(comebackLines(harness)).toEqual([]);
+  });
+
+  it("le salue après un micro coupé dans OBS (level à -100 dB) puis rouvert", async () => {
+    const harness = build({ comebackToFenysk: BACK_TO_FENYSK });
+    await harness.talk(2000);
+    await harness.sound(600_000, { voice: -100, game: null });
+    expect(comebackLines(harness)).toEqual([]);
+    await harness.talk(2000);
+    await harness.run(6000);
+    expect(comebackLines(harness)).toHaveLength(1);
+    expect(harness.synthesized).toEqual(["10 minutes d'absence, Fénisque. Tu nous racontes ?"]);
+  });
+
+  it("revient en sautant, tourné vers lui, puis parle 1 s après son silence", async () => {
+    const harness = build({ comebackToFenysk: BACK_TO_FENYSK });
+    await harness.talk(3000);
+    await harness.run(300_000);
+    const since = harness.events.length;
+    await harness.talk(2000);
+    const lastLoud = harness.sim.now - 50;
+    await harness.run(6000);
+    const names = harness.timeline(since).map(({ label: name }) => name);
+    expect(names).toContain("presence:returning");
+    expect(names).toContain("mode:address");
+    expect(names).not.toContain("mode:yawn");
+    const speech = harness.speeches()[0];
+    expect((speech?.at ?? 0) - lastLoud).toBeGreaterThanOrEqual(1000);
+    expect((speech?.at ?? 0) - lastLoud).toBeLessThanOrEqual(1500);
+  });
+
+  it("dit une phrase du tchat vers la gauche, sans se retourner", async () => {
+    const harness = build({ comebackToChat: BACK_TO_CHAT });
+    await harness.talk(3000);
+    await harness.run(300_000);
+    const since = harness.events.length;
+    await harness.talk(2000);
+    await harness.run(6000);
+    expect(harness.synthesized).toEqual(BACK_TO_CHAT);
+    expect(harness.timeline(since).map(({ label: name }) => name)).not.toContain("mode:address");
+  });
+
+  it("n'est pas coupée quand Fenysk reparle plus d'1 s : elle va au bout", async () => {
+    const harness = build({ comebackToFenysk: BACK_TO_FENYSK, seconds: 6 });
+    await harness.talk(3000);
+    await harness.run(300_000);
+    await harness.talk(2000);
+    await harness.run(1500);
+    expect(harness.speeches()).toHaveLength(1);
+    const since = harness.events.length;
+    await harness.talk(3000);
+    expect(harness.events.slice(since).filter(({ event }) => event.kind === "stop")).toEqual([]);
+  });
+
+  it("ne dit qu'une phrase par absence, même s'il parle ensuite longtemps", async () => {
+    const harness = build({ comebackToFenysk: BACK_TO_FENYSK, comebackToChat: BACK_TO_CHAT });
+    await harness.talk(3000);
+    await harness.run(300_000);
+    await harness.talk(60_000);
+    await harness.run(6000);
+    expect(comebackLines(harness)).toHaveLength(1);
+    expect(harness.speeches()).toHaveLength(1);
+  });
+
+  it("dit chaque phrase des deux listes avant d'en redire une", async () => {
+    const harness = build({ comebackToFenysk: ["A", "B"], comebackToChat: ["C"] });
+    await harness.talk(3000);
+    for (let round = 0; round < 3; round += 1) {
+      await harness.run(300_000);
+      await harness.talk(2000);
+    }
+    await harness.run(6000);
+    const phrases = comebackLines(harness).map((line) => /« (.+) »/.exec(line)?.[1]);
+    expect(phrases.slice(0, 3).sort()).toEqual(["A", "B", "C"]);
+  });
+
+  it("ne dit rien case décochée, ni quand les deux listes sont vides", async () => {
+    const unchecked = build({
+      comebackToFenysk: BACK_TO_FENYSK,
+      overrides: { foxShouldHailComeback: false },
+    });
+    await unchecked.talk(3000);
+    await unchecked.run(300_000);
+    await unchecked.talk(2000);
+    await unchecked.run(6000);
+    expect(comebackLines(unchecked)).toEqual([]);
+    const empty = build();
+    await empty.talk(3000);
+    await empty.run(300_000);
+    await empty.talk(2000);
+    await empty.run(6000);
+    expect(comebackLines(empty)).toEqual([]);
+    expect(empty.speeches()).toHaveLength(0);
   });
 });
 

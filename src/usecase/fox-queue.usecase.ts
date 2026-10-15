@@ -4,11 +4,14 @@ import type { Settings } from "../domain/settings.schema";
 import type { Fox } from "./fox.usecase";
 import type { FoxModeController, Intro } from "./fox-mode.usecase";
 
-// Ce que le renard a à dire : un message du tchat, un remerciement, une pique, un rappel, une phrase de cri, de tunnel, de
-// balance ou d'heure du live, ou le bilan du live. `label` nomme l'entrée dans le journal (« message de Alice »). Un message garde de quoi la retirer quand la
-// modération le supprime.
+// Les phrases que le mic de Fenysk déclenche : un cri, un monologue, un retour, un jeu trop fort.
+type MicKind = "shout" | "tunnel" | "comeback" | "balance";
+
+// Ce que le renard a à dire : un message du tchat, un remerciement, une pique, un rappel, une phrase du mic de Fenysk ou
+// d'heure du live, ou le bilan du live. `label` nomme l'entrée dans le journal (« message de Alice »). Un message garde de quoi
+// la retirer quand la modération le supprime.
 export type QueueItem = {
-  kind: "message" | "thanks" | "jab" | "reminder" | "shout" | "tunnel" | "balance" | "hours" | "review";
+  kind: "message" | "thanks" | "jab" | "reminder" | MicKind | "hours" | "review";
   label: string;
   text: string;
   messageId?: string | undefined;

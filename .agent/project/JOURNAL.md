@@ -11,6 +11,20 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-15 — Le retour de Fenysk demande 1 s de voix sur 3 s : une toux ne finit pas l'absence
+
+**Contexte.** Le premier level du mic au-dessus du threshold suffisait à finir l'absence : une toux ou un bruit de pièce déclenchait la phrase de `comeback`.
+**Décision.** Le retour compte quand la voix de D (`isTalking`, mic non coupé) cumule 1 s sur les 3 dernières secondes ; avant, l'absence continue et sa durée dite court depuis le dernier vrai silence. Deux constantes dans `comeback.rules.ts`, aucun réglage ; un pas de 100 ms en retard ne compte pas plus de 250 ms. `lexique.json` : le sens de `comeback` suit.
+**Renoncement.** Un réglage dans l'onglet Renard : un seuil de plus à expliquer pour une valeur qui ne bouge pas. `talkingFor` : il exige une parole continue, la consigne est une parole cumulée.
+
+## 2026-10-15 — Jean-Renard salue le retour de Fenysk après une absence de sa voix : `comeback` entre au lexique, le client OBS suit la coupure du mic
+
+**Contexte.** Alexis veut que le renard le salue d'une phrase moqueuse quand il reparle après des minutes de silence. Un mic coupé dans OBS doit compter comme muet ; OBS ne garantit pas ce que `InputVolumeMeters` envoie pour une source coupée, et la session de code n'a pas pu le constater en direct (OBS exige son mot de passe).
+**Décision.** `comeback` : la voix de Fenysk (le `silentFor` de D, aucun second détecteur) est muette depuis `foxComebackAfter` (5 min), le serveur l'ayant déjà entendue depuis son démarrage ; quand il reparle, une seule phrase par absence, tirée sans répétition dans `foxComebackToFenysk` (miroir) et `foxComebackToChat`, avec `{absence}` (« 12 minutes »). Urgente, jamais coupée par sa voix, elle attend son silence et fait revenir le renard ; la case `foxShouldHailComeback` l'active. Le client OBS lit `GetInputMute` à la connexion et écoute `InputMuteStateChanged` : une entrée coupée rend le level plancher (-100 dB), pour le mic comme pour le desktop. `lexique.json` : nouveau nom `comeback` ; `absence` reste banni (`presence`), le code dit `gone`.
+**Renoncement.** Se fier à `InputVolumeMeters` seul pour un mic coupé : non constaté en direct, et un bruit de pièce compterait comme un retour. Un second détecteur de voix pour le retour : deux définitions de « Fenysk parle ».
+
+---
+
 ## 2026-10-15 — Biome ne lit plus les fichiers ignorés par git : `vcs.useIgnoreFile`
 
 **Contexte.** Le gate échouait au lint dès que le serveur réécrivait `settings.local.json` (tableau `foxEmoteReactions` sur plusieurs lignes, Biome le veut sur une ligne). Le lint lisait aussi les JSON de `data/`, écrits comme lui par `src/infra` avec `JSON.stringify(…, null, 2)` : le vert dépendait des réglages du poste, pas du code.
