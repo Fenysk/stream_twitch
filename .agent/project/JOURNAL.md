@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-16 — La relance attend la première parole de Fenysk depuis le démarrage
+
+**Contexte.** Au démarrage du serveur, 3 min après (`foxJabAfter`), le renard piquait Fenysk qui n'avait encore rien dit : la voix jamais entendue comptait comme un silence infini, et `jab.rules.test.ts` figeait ce comportement.
+**Décision.** `isJabDue` exige une voix déjà entendue (`voiceSilentFor` fini) : la pique et le rappel, qui partagent ce minuteur, attendent la première parole ; ensuite le silence se compte depuis sa dernière parole, comme avant. Le clash de la récompense n'est pas lié au silence et ne change pas. L'assertion de `jab.rules.test.ts` est inversée à la demande d'Alexis ; la plomberie de test de `fox-mode.usecase.test.ts` gagne une option `isHeard`.
+**Renoncement.** Compter le silence depuis le démarrage : c'était le défaut.
+
 ## 2026-10-15 — Le retour de Fenysk demande 1 s de voix sur 3 s : une toux ne finit pas l'absence
 
 **Contexte.** Le premier level du mic au-dessus du threshold suffisait à finir l'absence : une toux ou un bruit de pièce déclenchait la phrase de `comeback`.

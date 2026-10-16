@@ -185,6 +185,8 @@ const build = (
     hours?: Partial<Settings>;
     // Le serveur vient de démarrer : le renard est caché. Sans cela, le test part d'un renard déjà revenu et posé (visible).
     isHidden?: boolean;
+    // Fenysk a déjà parlé une fois, 1 s avant le départ du test : sans cela, la relance attend sa première parole.
+    isHeard?: boolean;
   } = {},
 ) => {
   // Les réglages de ce serveur : les piques sont celles du test, aucune par défaut (le renard ne revient pas de lui-même).
@@ -465,6 +467,11 @@ const build = (
     log: (line) => logs.push(line),
   });
   mode.start();
+  if (options.isHeard) {
+    sim.now -= 1000;
+    for (const listener of micListeners) listener(-15);
+    sim.now += 1000;
+  }
   queue.start();
   foxChat.start();
   attitude.start();
@@ -1136,7 +1143,7 @@ const jabLines = (harness: ReturnType<typeof build>): string[] =>
 
 describe("La relance : caché, il revient piquer Fenysk après 3 min de silence total", () => {
   it("ne revient pas tant que le silence ne dure pas 3 min depuis son départ, puis revient en sautant à la seconde près", async () => {
-    const harness = build({ jabs: JABS });
+    const harness = build({ isHeard: true, jabs: JABS });
     await harness.run(JAB_AT - 100);
     expect(harness.speeches()).toHaveLength(0);
     expect(jabLines(harness)).toEqual([]);
@@ -1148,18 +1155,23 @@ describe("La relance : caché, il revient piquer Fenysk après 3 min de silence 
     expect(returning).toBeDefined();
   });
 
-  it("compte son silence depuis le démarrage quand il démarre caché : il revient en sautant à 3 min pile", async () => {
+  it("démarre caché sans piquer : il attend la première parole de Fenysk, puis revient en sautant 3 min après", async () => {
     const harness = build({ isHidden: true, jabs: JABS });
-    await harness.run(JAB_FROM_START_AT - 100);
+    await harness.run(JAB_FROM_START_AT + 600_000);
     expect(jabLines(harness)).toEqual([]);
     expect(harness.speeches()).toHaveLength(0);
+    await harness.talk(1000);
+    // Le pas de 100 ms qui suit les 3 min de silence, comptées depuis son dernier level.
+    const returnAt = Math.ceil((harness.sim.now - 50 - harness.start + 180_000) / 100) * 100;
+    await harness.run(returnAt - 100 - (harness.sim.now - harness.start));
+    expect(jabLines(harness)).toEqual([]);
     await harness.run(100);
     expect(jabLines(harness)).toHaveLength(1);
-    expect(harness.timeline()).toContainEqual({ at: JAB_FROM_START_AT, label: "presence:returning" });
+    expect(harness.timeline()).toContainEqual({ at: returnAt, label: "presence:returning" });
   });
 
   it("revient en sautant, se tourne vers Fenysk (150 ms), dit la pique, puis se retourne", async () => {
-    const harness = build({ jabs: JABS, seconds: 2 });
+    const harness = build({ isHeard: true, jabs: JABS, seconds: 2 });
     await harness.run(JAB_AT + 10_000);
     const timeline = harness.timeline().filter(({ at }) => at >= JAB_AT);
     expect(timeline).toContainEqual({ at: JAB_AT, label: "presence:returning" });
@@ -1178,20 +1190,20 @@ describe("La relance : caché, il revient piquer Fenysk après 3 min de silence 
   });
 
   it("montre le regard à gauche pendant le retournement, que le miroir tourne vers Fenysk", async () => {
-    const harness = build({ jabs: JABS, seconds: 2 });
+    const harness = build({ isHeard: true, jabs: JABS, seconds: 2 });
     await harness.run(JAB_AT + 3000);
     const images = harness.toImages(harness.start + JAB_AT + 820, harness.start + JAB_AT + 940);
     expect(new Set(images)).toEqual(new Set(["left-closed-rest"]));
   });
 
   it("dit une pique de la liste", async () => {
-    const harness = build({ jabs: JABS });
+    const harness = build({ isHeard: true, jabs: JABS });
     await harness.run(JAB_AT + 1000);
     expect(JABS.some((jab) => jabLines(harness)[0]?.includes(`« ${jab} »`))).toBe(true);
   });
 
   it("ne repique pas avant 10 min, puis repique à la dixième minute si le silence dure", async () => {
-    const harness = build({ jabs: JABS });
+    const harness = build({ isHeard: true, jabs: JABS });
     await harness.run(JAB_AT + 599_900);
     expect(jabLines(harness)).toHaveLength(1);
     expect(harness.speeches()).toHaveLength(1);
@@ -1202,7 +1214,7 @@ describe("La relance : caché, il revient piquer Fenysk après 3 min de silence 
   });
 
   it("dit chaque pique avant d'en redire une", async () => {
-    const harness = build({ jabs: JABS });
+    const harness = build({ isHeard: true, jabs: JABS });
     await harness.run(JAB_AT + 2 * 600_000 + 5000);
     const lines = jabLines(harness);
     expect(lines).toHaveLength(3);
@@ -1210,7 +1222,7 @@ describe("La relance : caché, il revient piquer Fenysk après 3 min de silence 
   });
 
   it("repart ensuite comme d'habitude : il repart 3 min après la fin de sa pique", async () => {
-    const harness = build({ jabs: JABS, seconds: 2 });
+    const harness = build({ isHeard: true, jabs: JABS, seconds: 2 });
     await harness.run(JAB_AT + 950 + 2400 + 180_000 + 10_000);
     const names = harness.timeline().filter(({ at }) => at > JAB_AT + 3400);
     // La phrase finit à JAB_AT + 3350 + 400 ; le bâillement arrive au pas de 100 ms qui suit les 3 min.
@@ -1221,7 +1233,7 @@ describe("La relance : caché, il revient piquer Fenysk après 3 min de silence 
   });
 
   it("attend 3 min de plus quand le tchat dit quelque chose, même un message que le filtre ignore", async () => {
-    const harness = build({ jabs: JABS });
+    const harness = build({ isHeard: true, jabs: JABS });
     await harness.run(300_000);
     await harness.receive(message("1", "!discord", { isCommand: true }));
     await harness.run(JAB_AT + 100_000 - 300_000);
@@ -1244,7 +1256,7 @@ describe("La relance : caché, il revient piquer Fenysk après 3 min de silence 
   });
 
   it("D s'applique : si Fenysk parle plus d'1 s, la pique s'arrête et ne reprend pas", async () => {
-    const harness = build({ jabs: JABS, seconds: 6 });
+    const harness = build({ isHeard: true, jabs: JABS, seconds: 6 });
     await harness.run(JAB_AT + 1500);
     expect(harness.speeches()).toHaveLength(1);
     const spokeAt = harness.sim.now;
@@ -1264,14 +1276,14 @@ describe("La relance : caché, il revient piquer Fenysk après 3 min de silence 
   });
 
   it("ne pique pas quand la liste est vide", async () => {
-    const harness = build({ jabs: [] });
+    const harness = build({ isHeard: true, jabs: [] });
     await harness.run(JAB_AT * 3);
     expect(jabLines(harness)).toEqual([]);
     expect(harness.speeches()).toHaveLength(0);
   });
 
   it("n'interrompt pas un message du tchat : la pique passe par la même file, un message qui arrive pendant le retour passe après", async () => {
-    const harness = build({ jabs: JABS, seconds: 2 });
+    const harness = build({ isHeard: true, jabs: JABS, seconds: 2 });
     await harness.run(JAB_AT + 100);
     await harness.receive(message("1", "Bonjour", { viewerId: "alice" }));
     await harness.run(15_000);
@@ -1303,7 +1315,7 @@ describe("La prononciation, de bout en bout", () => {
   });
 
   it("dit « Fénisque » pour « Fenysk » dans une pique, et dans « Faire parler »", async () => {
-    const harness = build({ jabs: ["Pourquoi Fenysk ne parle plus ?"] });
+    const harness = build({ isHeard: true, jabs: ["Pourquoi Fenysk ne parle plus ?"] });
     await harness.run(363_500 + 3000);
     expect(harness.synthesized).toEqual(["Pourquoi Fénisque ne parle plus ?"]);
     const said = await harness.mode.say("Merci Fenysk");
@@ -2441,7 +2453,7 @@ const REMINDER = "Venez dessiner sur LivePlace !";
 
 describe("O : les rappels dans les silences", () => {
   it("dit un rappel au silence qui suit la pique, tourné vers le tchat, le renard étant revenu en sautant", async () => {
-    const harness = build({ jabs: ["Pique A"], reminders: [REMINDER], seconds: 2 });
+    const harness = build({ isHeard: true, jabs: ["Pique A"], reminders: [REMINDER], seconds: 2 });
     await harness.run(JAB_AT + 10_000);
     expect(harness.synthesized).toEqual(["Pique A"]);
     const since = harness.events.length;
@@ -2457,7 +2469,7 @@ describe("O : les rappels dans les silences", () => {
   });
 
   it("repique ensuite, puis rappelle, à tour de rôle, toutes les 10 min", async () => {
-    const harness = build({ jabs: ["Pique A", "Pique B"], reminders: [REMINDER], seconds: 1 });
+    const harness = build({ isHeard: true, jabs: ["Pique A", "Pique B"], reminders: [REMINDER], seconds: 1 });
     await harness.run(JAB_AT + 3 * 600_000 + 10_000);
     const [first, second, third, fourth] = harness.synthesized;
     expect([second, fourth]).toEqual([REMINDER, REMINDER]);
@@ -2465,7 +2477,7 @@ describe("O : les rappels dans les silences", () => {
   });
 
   it("s'arrête quand Fenysk parle plus d'1 s, comme une pique, et ne reprend pas", async () => {
-    const harness = build({ jabs: [], reminders: [REMINDER], seconds: 6 });
+    const harness = build({ isHeard: true, jabs: [], reminders: [REMINDER], seconds: 6 });
     await harness.run(JAB_AT + 1500);
     expect(harness.speeches()).toHaveLength(1);
     const since = harness.events.length;
@@ -2478,6 +2490,7 @@ describe("O : les rappels dans les silences", () => {
   it("dit le prochain live d'Alexis, avec son jour, son heure et son titre, quand il n'y a que lui", async () => {
     const harness = build({
       startAt: new Date(2026, 9, 14, 21, 0).getTime(),
+      isHeard: true,
       jabs: [],
       reminders: [],
       slot: { start: new Date(2026, 9, 16, 20, 0).getTime(), title: "Soirée jeux" },
@@ -2491,6 +2504,7 @@ describe("O : les rappels dans les silences", () => {
   it("mêle le prochain live aux rappels de la liste, sans répéter avant d'avoir tout dit", async () => {
     const harness = build({
       startAt: new Date(2026, 9, 14, 21, 0).getTime(),
+      isHeard: true,
       jabs: [],
       reminders: [REMINDER],
       slot: { start: new Date(2026, 9, 17, 20, 30).getTime(), title: null },
@@ -2502,7 +2516,7 @@ describe("O : les rappels dans les silences", () => {
   });
 
   it("garde la pique seule, comme avant, sans aucun rappel ni aucun live à venir", async () => {
-    const harness = build({ jabs: ["Pique A", "Pique B"], reminders: [], seconds: 1 });
+    const harness = build({ isHeard: true, jabs: ["Pique A", "Pique B"], reminders: [], seconds: 1 });
     await harness.run(JAB_AT + 600_000 + 5000);
     expect([...harness.synthesized].sort()).toEqual(["Pique A", "Pique B"]);
   });
@@ -2605,7 +2619,7 @@ describe("P : il remercie les lurks", () => {
   });
 
   it("compte pour de l'activité : la relance attend 3 min de plus", async () => {
-    const harness = build({ jabs: JABS });
+    const harness = build({ isHeard: true, jabs: JABS });
     await harness.run(300_000);
     await harness.receive(lurk("1"));
     await harness.run(JAB_AT + 100_000 - 300_000);
@@ -2681,7 +2695,7 @@ describe("S : il sursaute avec le jeu", () => {
   });
 
   it("n'écrase pas le retournement vers Fenysk d'une phrase", async () => {
-    const harness = build({ jabs: JABS, seconds: 4 });
+    const harness = build({ isHeard: true, jabs: JABS, seconds: 4 });
     await harness.run(JAB_AT + 1500);
     expect(harness.speeches()).toHaveLength(1);
     const since = harness.events.length;

@@ -29,8 +29,8 @@ describe("isJabDue : la relance", () => {
     expect(isJabDue({ ...due, chatSilentFor: 179_999 }, rules)).toBe(false);
   });
 
-  it("est due quand Fenysk n'a jamais parlé depuis le démarrage", () => {
-    expect(isJabDue({ ...due, voiceSilentFor: FOREVER }, rules)).toBe(true);
+  it("n'est pas due tant que Fenysk n'a jamais parlé depuis le démarrage", () => {
+    expect(isJabDue({ ...due, voiceSilentFor: FOREVER }, rules)).toBe(false);
   });
 
   it("attend l'écart entre deux piques : 10 min depuis la dernière", () => {

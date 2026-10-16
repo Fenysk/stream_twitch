@@ -24,7 +24,8 @@ export function toNextSilenceKind(
 }
 
 // Depuis combien de ms (infini : jamais) il est parti, Fenysk ne dit rien, le tchat ne dit rien, et la dernière pique a été
-// dite. `awayFor` est `null` tant qu'il n'est pas parti.
+// dite. `awayFor` est `null` tant qu'il n'est pas parti ; `voiceSilentFor` est infini tant que Fenysk n'a rien dit depuis le
+// démarrage.
 export type JabSilence = {
   awayFor: number | null;
   voiceSilentFor: number;
@@ -33,11 +34,13 @@ export type JabSilence = {
 };
 
 // Il revient piquer quand il est parti et que Fenysk, le tchat et son départ datent tous de `after` au moins (le silence se
-// compte donc depuis son départ au plus tôt : il ne revient pas dès qu'il est parti), et que l'écart `gap` est écoulé.
+// compte donc depuis son départ au plus tôt : il ne revient pas dès qu'il est parti), et que l'écart `gap` est écoulé. Il
+// attend la première parole de Fenysk depuis le démarrage : le silence d'un Fenysk jamais entendu ne se compte pas.
 export const isJabDue = (
   { awayFor, voiceSilentFor, chatSilentFor, sinceLastJab }: JabSilence,
   rules: JabRules,
 ): boolean =>
   awayFor !== null &&
+  voiceSilentFor !== Number.POSITIVE_INFINITY &&
   Math.min(awayFor, voiceSilentFor, chatSilentFor) >= rules.after &&
   sinceLastJab >= rules.gap;

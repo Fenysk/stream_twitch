@@ -43,6 +43,7 @@ const SILENCE: Readonly<Record<SilenceKind, { label: string; log: string; toShow
 // pique tournée vers Fenysk, puis, la fois suivante, un rappel tourné vers le tchat (une phrase de `foxReminders`, ou le prochain
 // live d'Alexis), et ainsi de suite. Chaque liste se tire sans répéter avant d'avoir tout dit. La phrase passe par la file : si
 // Fenysk parle plus d'1 s, elle s'arrête. Au plus une par écart, qu'elle soit pique ou rappel ; sans aucun rappel, la pique reste seule.
+// Ni l'une ni l'autre avant la première parole de Fenysk depuis le démarrage.
 // Un clash (la récompense d'un viewer) pique tout de suite, hors de ce rythme : il n'attend pas l'écart et n'y compte pas, mais il
 // pioche dans les mêmes piques, sans répéter.
 export function createFoxJab({

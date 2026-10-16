@@ -333,7 +333,7 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
       {
         key: "foxJabAfter",
         label: "Silence avant de revenir piquer Fenysk",
-        help: "Silence total, depuis son départ.",
+        help: "Silence total, après ta première parole.",
         steps: toSteps(30_000, 900_000, 30_000, toDelay),
         fallback: 180_000,
       },

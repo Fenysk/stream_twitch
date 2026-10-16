@@ -16,12 +16,12 @@ const settings: Settings = {
   foxJabs: ["A", "B", "C"],
 };
 
-// Un serveur à la main : l'heure, la présence du renard, le silence de Fenysk, le tchat et les pas de 100 ms.
+// Un serveur à la main : l'heure, la présence du renard, le silence de Fenysk (déjà entendu au départ), le tchat et les pas de 100 ms.
 const setup = (custom: Settings = settings) => {
   const state = {
     now: 1_000_000,
     presence: { kind: "away" as "visible" | "leaving" | "away" | "returning", elapsed: 200_000 },
-    silentFor: Number.POSITIVE_INFINITY,
+    silentFor: 200_000,
     tick: (): void => undefined,
     chat: (_event: ChatSourceEvent): void => undefined,
     subscribers: 0,
@@ -123,6 +123,35 @@ describe("createFoxJab", () => {
     state.silentFor = 179_999;
     state.tick();
     expect(pushed).toEqual([]);
+  });
+
+  it("attend la première parole de Fenysk depuis le démarrage : ni pique ni rappel avant, la pique 3 min après", () => {
+    const { state, pushed } = setup({ ...settings, foxReminders: ["R1"] });
+    state.silentFor = Number.POSITIVE_INFINITY;
+    state.now += 1_800_000;
+    state.tick();
+    expect(pushed).toEqual([]);
+    state.silentFor = 0;
+    state.tick();
+    state.now += 179_999;
+    state.silentFor = 179_999;
+    state.tick();
+    expect(pushed).toEqual([]);
+    state.now += 1;
+    state.silentFor = 180_000;
+    state.tick();
+    expect(pushed.map(({ kind }) => kind)).toEqual(["jab"]);
+  });
+
+  it("attend aussi la première parole de Fenysk pour un rappel seul", () => {
+    const { state, pushed } = setup({ ...settings, foxJabs: [], foxReminders: ["R1"] });
+    state.silentFor = Number.POSITIVE_INFINITY;
+    state.now += 1_800_000;
+    state.tick();
+    expect(pushed).toEqual([]);
+    state.silentFor = 180_000;
+    state.tick();
+    expect(pushed.map(({ kind }) => kind)).toEqual(["reminder"]);
   });
 
   it("ne pique pas quand il est visible, en train de partir ou de revenir", () => {
