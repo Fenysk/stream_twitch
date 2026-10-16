@@ -1,5 +1,7 @@
 // Les six curseurs de l'onglet « Tête South Park » : une table, un rendu. Tout le reste des réglages reste dans settings.json.
 
+import { toEndClock, toTypedEndAt } from "../../domain/hours.rules";
+import { toInstant, toInstantText } from "../../domain/instant.rules";
 import type { EditableSettings } from "../../domain/settings.schema";
 import type { SliderStep } from "../design/slider";
 
@@ -26,10 +28,28 @@ export type ListKey = {
 
 export type ListSpec = { key: ListKey; label: string; help: string; rows?: number };
 
-// Les réglages qu'un champ d'heure change : une heure « HH:MM » (la fin prévue accepte aussi le texte vide).
-export type TimeKey = "foxEndTime" | "foxLateAfter";
+// Les réglages qu'un champ d'heure change : une heure « HH:MM » (foxLateAfter), ou la fin prévue (foxEndAt, un instant).
+export type TimeKey = "foxEndAt" | "foxLateAfter";
 
-export type TimeSpec = { key: TimeKey; label: string; help: string };
+// Ce que le champ montre du réglage gardé, et ce qu'il garde de l'heure tapée (`null` : refusée, pour `refusal`). Sans codec : le texte tel quel.
+export type TimeCodec = {
+  toShown(saved: string): string;
+  toSaved(typed: string, now: number): string | null;
+  refusal: string;
+};
+
+export type TimeSpec = { key: TimeKey; label: string; help: string; codec?: TimeCodec };
+
+// La fin prévue : « HH:MM » tapé donne la prochaine fois qu'elle sonne après maintenant ; vide, pas de fin prévue.
+export const END_AT_CODEC: TimeCodec = {
+  toShown: (saved) => toEndClock(toInstant(saved)),
+  toSaved: (typed, now) => {
+    if (typed === "") return "";
+    const endAt = toTypedEndAt(typed, now);
+    return endAt === null ? null : toInstantText(endAt);
+  },
+  refusal: "doit s'écrire HH:MM (de 00:00 à 23:59), ou rester vide",
+};
 
 // Les réglages qu'une case change : ceux dont la valeur est vrai ou faux.
 export type ToggleKey = {

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { toChatChannel } from "../../domain/chat-settings.rules";
 import type { ExpressionRef } from "../../domain/head.types";
+import { toInstant } from "../../domain/instant.rules";
 import type { Settings } from "../../domain/settings.schema";
 import { isFoxReward } from "../../domain/thanks.rules";
 import { createChatClient } from "../../infra/chat.client";
@@ -14,6 +15,7 @@ import {
   deleteLocalSettings,
   getLocalSettings,
   updateLocalSettings,
+  upgradeLocalSettings,
 } from "../../infra/local-settings.repository";
 import { createObsClient, createObsSocket, type ObsClient } from "../../infra/obs.client";
 import { createRegularsStore } from "../../infra/regulars.repository";
@@ -35,6 +37,7 @@ import { createFoxAttitude } from "../../usecase/fox-attitude.usecase";
 import { createFoxBalance } from "../../usecase/fox-balance.usecase";
 import { createFoxChat } from "../../usecase/fox-chat.usecase";
 import { createFoxComeback } from "../../usecase/fox-comeback.usecase";
+import { createFoxEndReset } from "../../usecase/fox-end-reset.usecase";
 import { createFoxHours } from "../../usecase/fox-hours.usecase";
 import { createFoxJab } from "../../usecase/fox-jab.usecase";
 import { createFoxMode, type FoxModeController } from "../../usecase/fox-mode.usecase";
@@ -120,6 +123,8 @@ export function startRuntime(): Runtime {
     process.once(signal, () => void shutdown(`Signal ${signal} reçu : arrêt du serveur.`));
   }
   const localPath = join(root, "settings.local.json");
+  // Une fin prévue encore écrite « HH:MM » (foxEndTime) devient un instant dans le fichier, avant sa lecture.
+  upgradeLocalSettings(localPath, Date.now(), log);
   // La version de la photo change à chaque démarrage : OBS ne garde pas l'ancienne image de la photo en cache.
   const { head, geometry, images } = getHeadFiles(join(root, "tete-south-park"), String(Date.now()));
   const store = createExpressionStore(join(root, "data", "heads"), log);
@@ -357,6 +362,21 @@ export function startRuntime(): Runtime {
     clock: Date.now,
     log,
   });
+  // La fin prévue s'efface quand le live est fini, par un changement de réglage ; elle voit la diffusion avant l'heure du live.
+  const endReset = createFoxEndReset({
+    broadcast: obs.broadcast,
+    end: {
+      get: () => toInstant(settings.getState().effective.foxEndAt ?? ""),
+      reset: () => {
+        const update = settings.update({ foxEndAt: "" });
+        if (!update.ok) log(`Renard : ${update.issues.map(({ message }) => message).join(" ; ")}`);
+        return update.ok;
+      },
+    },
+    clock: Date.now,
+    schedule,
+    log,
+  });
   // L'heure du live : pendant la diffusion d'OBS, il annonce les heures pleines, la fin prévue et ses rappels.
   const hours = createFoxHours({
     broadcast: obs.broadcast,
@@ -481,6 +501,7 @@ export function startRuntime(): Runtime {
   comeback.start();
   balance.start();
   startle.start();
+  endReset.start();
   hours.start();
   thanks.start();
   void viewers.start();

@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-16 — La fin prévue garde sa date : `foxEndTime` (« HH:MM ») devient `foxEndAt` (un instant), et le serveur l'efface une fois le live fini
+
+**Contexte.** « 15:00 » n'a pas de date : la fin réglée aujourd'hui s'appliquerait aussi au live de demain. La valeur survit déjà aux redémarrages (settings.local.json), elle doit en plus s'effacer une fois passée.
+**Décision.** `foxEndAt` garde le texte ISO d'un instant (`2026-10-16T13:00:00.000Z`), vide : pas de fin ; l'interface et les touches montrent toujours « HH:MM » (taper « HH:MM » donne la prochaine fois qu'elle sonne après maintenant), le plafond des touches passe à 24 h devant maintenant. Un `settings.local.json` qui a encore `foxEndTime` est converti au démarrage, dans le fichier (`upgradeLocalSettings`) : sonnée il y a moins de 3 h, l'heure est celle d'aujourd'hui, sinon la prochaine. `fox-end-reset.usecase.ts` efface `foxEndAt` par un changement de réglage : à l'arrêt du live si elle est passée, 3 h après elle hors live (relu chaque minute), au début d'un live commencé après elle (OBS fermé en plein live : le serveur ne voit pas l'arrêt) ; jamais pendant un live commencé avant elle, ni avant qu'OBS ait dit si le live est en cours. `lexique.json` : le sens d'`overtime` suit le nom du réglage.
+**Renoncement.** Garder « HH:MM » et ne vider qu'à l'arrêt du live : un serveur coupé avec OBS en plein live ne verrait jamais l'arrêt. Un nombre (epoch ms) : `SliderKey` en ferait un curseur, et le fichier d'Alexis deviendrait illisible. Effacer au démarrage avant le premier état d'OBS : un serveur relancé en plein live perdrait sa fin.
+
 ## 2026-10-16 — La relance attend la première parole de Fenysk depuis le démarrage
 
 **Contexte.** Au démarrage du serveur, 3 min après (`foxJabAfter`), le renard piquait Fenysk qui n'avait encore rien dit : la voix jamais entendue comptait comme un silence infini, et `jab.rules.test.ts` figeait ce comportement.

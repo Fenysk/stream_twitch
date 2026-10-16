@@ -60,7 +60,7 @@ const fox = {
   foxStartleLevel: -15,
   foxStartleGap: 30_000,
   foxHourPhrases: ["{heures} de live."],
-  foxEndTime: "",
+  foxEndAt: "",
   foxEndWarningMarks: ["60", "30", "15", "10", "5", "2", "1"],
   foxEndWarningPhrases: ["Plus que {minutes} minutes."],
   foxEndSoonPhrases: ["Plus que {reste} !"],
@@ -492,13 +492,30 @@ describe("les réglages fox*", () => {
     expect(SettingsSchema.safeParse({ ...head, foxEndWarning: 1_800_000 }).success).toBe(false);
   });
 
-  it("veulent une fin prévue HH:MM de 00:00 à 23:59, ou vide pour n'en avoir aucune", () => {
-    for (const time of ["", "00:00", "21:30", "23:59"]) {
-      expect(toEffectiveSettings(defaults, { foxEndTime: time }).ok, time).toBe(true);
+  it("veulent une fin prévue qui est un instant ISO avec sa date, ou vide pour n'en avoir aucune", () => {
+    for (const time of [
+      "",
+      "2026-10-16T13:00:00.000Z",
+      "2026-10-16T13:00:00Z",
+      "2026-10-16T15:00:00+02:00",
+    ]) {
+      expect(toEffectiveSettings(defaults, { foxEndAt: time }).ok, time).toBe(true);
     }
-    for (const time of ["24:00", "21:60", "9:30", "21h30", "minuit", "21:30:00", " 21:30"]) {
-      expect(issuesOf(toEffectiveSettings(defaults, { foxEndTime: time }))[0]?.path, time).toBe("foxEndTime");
+    for (const time of [
+      "15:00",
+      "2026-10-16",
+      "2026-10-16T13:00",
+      "2026-13-16T13:00:00Z",
+      "minuit",
+      " 2026-10-16T13:00:00Z",
+    ]) {
+      expect(issuesOf(toEffectiveSettings(defaults, { foxEndAt: time }))[0]?.path, time).toBe("foxEndAt");
     }
+  });
+
+  it("refusent l'ancien réglage foxEndTime (HH:MM) : il n'existe plus, un settings.local.json qui le garde est converti avant d'être lu", () => {
+    expect(toNextLocal({}, { foxEndTime: "15:00" }).ok).toBe(false);
+    expect(SettingsSchema.safeParse({ ...head, foxEndTime: "15:00" }).success).toBe(false);
   });
 
   it("veulent une heure des bâillements tardifs HH:MM, jamais vide", () => {

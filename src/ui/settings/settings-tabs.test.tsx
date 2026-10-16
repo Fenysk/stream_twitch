@@ -22,8 +22,8 @@ const state = vi.hoisted(() => ({
   twitchStatus: { kind: "disconnected", lastError: null } as { kind: string; [key: string]: unknown } | null,
   viewers: null as { kind: string; count?: number } | null,
   viewersError: null as string | null,
-  // La fin prévue (« HH:MM ») posée par le test, `undefined` : celle de settings.json ; et l'heure du PC que la page lit.
-  endTime: undefined as string | undefined,
+  // La fin prévue (le texte ISO d'un instant) posée par le test, `undefined` : celle de settings.json ; et l'heure du PC que la page lit.
+  endAt: undefined as string | undefined,
   now: new Date(2026, 9, 14, 21, 48).getTime(),
 }));
 
@@ -40,8 +40,8 @@ vi.mock("./use-settings", async () => {
   return {
     useSettings: () => {
       const effective = state.hasFoxSettings
-        ? { ...saved, foxEndTime: state.endTime ?? saved.foxEndTime }
-        : { ...saved, foxVoice: undefined, foxEndTime: undefined };
+        ? { ...saved, foxEndAt: state.endAt ?? saved.foxEndAt }
+        : { ...saved, foxVoice: undefined, foxEndAt: undefined };
       return {
         view: state.isLoaded ? { defaults: effective, local: state.local, effective } : null,
         drafts: {},
@@ -111,7 +111,7 @@ beforeEach(() => {
   state.twitchStatus = { kind: "disconnected", lastError: null };
   state.viewers = null;
   state.viewersError = null;
-  state.endTime = undefined;
+  state.endAt = undefined;
   state.now = new Date(2026, 9, 14, 21, 48).getTime();
 });
 
@@ -362,12 +362,14 @@ describe("l'onglet Direct", () => {
     expect(card).toContain("Fin prévue");
     expect(card).toContain('value=""');
     expect(card).toContain('placeholder="HH:MM"');
-    expect(card).toContain("HH:MM. Vide : pas de fin prévue. Même réglage que Renard &gt; Heure du live.");
+    expect(card).toContain(
+      "HH:MM, la prochaine fois qu&#x27;elle sonne. Vide : pas de fin prévue. Même réglage que Renard &gt; Heure du live.",
+    );
     expect(card).not.toContain("lp-warning");
   });
 
   it("dit l'heure de la fin prévue et le temps qu'il reste, dans le champ comme dans la ligne d'état", () => {
-    state.endTime = "23:00";
+    state.endAt = new Date(2026, 9, 14, 23, 0).toISOString();
     const card = toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live");
     expect(card).toContain("Fin à 23 h 00, dans 1 h 12");
     expect(card).toContain('value="23:00"');
@@ -375,7 +377,7 @@ describe("l'onglet Direct", () => {
   });
 
   it("alerte à 15 min de la fin prévue, pas à 16", () => {
-    state.endTime = "23:00";
+    state.endAt = new Date(2026, 9, 14, 23, 0).toISOString();
     state.now = new Date(2026, 9, 14, 22, 44).getTime();
     const sixteen = toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live");
     expect(sixteen).toContain("dans 16 min");
@@ -387,7 +389,7 @@ describe("l'onglet Direct", () => {
   });
 
   it("alerte une fois la fin prévue dépassée, de combien de minutes, minuit passé compris", () => {
-    state.endTime = "23:00";
+    state.endAt = new Date(2026, 9, 14, 23, 0).toISOString();
     state.now = new Date(2026, 9, 14, 23, 5).getTime();
     expect(toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live")).toMatch(
       /class="[^"]*lp-warning[^"]*"[^>]*>Fin dépassée de 5 min</,
@@ -396,6 +398,21 @@ describe("l'onglet Direct", () => {
     expect(toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live")).toContain(
       "Fin dépassée de 1 h 20",
     );
+  });
+
+  it("dit la fin prévue dépassée tant que le serveur ne l'a pas effacée, même plusieurs heures après", () => {
+    state.endAt = new Date(2026, 9, 14, 23, 0).toISOString();
+    state.now = new Date(2026, 9, 15, 4, 40).getTime();
+    const card = toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live");
+    expect(card).toContain("Fin dépassée de 5 h 40");
+    expect(card).toContain('value="23:00"');
+  });
+
+  it("dit une fin posée pour le lendemain à venir, avec toutes ses heures devant", () => {
+    state.endAt = new Date(2026, 9, 15, 23, 0).toISOString();
+    const card = toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live");
+    expect(card).toContain("Fin à 23 h 00, dans 25 h 12");
+    expect(card).toContain('value="23:00"');
   });
 
   it("n'écrit pas la carte de la fin du live quand les réglages du renard manquent", () => {

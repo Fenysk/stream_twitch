@@ -5,16 +5,20 @@ import { SettingsFeed } from "./settings-feed";
 
 const BASE = "http://127.0.0.1:4747";
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
-const viewOf = (foxEndTime: string) => ({
+const viewOf = (foxEndAt: string) => ({
   defaults: { threshold: -40 },
   local: {},
-  effective: { threshold: -40, foxEndTime },
+  effective: { threshold: -40, foxEndAt },
 });
+
+// La fin prévue telle que le serveur la garde : le texte ISO de l'instant, à l'heure locale de ces tests (le 14 octobre par défaut).
+const end = (hours: number, minutes = 0, day = 14): string =>
+  new Date(2026, 9, day, hours, minutes).toISOString();
 
 // Un serveur d'essai : sa fin prévue, ce que les PUT ont reçu, et de quoi le rendre injoignable, le faire refuser ou le ralentir.
 const serverOf = (initial: string) => {
   const state = {
-    endTime: initial,
+    endAt: initial,
     isDown: false,
     puts: [] as string[],
     gets: 0,
@@ -27,14 +31,14 @@ const serverOf = (initial: string) => {
     if (route === "GET /api/settings") {
       state.gets += 1;
       await state.gate;
-      return json(viewOf(state.endTime));
+      return json(viewOf(state.endAt));
     }
     if (route === "PUT /api/settings") {
-      const { changes } = JSON.parse(init.body ?? "{}") as { changes: { foxEndTime: string } };
-      state.puts.push(changes.foxEndTime);
-      if (state.putStatus !== 200) return json({ issues: [{ path: "foxEndTime", message: "refusé" }] }, 422);
-      state.endTime = changes.foxEndTime;
-      return json(viewOf(state.endTime));
+      const { changes } = JSON.parse(init.body ?? "{}") as { changes: { foxEndAt: string } };
+      state.puts.push(changes.foxEndAt);
+      if (state.putStatus !== 200) return json({ issues: [{ path: "foxEndAt", message: "refusé" }] }, 422);
+      state.endAt = changes.foxEndAt;
+      return json(viewOf(state.endAt));
     }
     throw new TypeError(`route inconnue : ${route}`);
   };
@@ -95,7 +99,7 @@ describe("EndTimeKeys : les touches de la fin du live", () => {
   });
 
   it("montre la fin réglée sur le serveur dans les deux sens, ou --:-- sans fin", async () => {
-    const { laterKey, soonerKey } = setup("23:00");
+    const { laterKey, soonerKey } = setup(end(23, 0));
     await flush();
     expect(laterKey.last()).toBe("+10 min\n23:00");
     expect(soonerKey.last()).toBe("−10 min\n23:00");
@@ -105,7 +109,7 @@ describe("EndTimeKeys : les touches de la fin du live", () => {
   });
 
   it("montre le sens seul tant que le serveur n'a pas répondu", () => {
-    const { laterKey, soonerKey } = setup("23:00");
+    const { laterKey, soonerKey } = setup(end(23, 0));
     expect(laterKey.last()).toBe("+10 min");
     expect(soonerKey.last()).toBe("−10 min");
   });
@@ -117,19 +121,19 @@ describe("EndTimeKeys : les touches de la fin du live", () => {
     expect(laterKey.last()).toBe("+10 min\n21:50");
     expect(server.state.puts).toEqual([]);
     await keys.release("later-1");
-    expect(server.state.puts).toEqual(["21:50"]);
+    expect(server.state.puts).toEqual([end(21, 50)]);
     expect(laterKey.last()).toBe("+10 min\n21:50");
     expect(laterKey.shown.alerts).toBe(0);
     expect(soonerKey.last()).toBe("−10 min\n21:50");
   });
 
   it("relit le serveur à l'appui : il part de la fin du moment, pas de celle d'il y a 10 s", async () => {
-    const { keys, server, laterKey } = setup("23:00");
+    const { keys, server, laterKey } = setup(end(23, 0));
     await flush();
-    server.state.endTime = "23:30";
+    server.state.endAt = end(23, 30);
     await keys.press("later-1");
     await keys.release("later-1");
-    expect(server.state.puts).toEqual(["23:40"]);
+    expect(server.state.puts).toEqual([end(23, 40)]);
     expect(laterKey.last()).toBe("+10 min\n23:40");
   });
 
@@ -160,7 +164,7 @@ describe("EndTimeKeys : les touches de la fin du live", () => {
     ]);
     expect(server.state.puts).toEqual([]);
     await keys.release("later-1");
-    expect(server.state.puts).toEqual(["22:30"]);
+    expect(server.state.puts).toEqual([end(22, 30)]);
     expect(laterKey.last()).toBe("+10 min\n22:30");
   });
 
@@ -171,7 +175,7 @@ describe("EndTimeKeys : les touches de la fin du live", () => {
     await keys.release("later-1");
     const titles = laterKey.shown.titles.length;
     await vi.advanceTimersByTimeAsync(3000);
-    expect(server.state.puts).toEqual(["21:50"]);
+    expect(server.state.puts).toEqual([end(21, 50)]);
     expect(laterKey.shown.titles.length).toBe(titles);
   });
 
@@ -184,7 +188,7 @@ describe("EndTimeKeys : les touches de la fin du live", () => {
     expect(server.state.puts).toEqual([]);
     await keys.release("later-1");
     expect(soonerKey.last()).toBe("−10 min\n22:30");
-    expect(server.state.puts).toEqual(["22:30"]);
+    expect(server.state.puts).toEqual([end(22, 30)]);
   });
 
   it("garde le titre local malgré une relecture du serveur pendant le maintien", async () => {
@@ -198,17 +202,45 @@ describe("EndTimeKeys : les touches de la fin du live", () => {
     await keys.release("later-1");
   });
 
+  it("montre --:-- à la relecture suivante quand le serveur a effacé la fin", async () => {
+    const { server, laterKey, soonerKey } = setup(end(23, 0));
+    await flush();
+    expect(laterKey.last()).toBe("+10 min\n23:00");
+    server.state.endAt = "";
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(laterKey.last()).toBe("+10 min\n--:--");
+    expect(soonerKey.last()).toBe("−10 min\n--:--");
+  });
+
+  it("repart de la dizaine qui suit maintenant quand la fin du serveur est dépassée : 21:00 à 21:47 donne 21:50 avec +10", async () => {
+    const { keys, server, laterKey } = setup(end(21, 0));
+    await flush();
+    await keys.press("later-1");
+    await keys.release("later-1");
+    expect(server.state.puts).toEqual([end(21, 50)]);
+    expect(laterKey.last()).toBe("+10 min\n21:50");
+  });
+
+  it("efface une fin dépassée avec −10 : 21:00 à 21:47", async () => {
+    const { keys, server, soonerKey } = setup(end(21, 0));
+    await flush();
+    await keys.press("sooner-1");
+    await keys.release("sooner-1");
+    expect(server.state.puts).toEqual([""]);
+    expect(soonerKey.last()).toBe("−10 min\n--:--");
+  });
+
   it("recule d'un cran à l'appui sur −10 : 23:00 donne 22:50", async () => {
-    const { keys, server, soonerKey } = setup("23:00");
+    const { keys, server, soonerKey } = setup(end(23, 0));
     await flush();
     await keys.press("sooner-1");
     expect(soonerKey.last()).toBe("−10 min\n22:50");
     await keys.release("sooner-1");
-    expect(server.state.puts).toEqual(["22:50"]);
+    expect(server.state.puts).toEqual([end(22, 50)]);
   });
 
   it("efface la fin en maintenant −10 sous l'heure actuelle, puis s'arrête là", async () => {
-    const { keys, server, soonerKey } = setup("22:10");
+    const { keys, server, soonerKey } = setup(end(22, 10));
     await flush();
     await keys.press("sooner-1");
     await vi.advanceTimersByTimeAsync(800);
@@ -232,26 +264,26 @@ describe("EndTimeKeys : les touches de la fin du live", () => {
     expect(soonerKey.last()).toBe("−10 min\n--:--");
   });
 
-  it("s'arrête au plafond de 21 h sans rien envoyer de plus : 18:30 donne 18:40 et pas plus", async () => {
-    const { keys, server, laterKey } = setup("18:30");
+  it("s'arrête au plafond de 24 h sans rien envoyer de plus : 21:30 demain donne 21:40 et pas plus", async () => {
+    const { keys, server, laterKey } = setup(end(21, 30, 15));
     await flush();
     await keys.press("later-1");
     await vi.advanceTimersByTimeAsync(3000);
-    expect(laterKey.last()).toBe("+10 min\n18:40");
+    expect(laterKey.last()).toBe("+10 min\n21:40");
     await keys.release("later-1");
-    expect(server.state.puts).toEqual(["18:40"]);
+    expect(server.state.puts).toEqual([end(21, 40, 15)]);
   });
 
-  it("maintenu longtemps à 02:56, passe 14:50 et ne s'arrête qu'à 23:50, 21 h devant", async () => {
+  it("maintenu longtemps à 02:56, passe 14:50 et ne s'arrête qu'à 02:50 le lendemain, 24 h devant", async () => {
     vi.setSystemTime(new Date(2026, 9, 15, 2, 56));
     const { keys, server, laterKey } = setup("");
     await flush();
     await keys.press("later-1");
     await vi.advanceTimersByTimeAsync(60_000);
     expect(laterKey.shown.titles).toContain("+10 min\n14:50");
-    expect(laterKey.last()).toBe("+10 min\n23:50");
+    expect(laterKey.last()).toBe("+10 min\n02:50");
     await keys.release("later-1");
-    expect(server.state.puts).toEqual(["23:50"]);
+    expect(server.state.puts).toEqual([end(2, 50, 16)]);
   });
 
   it("fait un cran et une écriture quand le relâché arrive avant la réponse du serveur", async () => {
@@ -266,12 +298,12 @@ describe("EndTimeKeys : les touches de la fin du live", () => {
     expect(server.state.puts).toEqual([]);
     open();
     await pressing;
-    expect(server.state.puts).toEqual(["21:50"]);
+    expect(server.state.puts).toEqual([end(21, 50)]);
     expect(laterKey.last()).toBe("+10 min\n21:50");
   });
 
   it("dit que le serveur est éteint à l'appui, avec l'alerte, sans rien envoyer", async () => {
-    const { keys, server, laterKey } = setup("23:00");
+    const { keys, server, laterKey } = setup(end(23, 0));
     await flush();
     server.state.isDown = true;
     await keys.press("later-1");
@@ -305,16 +337,16 @@ describe("EndTimeKeys : les touches de la fin du live", () => {
   });
 
   it("alerte quand le serveur refuse l'heure, journalise le refus et reprend la fin du serveur", async () => {
-    const { keys, server, log, laterKey } = setup("23:00");
+    const { keys, server, log, laterKey } = setup(end(23, 0));
     await flush();
     server.state.putStatus = 422;
     await keys.press("later-1");
     await keys.release("later-1");
-    expect(server.state.puts).toEqual(["23:10"]);
+    expect(server.state.puts).toEqual([end(23, 10)]);
     expect(laterKey.shown.alerts).toBe(1);
     expect(laterKey.last()).toBe("+10 min\n23:00");
     expect(log.warn).toHaveBeenCalledWith("Le serveur refuse la fin du live.", [
-      { path: "foxEndTime", message: "refusé" },
+      { path: "foxEndAt", message: "refusé" },
     ]);
   });
 
@@ -337,7 +369,7 @@ describe("EndTimeKeys : les touches de la fin du live", () => {
     await keys.release("later-1");
     await keys.press("later-1");
     await keys.release("later-1");
-    expect(server.state.puts).toEqual(["21:50", "22:00"]);
+    expect(server.state.puts).toEqual([end(21, 50), end(22, 0)]);
   });
 
   it("ignore un appui sur une touche inconnue", async () => {
@@ -391,40 +423,40 @@ describe("EndTimeKeys : la vitesse du maintien", () => {
   it("a fait 3 crans après 1 s : 21:50 à l'appui, 22:00 à 0,5 s, 22:10 à 0,8 s", async () => {
     const { held, puts } = await holdFor(1000);
     expect(held).toEqual({ title: "+10 min\n22:10", puts: [] });
-    expect(puts).toEqual(["22:10"]);
+    expect(puts).toEqual([end(22, 10)]);
   });
 
   it("a fait 26 crans après 3 s : l'écart est tombé à 60 ms, 02:00", async () => {
     const { held, puts } = await holdFor(3000);
     expect(held).toEqual({ title: "+10 min\n02:00", puts: [] });
-    expect(puts).toEqual(["02:00"]);
+    expect(puts).toEqual([end(2, 0, 15)]);
   });
 
   it("a fait 110 crans après 8 s, 21:50 + 18 h 10 donne 16:00, sans rien envoyer avant le relâché", async () => {
     const { held, puts } = await holdFor(8000);
     expect(held).toEqual({ title: "+10 min\n16:00", puts: [] });
-    expect(puts).toEqual(["16:00"]);
+    expect(puts).toEqual([end(16, 0, 15)]);
   });
 
-  it("arrive au plafond de 21 h en 8,9 s, soit 126 crans, et s'y arrête avec une seule écriture", async () => {
+  it("arrive au plafond de 24 h en 10 s, soit 144 crans, et s'y arrête avec une seule écriture", async () => {
     const { keys, server, laterKey } = setup("");
     await flush();
     await keys.press("later-1");
-    await vi.advanceTimersByTimeAsync(8900);
-    expect(laterKey.last()).toBe("+10 min\n18:30");
-    await vi.advanceTimersByTimeAsync(46);
-    expect(laterKey.last()).toBe("+10 min\n18:40");
+    await vi.advanceTimersByTimeAsync(9990);
+    expect(laterKey.last()).toBe("+10 min\n21:30");
+    await vi.advanceTimersByTimeAsync(36);
+    expect(laterKey.last()).toBe("+10 min\n21:40");
     const titles = laterKey.shown.titles.length;
     await vi.advanceTimersByTimeAsync(5000);
     // Seule la relecture des 10 s repose encore un titre, et c'est le même.
-    expect(new Set(laterKey.shown.titles.slice(titles - 1))).toEqual(new Set(["+10 min\n18:40"]));
+    expect(new Set(laterKey.shown.titles.slice(titles - 1))).toEqual(new Set(["+10 min\n21:40"]));
     expect(server.state.puts).toEqual([]);
     await keys.release("later-1");
-    expect(server.state.puts).toEqual(["18:40"]);
+    expect(server.state.puts).toEqual([end(21, 40, 15)]);
   });
 
   it("va aussi vite en arrière : −10 efface en 1,3 s une fin à 22:30, une seule écriture", async () => {
-    const { keys, server, soonerKey } = setup("22:30");
+    const { keys, server, soonerKey } = setup(end(22, 30));
     await flush();
     await keys.press("sooner-1");
     expect(soonerKey.last()).toBe("−10 min\n22:20");
@@ -506,7 +538,7 @@ describe("EndTimeKeys : toutes les touches de fin suivent la touche tenue", () =
   });
 
   it("ramène toutes les touches à la fin du serveur quand il refuse l'heure, l'alerte restant sur la touche tenue", async () => {
-    const { keys, server, laterKey, soonerKey } = setup("23:00");
+    const { keys, server, laterKey, soonerKey } = setup(end(23, 0));
     await flush();
     server.state.putStatus = 422;
     await keys.press("later-1");
@@ -532,7 +564,7 @@ describe("EndTimeKeys : toutes les touches de fin suivent la touche tenue", () =
     expect(soonerKey.shown.alerts).toBe(0);
     expect(laterKey.last()).toBe("+10 min\n22:30");
     await keys.release("later-1");
-    expect(server.state.puts).toEqual(["22:30"]);
+    expect(server.state.puts).toEqual([end(22, 30)]);
   });
 
   it("ignore aussi l'appui sur une autre touche du même sens", async () => {
@@ -545,7 +577,7 @@ describe("EndTimeKeys : toutes les touches de fin suivent la touche tenue", () =
     await keys.release("later-2");
     await vi.advanceTimersByTimeAsync(800);
     await keys.release("later-1");
-    expect(server.state.puts).toEqual(["22:10"]);
+    expect(server.state.puts).toEqual([end(22, 10)]);
   });
 
   it("reprend la main à une autre touche une fois la première relâchée et écrite", async () => {
@@ -556,7 +588,7 @@ describe("EndTimeKeys : toutes les touches de fin suivent la touche tenue", () =
     await keys.press("sooner-1");
     expect(soonerKey.last()).toBe("−10 min\n--:--");
     await keys.release("sooner-1");
-    expect(server.state.puts).toEqual(["21:50", ""]);
+    expect(server.state.puts).toEqual([end(21, 50), ""]);
   });
 
   it("vide le brouillon quand la touche tenue disparaît : les autres reviennent au serveur, rien n'est envoyé", async () => {
@@ -578,7 +610,7 @@ describe("EndTimeKeys : toutes les touches de fin suivent la touche tenue", () =
     expect(server.state.puts).toEqual([]);
     await keys.press("later-2");
     await keys.release("later-2");
-    expect(server.state.puts).toEqual(["21:50"]);
+    expect(server.state.puts).toEqual([end(21, 50)]);
   });
 
   it("garde le brouillon quand c'est une autre touche qui disparaît", async () => {
@@ -589,7 +621,7 @@ describe("EndTimeKeys : toutes les touches de fin suivent la touche tenue", () =
     await vi.advanceTimersByTimeAsync(800);
     const titles = soonerKey.shown.titles.length;
     await keys.release("later-1");
-    expect(server.state.puts).toEqual(["22:10"]);
+    expect(server.state.puts).toEqual([end(22, 10)]);
     expect(soonerKey.shown.titles.length).toBe(titles);
   });
 });

@@ -3,14 +3,12 @@ import {
   type HoursKey,
   type HoursPlan,
   type Stage,
-  toClockTime,
   toEndStages,
   toHourCount,
   toHourPlan,
   toHoursRules,
   toLateFrom,
   toLateYawnDelay,
-  toNextOccurrence,
   toStagePlan,
 } from "../domain/hours.rules";
 import { isFillable, toFilledPhrase } from "../domain/phrase.rules";
@@ -107,8 +105,7 @@ export function createFoxHours({
       nextYawnAt = null;
       return;
     }
-    const endTime = toClockTime(rules.endTime);
-    end = endTime ? toNextOccurrence(startedAt, endTime) : null;
+    end = rules.endAt;
     stages = end !== null && !hasSaidBedtime ? toEndStages(end, rules) : [];
     stagesDone = stages.filter(({ at }) => at <= now).length;
     const nextLateFrom = toLateFrom(startedAt, end, rules.lateAfter);

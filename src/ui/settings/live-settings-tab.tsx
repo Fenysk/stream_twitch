@@ -3,12 +3,13 @@
 // qu'on a sous la main pendant le live. Une seule colonne, sans aperçu : tout s'applique en direct.
 
 import { toEndStatus } from "../../domain/hours.rules";
+import { toInstant } from "../../domain/instant.rules";
 import { Button } from "../design/button";
 import { classNames } from "../design/class-names";
 import { useFox } from "../use-fox";
 import { ExpressionCard } from "./expression-card";
 import { FoxSpeakForm } from "./fox-speak-form";
-import type { TimeSpec } from "./head-fields";
+import { END_AT_CODEC, type TimeSpec } from "./head-fields";
 import {
   type StateLine,
   type Tone,
@@ -35,9 +36,10 @@ const END_REFRESH_MS = 15_000;
 
 // Le même réglage que dans l'onglet Renard (« Heure du live ») : seule l'aide change.
 const END_TIME: TimeSpec = {
-  key: "foxEndTime",
+  key: "foxEndAt",
   label: "Fin prévue",
-  help: "HH:MM. Vide : pas de fin prévue. Même réglage que Renard > Heure du live.",
+  help: "HH:MM, la prochaine fois qu'elle sonne. Vide : pas de fin prévue. Même réglage que Renard > Heure du live.",
+  codec: END_AT_CODEC,
 };
 
 const TONE_CLASS: Record<Tone, string | undefined> = {
@@ -91,9 +93,9 @@ export const LiveSettingsTab = () => {
           <StateText line={toFoxSourceLine(fox.isMuted)} />
         </SettingsCard>
       </div>
-      {effective.foxEndTime !== undefined && (
+      {effective.foxEndAt !== undefined && (
         <SettingsCard title="Fin du live">
-          <StateText line={toEndLine(toEndStatus(effective.foxEndTime, now))} />
+          <StateText line={toEndLine(toEndStatus(toInstant(effective.foxEndAt), now))} />
           <SettingTime spec={END_TIME} settings={settings} effective={effective} />
         </SettingsCard>
       )}

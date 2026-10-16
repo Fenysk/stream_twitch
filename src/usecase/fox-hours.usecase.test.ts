@@ -10,13 +10,16 @@ const at = (day: number, hours: number, minutes = 0, seconds = 0): number =>
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
 
+// Une fin prévue telle que le réglage la garde : le texte ISO de l'instant.
+const iso = (when: number): string => new Date(when).toISOString();
+
 const settings: Settings = {
   obsAddress: "ws://127.0.0.1:4455",
   micName: "Mic/Aux",
   threshold: -40,
   delay: 250,
   foxHourPhrases: ["Ding ! {heures} de live."],
-  foxEndTime: "00:00",
+  foxEndAt: iso(at(15, 0)),
   foxEndWarningMarks: ["30"],
   foxEndWarningPhrases: ["Plus que {minutes} minutes."],
   foxEndSoonPhrases: ["Pressant : {reste}."],
@@ -102,7 +105,7 @@ describe("createFoxHours : les heures pleines", () => {
   });
 
   it("annonce « 1 heure de live » à la première heure pleine, pas avant", () => {
-    const { goTo, texts } = setup({ ...settings, foxEndTime: "" });
+    const { goTo, texts } = setup({ ...settings, foxEndAt: "" });
     goTo(at(14, 21) + HOUR - 1);
     expect(texts()).toEqual([]);
     goTo(at(14, 21) + HOUR);
@@ -110,7 +113,7 @@ describe("createFoxHours : les heures pleines", () => {
   });
 
   it("annonce « 2 heures » à la suivante, une annonce par heure même si les pas sont espacés", () => {
-    const { goTo, texts } = setup({ ...settings, foxEndTime: "" });
+    const { goTo, texts } = setup({ ...settings, foxEndAt: "" });
     goTo(at(14, 21) + HOUR);
     goTo(at(14, 21) + HOUR + 100);
     goTo(at(14, 21) + 2 * HOUR);
@@ -118,20 +121,20 @@ describe("createFoxHours : les heures pleines", () => {
   });
 
   it("met l'annonce en file comme un remerciement : urgente, jamais coupée par la voix, tournée vers le tchat", () => {
-    const { goTo, pushed } = setup({ ...settings, foxEndTime: "" });
+    const { goTo, pushed } = setup({ ...settings, foxEndAt: "" });
     goTo(at(14, 21) + HOUR);
     expect(pushed[0]).toMatchObject({ kind: "hours", isCuttable: false, isUrgent: true });
     expect(pushed[0]?.toShow()).toBeNull();
   });
 
   it("écrit l'annonce au journal", () => {
-    const { goTo, logs } = setup({ ...settings, foxEndTime: "" });
+    const { goTo, logs } = setup({ ...settings, foxEndAt: "" });
     goTo(at(14, 21) + HOUR);
     expect(logs.at(-1)).toBe("Renard : heure pleine de live : « Ding ! 1 heure de live. »");
   });
 
   it("compte depuis le début de la diffusion, pas depuis le démarrage du serveur : il démarre en plein live", () => {
-    const { goTo, texts } = setup({ ...settings, foxEndTime: "" }, { isLive: true, duration: 2.5 * HOUR });
+    const { goTo, texts } = setup({ ...settings, foxEndAt: "" }, { isLive: true, duration: 2.5 * HOUR });
     goTo(at(14, 21) + 100);
     expect(texts()).toEqual([]);
     goTo(at(14, 21) + 0.5 * HOUR - 1);
@@ -141,7 +144,7 @@ describe("createFoxHours : les heures pleines", () => {
   });
 
   it("s'arrête avec la diffusion, et repart de zéro à la suivante", () => {
-    const { state, goTo, texts } = setup({ ...settings, foxEndTime: "" });
+    const { state, goTo, texts } = setup({ ...settings, foxEndAt: "" });
     goTo(at(14, 21) + 30 * MINUTE);
     state.broadcast({ isLive: false, duration: 0 });
     goTo(at(14, 21) + 3 * HOUR);
@@ -156,7 +159,7 @@ describe("createFoxHours : les heures pleines", () => {
   it("tire les phrases sans répéter avant d'avoir tout dit", () => {
     const { goTo, texts } = setup({
       ...settings,
-      foxEndTime: "",
+      foxEndAt: "",
       foxHourPhrases: ["A {heures}", "B {heures}"],
     });
     for (const hour of [1, 2, 3]) goTo(at(14, 21) + hour * HOUR);
@@ -164,7 +167,7 @@ describe("createFoxHours : les heures pleines", () => {
   });
 
   it("ne dit rien, et le journal le dit, quand la liste est vide", () => {
-    const { goTo, pushed, logs } = setup({ ...settings, foxEndTime: "", foxHourPhrases: [] });
+    const { goTo, pushed, logs } = setup({ ...settings, foxEndAt: "", foxHourPhrases: [] });
     goTo(at(14, 21) + HOUR);
     expect(pushed).toEqual([]);
     expect(logs.at(-1)).toBe("Renard : aucune phrase possible pour heure pleine de live, rien n'est dit.");
@@ -251,15 +254,42 @@ describe("createFoxHours : la fin prévue", () => {
   });
 
   it("n'a aucune étape sans fin prévue", () => {
-    const { goTo, pushed } = setup({ ...settings, foxEndTime: "" });
+    const { goTo, pushed } = setup({ ...settings, foxEndAt: "" });
     goTo(at(15, 0, 30));
     expect(pushed.filter(({ text }) => !text.startsWith("Ding"))).toEqual([]);
   });
 
+  it("tient la fin à l'instant enregistré : une fin d'avant le début du live ne repart pas sur le soir suivant", () => {
+    const { goTo, texts } = setup({ ...withoutHours, foxEndAt: iso(at(14, 20)) });
+    goTo(at(15, 20, 30));
+    expect(texts()).toEqual([]);
+  });
+
+  it("annonce une fin posée pour le lendemain à son heure, avec son avertissement", () => {
+    const { goTo, texts } = setup({ ...withoutHours, foxEndAt: iso(at(15, 15)) });
+    goTo(at(14, 23, 59));
+    goTo(at(15, 14, 30));
+    expect(texts()).toEqual(["Plus que 30 minutes."]);
+    goTo(at(15, 15));
+    expect(texts().at(-1)).toBe("15 heures. Le live est fini.");
+  });
+
+  it("continue les rappels d'un serveur relancé à 15 h 10 dans un live commencé à 11 h 43, sans redire ce qui est passé", () => {
+    const { state, goTo, texts } = setup({ ...withoutHours, foxEndAt: iso(at(14, 15)) }, null);
+    state.now = at(14, 15, 10);
+    state.broadcast({ isLive: true, duration: 3 * HOUR + 27 * MINUTE });
+    goTo(at(14, 15, 19));
+    expect(texts()).toEqual([]);
+    goTo(at(14, 15, 20));
+    expect(texts()).toEqual(["On avait dit 15 heures. Il est 15 heures 20. 20 minutes de rab."]);
+    goTo(at(14, 15, 30));
+    expect(texts().at(-1)).toBe("Je vais me coucher.");
+  });
+
   it("suit une fin prévue réglée en direct : les étapes déjà passées ne sont pas redites", () => {
-    const { hours, goTo, texts } = setup({ ...settings, foxEndTime: "" });
+    const { hours, goTo, texts } = setup({ ...settings, foxEndAt: "" });
     goTo(at(14, 22));
-    hours.update({ ...settings, foxEndTime: "22:30" });
+    hours.update({ ...settings, foxEndAt: iso(at(14, 22, 30)) });
     goTo(at(14, 22, 1));
     expect(texts().filter((text) => !text.startsWith("Ding"))).toEqual([]);
     goTo(at(14, 22, 30));
@@ -274,13 +304,15 @@ describe("createFoxHours : la fin prévue", () => {
   });
 
   it("se couche de nouveau à la diffusion suivante : le coucher d'un live ne vaut pas pour le suivant", () => {
-    const { state, goTo, leaves, pushed } = setup(withoutHours);
+    const { hours, state, goTo, leaves, pushed } = setup(withoutHours);
     goTo(at(15, 0, 30));
     pushed.at(-1)?.onDone?.(true);
     expect(leaves.count).toBe(1);
     state.broadcast({ isLive: false, duration: 0 });
     state.now = at(15, 21);
     state.broadcast({ isLive: true, duration: 0 });
+    // La fin est un instant : pour ce second live, Alexis en pose une nouvelle.
+    hours.update({ ...withoutHours, foxEndAt: iso(at(16, 0)) });
     goTo(at(16, 0, 30));
     pushed.at(-1)?.onDone?.(true);
     expect(leaves.count).toBe(2);
@@ -301,7 +333,7 @@ describe("createFoxHours : les paliers d'avertissement de la fin", () => {
   // Une fin à 23 h, un ton par liste : le texte dit quelle liste a parlé.
   const escalating: Settings = {
     ...withoutHours,
-    foxEndTime: "23:00",
+    foxEndAt: iso(at(14, 23)),
     foxEndWarningMarks: MARKS,
     foxEndWarningPhrases: ["Calme {reste}."],
     foxEndSoonPhrases: ["Pressant {reste}."],
@@ -453,7 +485,7 @@ describe("createFoxHours : les paliers d'avertissement de la fin", () => {
 });
 
 describe("createFoxHours : les bâillements tardifs", () => {
-  const withoutEnd: Settings = { ...settings, foxEndTime: "" };
+  const withoutEnd: Settings = { ...settings, foxEndAt: "" };
 
   it("ne bâille pas avant 23 h 30 sans fin prévue", () => {
     const { goTo, flashes } = setup(withoutEnd);
@@ -485,7 +517,7 @@ describe("createFoxHours : les bâillements tardifs", () => {
   });
 
   it("bâille après la fin prévue quand il y en a une, pas à 23 h 30", () => {
-    const { goTo, flashes } = setup({ ...settings, foxEndTime: "01:00" });
+    const { goTo, flashes } = setup({ ...settings, foxEndAt: iso(at(15, 1)) });
     goTo(at(14, 23, 40));
     expect(flashes).toEqual([]);
     goTo(at(15, 1));
@@ -534,8 +566,8 @@ describe("createFoxHours : le cycle de vie et les réglages", () => {
   });
 
   it("suit les phrases changées en direct", () => {
-    const { hours, goTo, texts } = setup({ ...settings, foxEndTime: "" });
-    hours.update({ ...settings, foxEndTime: "", foxHourPhrases: ["Autre {heures}"] });
+    const { hours, goTo, texts } = setup({ ...settings, foxEndAt: "" });
+    hours.update({ ...settings, foxEndAt: "", foxHourPhrases: ["Autre {heures}"] });
     goTo(at(14, 21) + HOUR);
     expect(texts()).toEqual(["Autre 1 heure"]);
   });
@@ -543,7 +575,7 @@ describe("createFoxHours : le cycle de vie et les réglages", () => {
   it("écarte une phrase dont une variable n'existe pas", () => {
     const { goTo, texts } = setup({
       ...settings,
-      foxEndTime: "",
+      foxEndAt: "",
       foxHourPhrases: ["{inconnue} !", "Bon {heures}"],
     });
     goTo(at(14, 21) + HOUR);
@@ -591,7 +623,7 @@ describe("createFoxHours : le bilan du live suit l'annonce de la fin prévue", (
     const { hours, goTo, pushed, reviews } = setup(withoutHours);
     goTo(at(15, 0));
     endItem(pushed).onDone?.();
-    hours.update({ ...withoutHours, foxEndTime: "01:00" });
+    hours.update({ ...withoutHours, foxEndAt: iso(at(15, 1)) });
     goTo(at(15, 1));
     const second = pushed.filter(({ text }) => text.endsWith("Le live est fini."));
     expect(second).toHaveLength(2);
@@ -600,19 +632,21 @@ describe("createFoxHours : le bilan du live suit l'annonce de la fin prévue", (
   });
 
   it("le relance à la diffusion suivante", () => {
-    const { state, goTo, pushed, reviews } = setup(withoutHours);
+    const { hours, state, goTo, pushed, reviews } = setup(withoutHours);
     goTo(at(15, 0));
     endItem(pushed).onDone?.();
     state.broadcast({ isLive: false, duration: 0 });
     state.now = at(15, 21);
     state.broadcast({ isLive: true, duration: 0 });
+    // La fin est un instant : pour ce second live, Alexis en pose une nouvelle.
+    hours.update({ ...withoutHours, foxEndAt: iso(at(16, 0)) });
     goTo(at(16, 0));
     endItem(pushed.slice(1)).onDone?.();
     expect(reviews.count).toBe(2);
   });
 
   it("n'en lance aucun sans fin prévue", () => {
-    const { goTo, pushed, reviews } = setup({ ...withoutHours, foxEndTime: "" });
+    const { goTo, pushed, reviews } = setup({ ...withoutHours, foxEndAt: "" });
     goTo(at(15, 0, 30));
     for (const item of pushed) (item as { onDone?: (isSaid: boolean) => void }).onDone?.(true);
     expect(reviews.count).toBe(0);

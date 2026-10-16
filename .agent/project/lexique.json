@@ -55,7 +55,7 @@
     { "canonical": "desktop",   "meaning": "La source OBS du son du PC (desktopName dans settings.json), dont le renard compare le level à la voix de Fenysk.", "banned": ["bureau"] },
     { "canonical": "balance",   "meaning": "Le desktop est au moins aussi fort que la voix de Fenysk (à foxBalanceMargin près) pendant qu'il parle : le renard le dit.", "banned": ["equilibre"] },
     { "canonical": "broadcast", "meaning": "La diffusion en cours côté OBS (GetStreamStatus) : le renard ne tient l'heure que pendant elle.", "banned": ["diffusion"] },
-    { "canonical": "overtime",  "meaning": "Le temps passé après la fin prévue (foxEndTime) : le renard rappelle toutes les foxOvertimeGap, puis se couche.", "banned": ["rab"] },
+    { "canonical": "overtime",  "meaning": "Le temps passé après la fin prévue (foxEndAt) : le renard rappelle toutes les foxOvertimeGap, puis se couche.", "banned": ["rab"] },
     { "canonical": "reminder",  "meaning": "Une phrase du silence de la relance, tournée vers le chat : l'une des foxReminders, ou le prochain slot de la timetable. Elle alterne avec une pique.", "banned": ["rappel"] },
     { "canonical": "timetable", "meaning": "Le planning Twitch d'Alexis (Helix schedule), relu toutes les 30 min.", "banned": ["planning"] },
     { "canonical": "slot",      "meaning": "Un créneau de la timetable : un début et un titre éventuel. Annulé, il n'existe pas.", "banned": ["creneau"] },

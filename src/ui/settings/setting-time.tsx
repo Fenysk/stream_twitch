@@ -4,22 +4,39 @@
 import { useState } from "react";
 import type { EditableSettings } from "../../domain/settings.schema";
 import { TextField } from "../design/text-field";
-import type { TimeSpec } from "./head-fields";
+import type { TimeCodec, TimeSpec } from "./head-fields";
 import type { UseSettings } from "./use-settings";
 
 type SettingTimeProps = { spec: TimeSpec; settings: UseSettings; effective: EditableSettings };
 
+const SAME_TEXT: TimeCodec = { toShown: (saved) => saved, toSaved: (typed) => typed, refusal: "" };
+
 export const SettingTime = ({ spec, settings, effective }: SettingTimeProps) => {
-  const saved = effective[spec.key] ?? "";
+  const codec = spec.codec ?? SAME_TEXT;
+  const saved = codec.toShown(effective[spec.key] ?? "");
   // Ce qu'on est en train d'écrire ; `null` : rien en cours, le champ montre l'heure qui s'applique.
   const [draft, setDraft] = useState<string | null>(null);
-  const error = settings.errors.byKey[spec.key];
+  // L'heure tapée que le codec refuse, avant même d'écrire au serveur.
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const error = refusal ?? settings.errors.byKey[spec.key];
 
   const commit = async () => {
     if (draft === null) return;
     const text = draft.trim();
-    if (text !== saved && !(await settings.change({ [spec.key]: text }))) return;
+    if (text !== saved) {
+      const value = codec.toSaved(text, Date.now());
+      if (value === null) {
+        setRefusal(codec.refusal);
+        return;
+      }
+      if (!(await settings.change({ [spec.key]: value }))) return;
+    }
     setDraft(null);
+  };
+
+  const type = (text: string) => {
+    setRefusal(null);
+    setDraft(text);
   };
 
   return (
@@ -29,7 +46,7 @@ export const SettingTime = ({ spec, settings, effective }: SettingTimeProps) => 
         value={draft ?? saved}
         placeholder="HH:MM"
         maxLength={5}
-        onInput={setDraft}
+        onInput={type}
         onCommit={() => void commit()}
       />
       <p className="lp-type-caption lp-muted">{spec.help}</p>

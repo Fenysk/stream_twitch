@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChatAnimationSchema, ChatStyleSchema } from "./chat.schema";
+import { toInstant } from "./instant.rules";
 import { toPronunciation } from "./pronunciation.rules";
 import { toEmoteReaction } from "./reaction.rules";
 
@@ -119,7 +120,7 @@ const FOX_KEYS: readonly string[] = [
   "foxStartleLevel",
   "foxStartleGap",
   "foxHourPhrases",
-  "foxEndTime",
+  "foxEndAt",
   "foxEndWarningMarks",
   "foxEndWarningPhrases",
   "foxEndSoonPhrases",
@@ -216,15 +217,18 @@ const phraseList = (needsOne: boolean) => {
   return needsOne ? phrases.min(1, "doit avoir au moins une phrase") : phrases;
 };
 const nonNegative = () => z.number(NOT_A_NUMBER).min(0, "ne peut pas être négatif");
-// Une heure du jour, « HH:MM » de 00:00 à 23:59 ; `orEmpty` : le texte vide est permis (pas d'heure).
-const clockTime = (orEmpty: boolean) =>
+// Une heure du jour, « HH:MM » de 00:00 à 23:59.
+const clockTime = () =>
   z
     .string("doit être un texte")
-    .regex(
-      orEmpty ? /^(?:(?:[01]\d|2[0-3]):[0-5]\d)?$/ : /^(?:[01]\d|2[0-3]):[0-5]\d$/,
-      orEmpty
-        ? "doit s'écrire HH:MM (de 00:00 à 23:59), ou rester vide"
-        : "doit s'écrire HH:MM (de 00:00 à 23:59)",
+    .regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "doit s'écrire HH:MM (de 00:00 à 23:59)");
+// Un instant, en texte ISO (« 2026-10-16T13:00:00.000Z »), ou le texte vide : pas d'instant.
+const instantOrEmpty = () =>
+  z
+    .string("doit être un texte")
+    .refine(
+      (text) => text === "" || toInstant(text) !== null,
+      "doit s'écrire comme 2026-10-16T13:00:00.000Z, ou rester vide",
     );
 // Une liste de nombres entiers positifs, un par ligne (écrits en texte, comme le champ multiligne qui les change).
 const wholeNumberList = (unit: string) =>
@@ -379,12 +383,12 @@ export const SettingsFieldsSchema = z
     foxStartleWithin: positiveWhole().optional(),
     foxStartleLevel: decibels().optional(),
     foxStartleGap: positiveWhole().optional(),
-    // L'heure du live : les phrases de chaque heure pleine ; la fin prévue (« HH:MM », vide : pas de fin prévue), les paliers où il
-    // prévient (un nombre de minutes avant elle par ligne), les phrases de ses trois tons (calme, pressant, paniqué), celles de la
-    // fin, l'écart (ms) entre deux rappels après elle, leurs phrases, la phrase du coucher ; puis l'heure (« HH:MM ») après
-    // laquelle il bâille sans fin prévue, et l'écart (ms) entre deux bâillements.
+    // L'heure du live : les phrases de chaque heure pleine ; la fin prévue (un instant en texte ISO, avec sa date ; vide : pas de
+    // fin prévue), les paliers où il prévient (un nombre de minutes avant elle par ligne), les phrases de ses trois tons (calme,
+    // pressant, paniqué), celles de la fin, l'écart (ms) entre deux rappels après elle, leurs phrases, la phrase du coucher ; puis
+    // l'heure (« HH:MM ») après laquelle il bâille sans fin prévue, et l'écart (ms) entre deux bâillements.
     foxHourPhrases: phraseList(false).optional(),
-    foxEndTime: clockTime(true).optional(),
+    foxEndAt: instantOrEmpty().optional(),
     foxEndWarningMarks: wholeNumberList("minutes").optional(),
     foxEndWarningPhrases: phraseList(false).optional(),
     foxEndSoonPhrases: phraseList(false).optional(),
@@ -393,7 +397,7 @@ export const SettingsFieldsSchema = z
     foxOvertimeGap: positiveWhole().optional(),
     foxOvertimePhrases: phraseList(false).optional(),
     foxBedtimePhrases: phraseList(false).optional(),
-    foxLateAfter: clockTime(false).optional(),
+    foxLateAfter: clockTime().optional(),
     foxLateYawnMin: positiveWhole().optional(),
     foxLateYawnMax: positiveWhole().optional(),
     // Le bilan du live : dit tout seul juste après l'annonce de la fin prévue (la case « Bilan à la fin prévue »).
@@ -608,7 +612,7 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxStartleLevel: true,
   foxStartleGap: true,
   foxHourPhrases: true,
-  foxEndTime: true,
+  foxEndAt: true,
   foxEndWarningMarks: true,
   foxEndWarningPhrases: true,
   foxEndSoonPhrases: true,

@@ -1,4 +1,10 @@
-import { END_STEP_MINUTES, type EndDirection, toSteppedEndTime } from "../../src/domain/hours.rules";
+import {
+  END_STEP_MINUTES,
+  type EndDirection,
+  toEndClock,
+  toSteppedEndAt,
+} from "../../src/domain/hours.rules";
+import { toInstant, toInstantText } from "../../src/domain/instant.rules";
 import { SERVER_DOWN_TITLE, SERVER_TO_RESTART_TITLE } from "./server-request";
 import type { FeedSnapshot, SettingsFeed } from "./settings-feed";
 
@@ -32,21 +38,23 @@ export const toEndKeyTitle = (direction: EndDirection, endTime: string): string 
 
 // Au repos, la touche montre la fin réglée sur le serveur, ou pourquoi il ne la donne pas.
 const toRestingTitle = (direction: EndDirection, snapshot: FeedSnapshot): string => {
-  if (snapshot.status === "ready") return toEndKeyTitle(direction, snapshot.view.effective.foxEndTime ?? "");
+  if (snapshot.status === "ready") {
+    return toEndKeyTitle(direction, toEndClock(toInstant(snapshot.view.effective.foxEndAt ?? "")));
+  }
   if (snapshot.status === "down") return SERVER_DOWN_TITLE;
   if (snapshot.status === "to-restart") return SERVER_TO_RESTART_TITLE;
   return LABELS[direction];
 };
 
-// Un appui, du bouton enfoncé au relâché : la touche tenue, la valeur du serveur au départ, le brouillon que toutes les touches
-// de fin montrent pendant l'appui, le minuteur du maintien.
+// Un appui, du bouton enfoncé au relâché : la touche tenue, la fin du serveur au départ, le brouillon (la fin, `null` : aucune) que
+// toutes les touches de fin montrent pendant l'appui, le minuteur du maintien.
 type Press = {
   id: string;
   direction: EndDirection;
   isReleased: boolean;
   isStarted: boolean;
-  initial: string;
-  value: string;
+  initial: number | null;
+  value: number | null;
   timer: ReturnType<typeof setTimeout> | undefined;
 };
 
@@ -103,8 +111,8 @@ export class EndTimeKeys {
       direction: registered.direction,
       isReleased: false,
       isStarted: false,
-      initial: "",
-      value: "",
+      initial: null,
+      value: null,
       timer: undefined,
     };
     this.#press = press;
@@ -116,7 +124,7 @@ export class EndTimeKeys {
       await this.#renderAll();
       return;
     }
-    press.initial = snapshot.view.effective.foxEndTime ?? "";
+    press.initial = toInstant(snapshot.view.effective.foxEndAt ?? "");
     press.value = press.initial;
     press.isStarted = true;
     const canMove = this.#step(press);
@@ -133,7 +141,7 @@ export class EndTimeKeys {
 
   // Un cran de plus ; faux quand la fin ne bouge plus (rien à changer, ou une limite).
   #step(press: Press): boolean {
-    const next = toSteppedEndTime(press.value, this.#clock(), press.direction);
+    const next = toSteppedEndAt(press.value, this.#clock(), press.direction);
     if (next === press.value) return false;
     press.value = next;
     void this.#renderAll();
@@ -155,7 +163,9 @@ export class EndTimeKeys {
     stopHold(press);
     try {
       if (press.value !== press.initial) {
-        const result = await this.#feed.run(() => this.#feed.change({ foxEndTime: press.value }));
+        const result = await this.#feed.run(() =>
+          this.#feed.change({ foxEndAt: toInstantText(press.value) }),
+        );
         if (!result.ok) {
           if (result.reason === "refused") this.#log.warn("Le serveur refuse la fin du live.", result.issues);
           await this.#showAlert(press.id);
@@ -185,9 +195,10 @@ export class EndTimeKeys {
     const registered = this.#keys.get(id);
     if (!registered) return;
     const { key, direction } = registered;
-    const draft = this.#press?.isStarted ? this.#press.value : undefined;
-    const title =
-      draft === undefined ? toRestingTitle(direction, this.#feed.snapshot) : toEndKeyTitle(direction, draft);
+    const press = this.#press;
+    const title = press?.isStarted
+      ? toEndKeyTitle(direction, toEndClock(press.value))
+      : toRestingTitle(direction, this.#feed.snapshot);
     try {
       await key.setTitle(title);
     } catch (error) {

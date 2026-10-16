@@ -1,7 +1,7 @@
 // Les lignes d'état de la page Direct : ce que chaque carte dit en une ligne, et son ton. L'état se lit au texte ; le ton
 // (bon, neutre, alerte) n'ajoute que la couleur d'un texte déjà écrit.
 
-import { END_SOON_MINUTES, type EndStatus } from "../../domain/hours.rules";
+import { END_SOON_MINUTES, type EndStatus, toClockText } from "../../domain/hours.rules";
 import type { TwitchStatus } from "../../domain/twitch.schema";
 import type { ViewersState } from "../../domain/viewers.types";
 import { DESIGN_TEXTS } from "../design/design-texts";
@@ -53,12 +53,6 @@ const MINUTE_MS = 60_000;
 // « 12 min », « 1 h 12 » : une durée à la minute.
 const toDurationText = (minutes: number): string =>
   minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}`;
-
-// « 23 h 00 », « 9 h 05 » : l'heure locale d'un instant.
-const toClockText = (at: number): string => {
-  const date = new Date(at);
-  return `${date.getHours()} h ${String(date.getMinutes()).padStart(2, "0")}`;
-};
 
 // La fin prévue : alerte à 15 min d'elle et moins, et une fois dépassée. Le temps à venir s'arrondit à la minute au-dessus
 // (30 s : « 1 min »), le dépassement à la minute en dessous.

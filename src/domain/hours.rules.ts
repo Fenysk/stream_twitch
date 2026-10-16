@@ -1,3 +1,4 @@
+import { toInstant } from "./instant.rules";
 import type { Settings } from "./settings.schema";
 import { toSpokenClock, toSpokenDuration, toSpokenHours } from "./spoken-time.rules";
 
@@ -11,11 +12,11 @@ export type HoursKey =
   | "foxOvertimePhrases"
   | "foxBedtimePhrases";
 
-// Les réglages de l'heure du live : la fin prévue (« HH:MM », vide : pas de fin prévue), les paliers d'avertissement (minutes
+// Les réglages de l'heure du live : la fin prévue (un instant, `null` : pas de fin prévue), les paliers d'avertissement (minutes
 // avant elle, du plus tôt au plus tard), l'écart (ms) entre deux rappels après elle, l'heure (« HH:MM ») après laquelle il bâille
 // sans fin prévue, l'écart (ms) entre deux bâillements tardifs, et les listes de phrases.
 export type HoursRules = {
-  endTime: string;
+  endAt: number | null;
   warningMarks: readonly number[];
   overtimeGap: number;
   lateAfter: string;
@@ -34,7 +35,7 @@ export const toWarningMarks = (lines: readonly string[]): number[] =>
 // Sans les réglages du renard (tous ou aucun), il ne tient pas l'heure.
 export function toHoursRules({
   foxHourPhrases,
-  foxEndTime,
+  foxEndAt,
   foxEndWarningMarks,
   foxEndWarningPhrases,
   foxEndSoonPhrases,
@@ -49,7 +50,7 @@ export function toHoursRules({
 }: Settings): HoursRules | undefined {
   if (
     foxHourPhrases === undefined ||
-    foxEndTime === undefined ||
+    foxEndAt === undefined ||
     foxEndWarningMarks === undefined ||
     foxEndWarningPhrases === undefined ||
     foxEndSoonPhrases === undefined ||
@@ -64,7 +65,7 @@ export function toHoursRules({
   )
     return undefined;
   return {
-    endTime: foxEndTime,
+    endAt: toInstant(foxEndAt),
     warningMarks: toWarningMarks(foxEndWarningMarks),
     overtimeGap: foxOvertimeGap,
     lateAfter: foxLateAfter,
@@ -111,31 +112,49 @@ function toPreviousOccurrence(before: number, { hours, minutes }: ClockTime): nu
 export const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
 
-// La fin prévue vue de `now`, sans rien savoir du live : sonnée il y a moins de 3 h, c'est un dépassement (`elapsed` ms) ; sinon la
-// prochaine, à venir (`remaining` ms, 21 h au plus). Le renard se couche 1 h 30 après la fin au plus tard : 3 h suffisent.
+// La fin prévue vue de `now` : à venir, ou dépassée tant que le serveur ne l'a pas effacée.
 export type EndStatus =
   | { kind: "none" }
   | { kind: "upcoming"; end: number; remaining: number }
   | { kind: "overtime"; end: number; elapsed: number };
 
-const OVERTIME_SPAN_MS = 3 * HOUR_MS;
-// Le plus loin qu'une heure reste « à venir » : le reste du jour une fois la fenêtre du dépassement retirée.
-const MAX_AHEAD_MS = 24 * HOUR_MS - OVERTIME_SPAN_MS;
+// Le renard se couche 1 h 30 après la fin au plus tard : 3 h après elle, hors live, elle n'a plus lieu d'être.
+export const OVERTIME_SPAN_MS = 3 * HOUR_MS;
+// Le plus loin devant `now` qu'une touche pose la fin.
+const MAX_AHEAD_MS = 24 * HOUR_MS;
 
-export function toEndStatus(endTime: string, now: number): EndStatus {
-  const time = toClockTime(endTime);
-  if (!time) return { kind: "none" };
-  const previous = toPreviousOccurrence(now, time);
-  if (now - previous < OVERTIME_SPAN_MS) return { kind: "overtime", end: previous, elapsed: now - previous };
-  const next = toNextOccurrence(now, time);
-  return { kind: "upcoming", end: next, remaining: next - now };
+export function toEndStatus(endAt: number | null, now: number): EndStatus {
+  if (endAt === null) return { kind: "none" };
+  if (endAt > now) return { kind: "upcoming", end: endAt, remaining: endAt - now };
+  return { kind: "overtime", end: endAt, elapsed: now - endAt };
 }
 
-// « HH:MM » à l'heure locale : la forme que le réglage de la fin prévue garde.
-const toTimeText = (at: number): string => {
-  const date = new Date(at);
+// L'ancienne fin « HH:MM » (foxEndTime) en instant : sonnée il y a moins de 3 h, celle d'aujourd'hui ; sinon la prochaine.
+export function toLegacyEndAt(endTime: string, now: number): number | null {
+  const time = toClockTime(endTime);
+  if (!time) return null;
+  const previous = toPreviousOccurrence(now, time);
+  return now - previous < OVERTIME_SPAN_MS ? previous : toNextOccurrence(now, time);
+}
+
+// « HH:MM » tapé dans le champ : la prochaine fois qu'elle sonne, strictement après `now` ; `null` si ce n'est pas une heure.
+export function toTypedEndAt(typed: string, now: number): number | null {
+  const time = toClockTime(typed);
+  return time ? toNextOccurrence(now, time) : null;
+}
+
+// « HH:MM » à l'heure locale, ce que le champ et les touches montrent ; le texte vide sans fin.
+export function toEndClock(endAt: number | null): string {
+  if (endAt === null) return "";
+  const date = new Date(endAt);
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-};
+}
+
+// « 23 h 00 », « 9 h 05 » : l'heure locale dans une phrase.
+export function toClockText(at: number): string {
+  const date = new Date(at);
+  return `${date.getHours()} h ${String(date.getMinutes()).padStart(2, "0")}`;
+}
 
 export const END_STEP_MINUTES = 10;
 
@@ -153,21 +172,33 @@ const toStepBefore = (at: number): number => {
 };
 
 // Un cran de la fin prévue (une touche de Stream Deck) : « later » la repousse à la dizaine de minutes suivante, « sooner » la
-// ramène à la précédente. Elle ne passe jamais avant la dizaine qui suit `now`, ni au-delà de `now` + 21 h (l'heure serait alors
-// lue comme dépassée) : ces deux appuis ne changent rien (`endTime` revient tel quel). Une fin ramenée à `now` ou avant n'est plus
-// prévue : le texte vide.
+// ramène à la précédente. Elle ne passe jamais avant la dizaine qui suit `now`, ni au-delà de `now` + 24 h : cet appui ne change
+// rien (`endAt` revient tel quel). Une fin ramenée à `now` ou avant n'est plus prévue : `null`.
 export type EndDirection = "later" | "sooner";
 
-export function toSteppedEndTime(endTime: string, now: number, direction: EndDirection): string {
-  const status = toEndStatus(endTime, now);
-  const end = status.kind === "none" ? null : status.end;
+export function toSteppedEndAt(endAt: number | null, now: number, direction: EndDirection): number | null {
   if (direction === "sooner") {
-    if (end === null) return endTime;
-    const target = toStepBefore(end);
-    return target > now ? toTimeText(target) : "";
+    if (endAt === null) return null;
+    const target = toStepBefore(endAt);
+    return target > now ? target : null;
   }
-  const target = end === null ? toStepAfter(now) : Math.max(toStepAfter(end), toStepAfter(now));
-  return target - now <= MAX_AHEAD_MS ? toTimeText(target) : endTime;
+  const target = endAt === null ? toStepAfter(now) : Math.max(toStepAfter(endAt), toStepAfter(now));
+  return target - now <= MAX_AHEAD_MS ? target : endAt;
+}
+
+// Quand le serveur se demande si la fin enregistrée vaut encore : pendant un live commencé à `startedAt`, à son arrêt, ou hors live.
+export type EndMoment = { kind: "live"; startedAt: number } | { kind: "stopped" } | { kind: "idle" };
+
+// À l'arrêt du live : si elle est passée. Hors live : 3 h après elle. Pendant un live : seulement s'il a commencé après elle.
+export function isEndOver(endAt: number, now: number, moment: EndMoment): boolean {
+  switch (moment.kind) {
+    case "live":
+      return endAt <= moment.startedAt;
+    case "stopped":
+      return endAt <= now;
+    case "idle":
+      return endAt + OVERTIME_SPAN_MS <= now;
+  }
 }
 
 // Combien d'heures pleines de diffusion se sont écoulées depuis son début.

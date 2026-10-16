@@ -86,7 +86,7 @@ const settings: Settings = {
   foxStartleWithin: 300,
   foxStartleLevel: -15,
   foxStartleGap: 30_000,
-  foxEndTime: "",
+  foxEndAt: "",
   foxEndWarningMarks: ["30"],
   foxOvertimeGap: 600_000,
   foxLateAfter: "23:30",
@@ -2276,6 +2276,9 @@ describe("N : la balance du son", () => {
 
 // L'heure du PC dans ces tests : un soir d'octobre, à l'heure locale.
 const at = (hours: number, minutes = 0, day = 14): number => new Date(2026, 9, day, hours, minutes).getTime();
+// La fin prévue telle que le réglage la garde : le texte ISO de l'instant.
+const endAt = (hours: number, minutes = 0, day = 14): string =>
+  new Date(at(hours, minutes, day)).toISOString();
 
 describe("M : il tient l'heure du live", () => {
   it("revient pour une heure pleine de live, tourné vers le tchat, même parti", async () => {
@@ -2299,7 +2302,11 @@ describe("M : il tient l'heure du live", () => {
   it("ne compte que pendant la diffusion : OBS ne la lance pas, il ne dit rien", async () => {
     const harness = build({
       startAt: at(21),
-      hours: { foxHourPhrases: ["Ding ! {heures} de live."], foxEndTime: "21:05", foxEndPhrases: ["Fin."] },
+      hours: {
+        foxHourPhrases: ["Ding ! {heures} de live."],
+        foxEndAt: endAt(21, 5),
+        foxEndPhrases: ["Fin."],
+      },
     });
     harness.updateBroadcast({ isLive: false, duration: 0 });
     await harness.run(600_000);
@@ -2328,7 +2335,7 @@ describe("M : il tient l'heure du live", () => {
     const harness = build({
       startAt: at(23, 40),
       hours: {
-        foxEndTime: "00:00",
+        foxEndAt: endAt(0, 0, 15),
         foxEndWarningMarks: ["10"],
         foxEndSoonPhrases: ["Plus que {minutes} minutes."],
         foxEndPhrases: ["{fin}. Le live est fini."],
@@ -2365,7 +2372,7 @@ describe("M : il tient l'heure du live", () => {
     const harness = build({
       startAt: at(23, 40),
       hours: {
-        foxEndTime: "00:00",
+        foxEndAt: endAt(0, 0, 15),
         foxEndWarningMarks: ["10"],
         foxBedtimePhrases: ["Je vais me coucher."],
       },
@@ -2384,7 +2391,7 @@ describe("M : il tient l'heure du live", () => {
     const harness = build({
       startAt: at(0, 15, 15),
       hours: {
-        foxEndTime: "00:00",
+        foxEndAt: endAt(0, 0, 15),
         foxEndPhrases: ["{fin}. Le live est fini."],
         foxOvertimePhrases: ["Il est {maintenant}."],
         foxBedtimePhrases: ["Je vais me coucher."],
@@ -2733,7 +2740,7 @@ describe("U : il remercie un viewer très impliqué", () => {
 
 describe("V : le bilan du live", () => {
   const END = {
-    foxEndTime: "00:00",
+    foxEndAt: endAt(0, 0, 15),
     foxEndWarningMarks: ["10"],
     foxEndWarningPhrases: [],
     foxEndSoonPhrases: [],

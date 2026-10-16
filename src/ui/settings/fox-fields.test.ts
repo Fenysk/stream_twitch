@@ -453,8 +453,8 @@ describe("les clés de chaque onglet", () => {
     expect(FOX_KEYS).toContain("foxThanksLurk");
     expect(FOX_KEYS).toContain("foxThanksLurkGeneric");
     expect(FOX_KEYS).toContain("foxReminders");
-    expect(FOX_TIMES.map(({ key }) => key)).toEqual(["foxEndTime", "foxLateAfter"]);
-    expect(FOX_KEYS).toContain("foxEndTime");
+    expect(FOX_TIMES.map(({ key }) => key)).toEqual(["foxEndAt", "foxLateAfter"]);
+    expect(FOX_KEYS).toContain("foxEndAt");
     expect(FOX_KEYS).toContain("foxLateAfter");
     expect(FOX_TOGGLES.map(({ key }) => key)).toEqual([
       "foxShouldWelcome",
@@ -548,15 +548,15 @@ describe("les heures de l'onglet Renard", () => {
   });
 
   it("ont pour défaut la valeur de settings.json : pas de fin prévue, 23:30", () => {
-    expect(defaults.foxEndTime).toBe("");
+    expect(defaults.foxEndAt).toBe("");
     expect(defaults.foxLateAfter).toBe("23:30");
   });
 
   it("lisent le refus d'une heure sous son champ, avec son libellé", () => {
     const errors = toFieldErrors([
-      { path: "foxEndTime", message: "doit s'écrire HH:MM (de 00:00 à 23:59), ou rester vide" },
+      { path: "foxEndAt", message: "doit s'écrire HH:MM (de 00:00 à 23:59), ou rester vide" },
     ]);
-    expect(errors.byKey).toEqual({ foxEndTime: "doit s'écrire HH:MM (de 00:00 à 23:59), ou rester vide" });
+    expect(errors.byKey).toEqual({ foxEndAt: "doit s'écrire HH:MM (de 00:00 à 23:59), ou rester vide" });
     expect(errors.general).toEqual([]);
   });
 });

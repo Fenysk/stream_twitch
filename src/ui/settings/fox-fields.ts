@@ -5,6 +5,7 @@
 
 import { END_PANIC_MINUTES, END_SOON_MINUTES } from "../../domain/hours.rules";
 import {
+  END_AT_CODEC,
   type ListSpec,
   type SliderKey,
   type SliderSpec,
@@ -749,9 +750,10 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
     ],
     times: [
       {
-        key: "foxEndTime",
+        key: "foxEndAt",
         label: "Fin prévue",
         help: "HH:MM, la prochaine fois qu'elle sonne. Vide : pas de fin prévue.",
+        codec: END_AT_CODEC,
       },
       {
         key: "foxLateAfter",
