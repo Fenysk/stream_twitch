@@ -3,6 +3,7 @@
 // lecture du tchat.
 // La voix se choisit dans une liste, pas à un curseur. Les crans, leur libellé et le type d'un curseur sont ceux de la tête.
 
+import { END_PANIC_MINUTES, END_SOON_MINUTES } from "../../domain/hours.rules";
 import {
   type ListSpec,
   type SliderKey,
@@ -725,13 +726,6 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
     ],
     sliders: [
       {
-        key: "foxEndWarning",
-        label: "Avertissement avant la fin",
-        help: "Avant la fin prévue.",
-        steps: toSteps(300_000, 3_600_000, 300_000, toDelay),
-        fallback: 1_800_000,
-      },
-      {
         key: "foxOvertimeGap",
         label: "Écart entre deux rappels de fin",
         help: "Après la fin prévue.",
@@ -773,9 +767,27 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
         rows: 5,
       },
       {
+        key: "foxEndWarningMarks",
+        label: "Paliers d'avertissement",
+        help: "Une ligne par palier, en minutes avant la fin prévue. Liste vide : aucun avertissement.",
+        rows: 4,
+      },
+      {
         key: "foxEndWarningPhrases",
-        label: "Avertissement de la fin",
-        help: "Dit à Fenysk avant la fin prévue.",
+        label: "Avertissement calme",
+        help: `Dit à Fenysk, plus de ${END_SOON_MINUTES} min avant la fin.`,
+        rows: 3,
+      },
+      {
+        key: "foxEndSoonPhrases",
+        label: "Avertissement pressant",
+        help: `Dit à Fenysk, de ${END_SOON_MINUTES} à ${END_PANIC_MINUTES + 1} min avant la fin.`,
+        rows: 3,
+      },
+      {
+        key: "foxEndPanicPhrases",
+        label: "Avertissement paniqué",
+        help: `Dit à Fenysk, ${END_PANIC_MINUTES} min et moins avant la fin.`,
         rows: 3,
       },
       {

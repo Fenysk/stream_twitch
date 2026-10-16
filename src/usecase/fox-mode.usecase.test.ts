@@ -87,7 +87,7 @@ const settings: Settings = {
   foxStartleLevel: -15,
   foxStartleGap: 30_000,
   foxEndTime: "",
-  foxEndWarning: 1_800_000,
+  foxEndWarningMarks: ["30"],
   foxOvertimeGap: 600_000,
   foxLateAfter: "23:30",
   foxLateYawnMin: 300_000,
@@ -203,6 +203,8 @@ const build = (
     foxBalanceAlerts: options.balanceAlerts ?? [],
     foxHourPhrases: [],
     foxEndWarningPhrases: [],
+    foxEndSoonPhrases: [],
+    foxEndPanicPhrases: [],
     foxEndPhrases: [],
     foxOvertimePhrases: [],
     foxBedtimePhrases: [],
@@ -2327,8 +2329,8 @@ describe("M : il tient l'heure du live", () => {
       startAt: at(23, 40),
       hours: {
         foxEndTime: "00:00",
-        foxEndWarning: 600_000,
-        foxEndWarningPhrases: ["Plus que {minutes} minutes."],
+        foxEndWarningMarks: ["10"],
+        foxEndSoonPhrases: ["Plus que {minutes} minutes."],
         foxEndPhrases: ["{fin}. Le live est fini."],
         foxOvertimePhrases: ["Il est {maintenant}, {retard} de rab."],
         foxBedtimePhrases: ["Je vais me coucher."],
@@ -2364,7 +2366,7 @@ describe("M : il tient l'heure du live", () => {
       startAt: at(23, 40),
       hours: {
         foxEndTime: "00:00",
-        foxEndWarning: 600_000,
+        foxEndWarningMarks: ["10"],
         foxBedtimePhrases: ["Je vais me coucher."],
       },
     });
@@ -2732,8 +2734,10 @@ describe("U : il remercie un viewer très impliqué", () => {
 describe("V : le bilan du live", () => {
   const END = {
     foxEndTime: "00:00",
-    foxEndWarning: 600_000,
+    foxEndWarningMarks: ["10"],
     foxEndWarningPhrases: [],
+    foxEndSoonPhrases: [],
+    foxEndPanicPhrases: [],
     foxEndPhrases: ["{fin}. Le live est fini."],
     foxOvertimePhrases: [],
     foxBedtimePhrases: [],

@@ -120,8 +120,10 @@ const FOX_KEYS: readonly string[] = [
   "foxStartleGap",
   "foxHourPhrases",
   "foxEndTime",
-  "foxEndWarning",
+  "foxEndWarningMarks",
   "foxEndWarningPhrases",
+  "foxEndSoonPhrases",
+  "foxEndPanicPhrases",
   "foxEndPhrases",
   "foxOvertimeGap",
   "foxOvertimePhrases",
@@ -224,6 +226,14 @@ const clockTime = (orEmpty: boolean) =>
         ? "doit s'écrire HH:MM (de 00:00 à 23:59), ou rester vide"
         : "doit s'écrire HH:MM (de 00:00 à 23:59)",
     );
+// Une liste de nombres entiers positifs, un par ligne (écrits en texte, comme le champ multiligne qui les change).
+const wholeNumberList = (unit: string) =>
+  z.array(
+    z
+      .string("doit être un texte")
+      .regex(/^[1-9]\d{0,5}$/, `chaque ligne doit être un nombre entier de ${unit}, 1 ou plus`),
+    "doit être une liste de nombres",
+  );
 // Un écart entre deux levels, en dB : positif ou négatif.
 const decibelGap = () =>
   z.number(NOT_A_NUMBER).min(-20, "doit être d'au moins -20 dB").max(20, "doit être d'au plus 20 dB");
@@ -369,13 +379,16 @@ export const SettingsFieldsSchema = z
     foxStartleWithin: positiveWhole().optional(),
     foxStartleLevel: decibels().optional(),
     foxStartleGap: positiveWhole().optional(),
-    // L'heure du live : les phrases de chaque heure pleine ; la fin prévue (« HH:MM », vide : pas de fin prévue), combien de ms
-    // avant elle il prévient, ses phrases, celles de la fin, l'écart (ms) entre deux rappels après elle, leurs phrases, la phrase
-    // du coucher ; puis l'heure (« HH:MM ») après laquelle il bâille sans fin prévue, et l'écart (ms) entre deux bâillements.
+    // L'heure du live : les phrases de chaque heure pleine ; la fin prévue (« HH:MM », vide : pas de fin prévue), les paliers où il
+    // prévient (un nombre de minutes avant elle par ligne), les phrases de ses trois tons (calme, pressant, paniqué), celles de la
+    // fin, l'écart (ms) entre deux rappels après elle, leurs phrases, la phrase du coucher ; puis l'heure (« HH:MM ») après
+    // laquelle il bâille sans fin prévue, et l'écart (ms) entre deux bâillements.
     foxHourPhrases: phraseList(false).optional(),
     foxEndTime: clockTime(true).optional(),
-    foxEndWarning: positiveWhole().optional(),
+    foxEndWarningMarks: wholeNumberList("minutes").optional(),
     foxEndWarningPhrases: phraseList(false).optional(),
+    foxEndSoonPhrases: phraseList(false).optional(),
+    foxEndPanicPhrases: phraseList(false).optional(),
     foxEndPhrases: phraseList(false).optional(),
     foxOvertimeGap: positiveWhole().optional(),
     foxOvertimePhrases: phraseList(false).optional(),
@@ -420,14 +433,7 @@ export const SettingsFieldsSchema = z
     // phrases de chaque cas (une liste vide : ce cas ne dit rien).
     foxShouldWelcome: z.boolean("doit être true ou false").optional(),
     foxWelcomeLiveGap: positiveWhole().optional(),
-    foxWelcomeLiveCounts: z
-      .array(
-        z
-          .string("doit être un texte")
-          .regex(/^[1-9]\d{0,5}$/, "chaque ligne doit être un nombre entier de lives, 1 ou plus"),
-        "doit être une liste de nombres",
-      )
-      .optional(),
+    foxWelcomeLiveCounts: wholeNumberList("lives").optional(),
     foxWelcomeReturnAfter: positiveWhole().optional(),
     foxWelcomeMilestone: phraseList(false).optional(),
     foxWelcomeReturn: phraseList(false).optional(),
@@ -603,8 +609,10 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxStartleGap: true,
   foxHourPhrases: true,
   foxEndTime: true,
-  foxEndWarning: true,
+  foxEndWarningMarks: true,
   foxEndWarningPhrases: true,
+  foxEndSoonPhrases: true,
+  foxEndPanicPhrases: true,
   foxEndPhrases: true,
   foxOvertimeGap: true,
   foxOvertimePhrases: true,

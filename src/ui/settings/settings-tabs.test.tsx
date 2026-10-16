@@ -22,6 +22,9 @@ const state = vi.hoisted(() => ({
   twitchStatus: { kind: "disconnected", lastError: null } as { kind: string; [key: string]: unknown } | null,
   viewers: null as { kind: string; count?: number } | null,
   viewersError: null as string | null,
+  // La fin prévue (« HH:MM ») posée par le test, `undefined` : celle de settings.json ; et l'heure du PC que la page lit.
+  endTime: undefined as string | undefined,
+  now: new Date(2026, 9, 14, 21, 48).getTime(),
 }));
 
 vi.mock("./use-settings", async () => {
@@ -36,7 +39,9 @@ vi.mock("./use-settings", async () => {
   const answer = async () => undefined;
   return {
     useSettings: () => {
-      const effective = state.hasFoxSettings ? saved : { ...saved, foxVoice: undefined };
+      const effective = state.hasFoxSettings
+        ? { ...saved, foxEndTime: state.endTime ?? saved.foxEndTime }
+        : { ...saved, foxVoice: undefined, foxEndTime: undefined };
       return {
         view: state.isLoaded ? { defaults: effective, local: state.local, effective } : null,
         drafts: {},
@@ -68,6 +73,10 @@ vi.mock("./use-mic-level", () => ({
 
 vi.mock("./use-viewers", () => ({
   useViewers: () => ({ viewers: state.viewers, error: state.viewersError }),
+}));
+
+vi.mock("./use-now", () => ({
+  useNow: () => state.now,
 }));
 
 vi.mock("./use-voices", () => ({
@@ -102,6 +111,8 @@ beforeEach(() => {
   state.twitchStatus = { kind: "disconnected", lastError: null };
   state.viewers = null;
   state.viewersError = null;
+  state.endTime = undefined;
+  state.now = new Date(2026, 9, 14, 21, 48).getTime();
 });
 
 const RESET = "Revenir aux valeurs par défaut";
@@ -333,22 +344,71 @@ describe("l'onglet Direct", () => {
     expect(html).not.toContain(RESET);
   });
 
-  it("range quatre cartes d'état, puis l'expression de la tête, puis « Faire parler le renard »", () => {
+  it("range quatre cartes d'état, puis la fin du live, l'expression de la tête et « Faire parler le renard »", () => {
     expect(toTitles(renderToStaticMarkup(<LiveSettingsTab />))).toEqual([
       "Micro",
       "Twitch",
       "Live",
       "Renard",
+      "Fin du live",
       "Expression de la tête",
       "Faire parler le renard",
     ]);
   });
 
-  it("met les quatre états dans une grille, avant les deux cartes d'action", () => {
+  it("n'a pas de fin prévue par défaut : le champ d'heure est vide, avec son aide qui renvoie à l'onglet Renard", () => {
+    const card = toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live");
+    expect(card).toContain("Pas de fin prévue");
+    expect(card).toContain("Fin prévue");
+    expect(card).toContain('value=""');
+    expect(card).toContain('placeholder="HH:MM"');
+    expect(card).toContain("HH:MM. Vide : pas de fin prévue. Même réglage que Renard &gt; Heure du live.");
+    expect(card).not.toContain("lp-warning");
+  });
+
+  it("dit l'heure de la fin prévue et le temps qu'il reste, dans le champ comme dans la ligne d'état", () => {
+    state.endTime = "23:00";
+    const card = toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live");
+    expect(card).toContain("Fin à 23 h 00, dans 1 h 12");
+    expect(card).toContain('value="23:00"');
+    expect(card).not.toContain("lp-warning");
+  });
+
+  it("alerte à 15 min de la fin prévue, pas à 16", () => {
+    state.endTime = "23:00";
+    state.now = new Date(2026, 9, 14, 22, 44).getTime();
+    const sixteen = toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live");
+    expect(sixteen).toContain("dans 16 min");
+    expect(sixteen).not.toContain("lp-warning");
+    state.now = new Date(2026, 9, 14, 22, 45).getTime();
+    const fifteen = toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live");
+    expect(fifteen).toContain("dans 15 min");
+    expect(fifteen).toMatch(/class="[^"]*lp-warning[^"]*"[^>]*>Fin à 23 h 00, dans 15 min</);
+  });
+
+  it("alerte une fois la fin prévue dépassée, de combien de minutes, minuit passé compris", () => {
+    state.endTime = "23:00";
+    state.now = new Date(2026, 9, 14, 23, 5).getTime();
+    expect(toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live")).toMatch(
+      /class="[^"]*lp-warning[^"]*"[^>]*>Fin dépassée de 5 min</,
+    );
+    state.now = new Date(2026, 9, 15, 0, 20).getTime();
+    expect(toCard(renderToStaticMarkup(<LiveSettingsTab />), "Fin du live")).toContain(
+      "Fin dépassée de 1 h 20",
+    );
+  });
+
+  it("n'écrit pas la carte de la fin du live quand les réglages du renard manquent", () => {
+    state.hasFoxSettings = false;
+    expect(toTitles(renderToStaticMarkup(<LiveSettingsTab />))).not.toContain("Fin du live");
+  });
+
+  it("met les quatre états dans une grille, avant la fin du live et les deux cartes d'action", () => {
     const html = renderToStaticMarkup(<LiveSettingsTab />);
-    const grid = html.slice(html.indexOf('class="live-states"'), html.indexOf("Expression de la tête"));
+    const grid = html.slice(html.indexOf('class="live-states"'), html.indexOf(">Fin du live<"));
     expect(toTitles(grid)).toEqual(["Micro", "Twitch", "Live", "Renard"]);
     expect(html.indexOf('class="live-states"')).toBeLessThan(html.indexOf("Expression de la tête"));
+    expect(html.indexOf(">Fin du live<")).toBeLessThan(html.indexOf("Expression de la tête"));
   });
 
   it("montre le vumètre du micro, et dit que OBS n'est pas joint ou donne le niveau", () => {

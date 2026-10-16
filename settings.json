@@ -170,8 +170,20 @@
     "{heures} de live. À ce stade, c'est un marathon !"
   ],
   "foxEndTime": "",
-  "foxEndWarning": 1800000,
-  "foxEndWarningPhrases": ["Plus que {minutes} minutes, Fenysk. Je dis ça, je dis rien."],
+  "foxEndWarningMarks": ["60", "30", "15", "10", "5", "2", "1"],
+  "foxEndWarningPhrases": [
+    "{reste} avant la fin. Profitez, ça passe vite.",
+    "Plus que {reste}, Fenysk. Je dis ça, je dis rien."
+  ],
+  "foxEndSoonPhrases": [
+    "{reste}, Fenysk ! Commence tes au revoir, tu mets toujours trois plombes.",
+    "Plus que {reste}. Le tchat, préparez les mouchoirs !",
+    "{reste} ! Lâche ce boss, il sera encore là demain."
+  ],
+  "foxEndPanicPhrases": [
+    "{reste} ! Je répète : {reste} !",
+    "Plus que {reste} ! Fenysk, la manette, tout de suite !"
+  ],
   "foxEndPhrases": [
     "C'est l'heure, Fenysk ! Dis au revoir au tchat.",
     "Fin du live prévue. Fenysk va dire \"encore cinq minutes\", je le sens.",

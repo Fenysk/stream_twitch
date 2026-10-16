@@ -2,9 +2,9 @@
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "UUID": "com.fenysk.stream-twitch",
   "Name": "Stream Twitch",
-  "Version": "0.2.0.0",
+  "Version": "0.3.0.0",
   "Author": "Fenysk",
-  "Description": "Pilote le serveur local de Stream Twitch depuis des touches : le nombre de viewers, des interrupteurs, des cycles de valeurs et des préréglages qui montrent l'état réel des réglages, et des phrases pour Jean-Renard.",
+  "Description": "Pilote le serveur local de Stream Twitch depuis des touches : le nombre de viewers, des interrupteurs, des cycles de valeurs et des préréglages qui montrent l'état réel des réglages, des phrases pour Jean-Renard, et l'heure de fin du live réglée par crans de 10 min.",
   "Icon": "imgs/plugin/icon",
   "Category": "Stream Twitch",
   "CategoryIcon": "imgs/plugin/category",
@@ -115,6 +115,40 @@
       "States": [
         {
           "Image": "imgs/actions/phrase/key",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#f6e8e0",
+          "FontSize": 12,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "UUID": "com.fenysk.stream-twitch.end-later",
+      "Name": "Fin du live +10",
+      "Tooltip": "Repousse l'heure de fin du live de 10 min. Maintenir fait défiler ; l'heure est envoyée au serveur au relâché.",
+      "Icon": "imgs/actions/end-later/icon",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/end-later/key",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#f6e8e0",
+          "FontSize": 12,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "UUID": "com.fenysk.stream-twitch.end-sooner",
+      "Name": "Fin du live −10",
+      "Tooltip": "Avance l'heure de fin du live de 10 min ; sous l'heure actuelle, il n'y a plus de fin. Maintenir fait défiler ; l'heure est envoyée au serveur au relâché.",
+      "Icon": "imgs/actions/end-sooner/icon",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/end-sooner/key",
           "TitleAlignment": "bottom",
           "TitleColor": "#f6e8e0",
           "FontSize": 12,

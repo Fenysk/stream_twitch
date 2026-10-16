@@ -47,7 +47,9 @@ export type FoxHours = {
 // Le nom de chaque sorte d'annonce dans le journal.
 const LIST_TEXTS: Record<HoursKey, string> = {
   foxHourPhrases: "heure pleine de live",
-  foxEndWarningPhrases: "avertissement de la fin prévue",
+  foxEndWarningPhrases: "avertissement calme de la fin prévue",
+  foxEndSoonPhrases: "avertissement pressant de la fin prévue",
+  foxEndPanicPhrases: "avertissement paniqué de la fin prévue",
   foxEndPhrases: "fin prévue",
   foxOvertimePhrases: "rappel après la fin prévue",
   foxBedtimePhrases: "coucher",
@@ -56,13 +58,16 @@ const LIST_TEXTS: Record<HoursKey, string> = {
 const toEmptySaid = (): Record<HoursKey, string[]> => ({
   foxHourPhrases: [],
   foxEndWarningPhrases: [],
+  foxEndSoonPhrases: [],
+  foxEndPanicPhrases: [],
   foxEndPhrases: [],
   foxOvertimePhrases: [],
   foxBedtimePhrases: [],
 });
 
 // L'heure du live : pendant la diffusion d'OBS seulement, le renard annonce chaque heure pleine au tchat, prévient Fenysk de la
-// fin prévue puis la lui annonce, le relance toutes les 10 min, et se couche au troisième rappel (il part, plus de rappel).
+// fin prévue à chaque palier (sur un ton qui monte : calme, pressant, paniqué) puis la lui annonce, le relance toutes les 10 min,
+// et se couche au troisième rappel (il part, plus de rappel).
 // Il bâille au repos, sans partir, après la fin prévue (ou après 23 h 30 sans fin prévue). Le bilan du live suit l'annonce de la
 // fin prévue, une fois par diffusion. Chaque annonce passe par la file
 // comme un remerciement ; caché, il revient pour elle, pas pour un bâillement. Ce qui est déjà passé quand il découvre la
@@ -152,7 +157,7 @@ export function createFoxHours({
     stagesDone += due.length;
     const stage = due.at(-1);
     if (!stage) return;
-    const announcement = toStagePlan(stage, { end, now, warning: rules.warning });
+    const announcement = toStagePlan(stage, { end, now });
     if (stage.kind !== "bedtime") {
       say(announcement, stage.kind === "end" ? sayReview : undefined);
       return;

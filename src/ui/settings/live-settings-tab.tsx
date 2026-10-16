@@ -1,23 +1,44 @@
 // La page « Direct » : l'accueil des réglages, pour savoir en un coup d'œil où en est le live. Quatre cartes d'état (le micro,
-// Twitch, le nombre de viewers, la source du renard), puis l'expression de la tête et « Faire parler le renard », qu'on a sous
-// la main pendant le live. Une seule colonne, sans aperçu : rien ici ne se règle, tout s'applique en direct.
+// Twitch, le nombre de viewers, la source du renard), puis la fin du live, l'expression de la tête et « Faire parler le renard »,
+// qu'on a sous la main pendant le live. Une seule colonne, sans aperçu : tout s'applique en direct.
 
+import { toEndStatus } from "../../domain/hours.rules";
 import { Button } from "../design/button";
 import { classNames } from "../design/class-names";
 import { useFox } from "../use-fox";
 import { ExpressionCard } from "./expression-card";
 import { FoxSpeakForm } from "./fox-speak-form";
-import { type StateLine, type Tone, toFoxSourceLine, toTwitchLine, toViewersLine } from "./live-states";
+import type { TimeSpec } from "./head-fields";
+import {
+  type StateLine,
+  type Tone,
+  toEndLine,
+  toFoxSourceLine,
+  toTwitchLine,
+  toViewersLine,
+} from "./live-states";
 import { MicMeter } from "./mic-meter";
+import { SettingTime } from "./setting-time";
 import { SettingsCard, SettingsLoading, SettingsPage } from "./settings-page";
 import { toSectionLabel } from "./settings-sections";
 import { useExpressions } from "./use-expressions";
 import { useMicLevel } from "./use-mic-level";
+import { useNow } from "./use-now";
 import { useSettings } from "./use-settings";
 import { useTwitch } from "./use-twitch";
 import { useViewers } from "./use-viewers";
 
 const TITLE = toSectionLabel("live");
+
+// La fin prévue se relit toutes les 15 s : le temps restant se met à jour sans recharger la page.
+const END_REFRESH_MS = 15_000;
+
+// Le même réglage que dans l'onglet Renard (« Heure du live ») : seule l'aide change.
+const END_TIME: TimeSpec = {
+  key: "foxEndTime",
+  label: "Fin prévue",
+  help: "HH:MM. Vide : pas de fin prévue. Même réglage que Renard > Heure du live.",
+};
 
 const TONE_CLASS: Record<Tone, string | undefined> = {
   good: "lp-success",
@@ -47,6 +68,7 @@ export const LiveSettingsTab = () => {
   const { viewers, error: viewersError } = useViewers();
   const fox = useFox("preview");
   const { expressions } = useExpressions();
+  const now = useNow(END_REFRESH_MS);
   const { view } = settings;
   if (!view) return <SettingsLoading title={TITLE} />;
   const { effective } = view;
@@ -69,6 +91,12 @@ export const LiveSettingsTab = () => {
           <StateText line={toFoxSourceLine(fox.isMuted)} />
         </SettingsCard>
       </div>
+      {effective.foxEndTime !== undefined && (
+        <SettingsCard title="Fin du live">
+          <StateText line={toEndLine(toEndStatus(effective.foxEndTime, now))} />
+          <SettingTime spec={END_TIME} settings={settings} effective={effective} />
+        </SettingsCard>
+      )}
       <ExpressionCard
         title="Expression de la tête"
         expressions={expressions}

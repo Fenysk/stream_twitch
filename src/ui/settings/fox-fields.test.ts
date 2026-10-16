@@ -17,7 +17,7 @@ import { SLIDER_KEYS } from "./head-fields";
 import { isDefaultTab, toChanges, toFieldErrors } from "./settings-changes";
 
 // Les réglages de chaque onglet, comme les onglets les désignent à « Revenir aux valeurs par défaut » : la tête (ses six
-// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses soixante curseurs, ses quarante listes, ses deux heures, la voix et six cases).
+// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses cinquante-neuf curseurs, ses quarante-trois listes, ses deux heures, la voix et six cases).
 const HEAD_KEYS = [...SLIDER_KEYS, "expression"];
 const CHAT_KEYS = [
   ...CHAT_SLIDERS.map(({ key }) => key),
@@ -37,7 +37,7 @@ const labelsOf = (key: string): string[] => spec(key).steps.map(({ label }) => l
 const valuesOf = (key: string): number[] => spec(key).steps.map(({ value }) => value);
 
 describe("les curseurs de l'onglet Renard", () => {
-  it("sont soixante : cinquante-cinq pour l'animation en dix-huit groupes, cinq pour la lecture du tchat", () => {
+  it("sont cinquante-neuf : cinquante-quatre pour l'animation en dix-huit groupes, cinq pour la lecture du tchat", () => {
     expect(FOX_GROUPS.map(({ title }) => title)).toEqual([
       "Quand il parle",
       "Au repos",
@@ -110,7 +110,6 @@ describe("les curseurs de l'onglet Renard", () => {
       "foxStartleWithin",
       "foxStartleLevel",
       "foxStartleGap",
-      "foxEndWarning",
       "foxOvertimeGap",
       "foxLateYawnMin",
       "foxLateYawnMax",
@@ -203,7 +202,6 @@ describe("les curseurs de l'onglet Renard", () => {
       "Durée de cette hausse",
       "Level du son à dépasser",
       "Écart entre deux sursauts",
-      "Avertissement avant la fin",
       "Écart entre deux rappels de fin",
       "Bâillement tardif : au plus tôt",
       "Bâillement tardif : au plus tard",
@@ -326,7 +324,10 @@ describe("les listes de phrases de l'onglet Renard", () => {
       "foxComebackToChat",
       "foxBalanceAlerts",
       "foxHourPhrases",
+      "foxEndWarningMarks",
       "foxEndWarningPhrases",
+      "foxEndSoonPhrases",
+      "foxEndPanicPhrases",
       "foxEndPhrases",
       "foxOvertimePhrases",
       "foxBedtimePhrases",
@@ -390,7 +391,10 @@ describe("les listes de phrases de l'onglet Renard", () => {
     ]);
     expect(FOX_GROUPS.find(({ title }) => title === "Heure du live")?.lists?.map(({ key }) => key)).toEqual([
       "foxHourPhrases",
+      "foxEndWarningMarks",
       "foxEndWarningPhrases",
+      "foxEndSoonPhrases",
+      "foxEndPanicPhrases",
       "foxEndPhrases",
       "foxOvertimePhrases",
       "foxBedtimePhrases",
@@ -429,8 +433,8 @@ describe("les listes de phrases de l'onglet Renard", () => {
 });
 
 describe("les clés de chaque onglet", () => {
-  it("sont cent neuf pour le renard : ses soixante curseurs, ses quarante listes, ses deux heures, les cases de l'accueil, des remerciements, du retour et du bilan, la voix et les deux cases de la lecture du tchat", () => {
-    expect(FOX_KEYS).toHaveLength(109);
+  it("sont cent onze pour le renard : ses cinquante-neuf curseurs, ses quarante-trois listes, ses deux heures, les cases de l'accueil, des remerciements, du retour et du bilan, la voix et les deux cases de la lecture du tchat", () => {
+    expect(FOX_KEYS).toHaveLength(111);
     expect(FOX_KEYS).toContain("chatBots");
     expect(FOX_KEYS).toContain("foxThanksPrediction");
     expect(FOX_KEYS).toContain("foxThanksPredictionNoLoser");
@@ -497,6 +501,41 @@ describe("les clés de chaque onglet", () => {
     const effective = { threshold: -40, foxBounce: 0.03, foxVoice: "Microsoft Claude" };
     expect(isDefaultTab(FOX_KEYS, {}, {}, effective)).toBe(true);
     expect(isDefaultTab(FOX_KEYS, { foxBounce: 0.05 }, {}, effective)).toBe(false);
+  });
+});
+
+describe("les avertissements de la fin dans l'onglet Renard", () => {
+  const list = (key: string) => {
+    const found = FOX_LISTS.find((candidate) => candidate.key === key);
+    if (!found) throw new Error(`liste absente : ${key}`);
+    return found;
+  };
+
+  it("règlent les paliers en minutes avant la fin prévue, une ligne par palier", () => {
+    expect(list("foxEndWarningMarks").help).toContain(
+      "Une ligne par palier, en minutes avant la fin prévue.",
+    );
+    expect(defaults.foxEndWarningMarks).toEqual(["60", "30", "15", "10", "5", "2", "1"]);
+  });
+
+  it("disent la tranche de chaque ton : plus de 15 min, de 15 à 3 min, 2 min et moins avant la fin", () => {
+    expect(list("foxEndWarningPhrases").help).toBe("Dit à Fenysk, plus de 15 min avant la fin.");
+    expect(list("foxEndSoonPhrases").help).toBe("Dit à Fenysk, de 15 à 3 min avant la fin.");
+    expect(list("foxEndPanicPhrases").help).toBe("Dit à Fenysk, 2 min et moins avant la fin.");
+  });
+
+  it("n'ont plus de curseur d'avertissement : le réglage est remplacé par les paliers", () => {
+    expect(FOX_KEYS).not.toContain("foxEndWarning");
+    expect(FOX_KEYS).toContain("foxEndWarningMarks");
+    expect(defaults).not.toHaveProperty("foxEndWarning");
+  });
+
+  it("ont, par défaut, des phrases qui disent le temps restant dans {reste}", () => {
+    for (const key of ["foxEndWarningPhrases", "foxEndSoonPhrases", "foxEndPanicPhrases"]) {
+      const phrases = defaults[key] as string[];
+      expect(phrases.length, key).toBeGreaterThanOrEqual(2);
+      for (const phrase of phrases) expect(phrase, key).toContain("{reste}");
+    }
   });
 });
 

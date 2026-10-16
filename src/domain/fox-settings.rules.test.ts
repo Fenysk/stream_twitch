@@ -61,8 +61,10 @@ const fox = {
   foxStartleGap: 30_000,
   foxHourPhrases: ["{heures} de live."],
   foxEndTime: "",
-  foxEndWarning: 1_800_000,
+  foxEndWarningMarks: ["60", "30", "15", "10", "5", "2", "1"],
   foxEndWarningPhrases: ["Plus que {minutes} minutes."],
+  foxEndSoonPhrases: ["Plus que {reste} !"],
+  foxEndPanicPhrases: ["{reste} !"],
   foxEndPhrases: ["C'est l'heure !"],
   foxOvertimeGap: 600_000,
   foxOvertimePhrases: ["Il est {maintenant}."],
@@ -456,7 +458,7 @@ describe("les réglages fox*", () => {
   });
 
   it("règlent l'heure du live : des durées strictement positives, les bâillements tardifs du plus court au plus long", () => {
-    for (const key of ["foxEndWarning", "foxOvertimeGap", "foxLateYawnMin", "foxLateYawnMax"] as const) {
+    for (const key of ["foxOvertimeGap", "foxLateYawnMin", "foxLateYawnMax"] as const) {
       expect(issuesOf(toEffectiveSettings(defaults, { [key]: 0 }))[0]?.path, key).toBe(key);
     }
     expect(issuesOf(toEffectiveSettings(defaults, { foxLateYawnMin: 700_000 }))).toEqual([
@@ -466,6 +468,28 @@ describe("les réglages fox*", () => {
       },
     ]);
     expect(toEffectiveSettings(defaults, { foxLateYawnMin: 600_000 }).ok).toBe(true);
+  });
+
+  it("veulent des paliers d'avertissement entiers : un nombre de minutes de 1 ou plus par ligne, ou aucun", () => {
+    expect(toEffectiveSettings(defaults, { foxEndWarningMarks: ["60", "30", "1"] }).ok).toBe(true);
+    expect(toEffectiveSettings(defaults, { foxEndWarningMarks: [] }).ok).toBe(true);
+    expect(issuesOf(toEffectiveSettings(defaults, { foxEndWarningMarks: ["30", "bientôt"] }))[0]?.path).toBe(
+      "foxEndWarningMarks.1",
+    );
+    for (const line of ["0", "-5", "1,5", "", " 5"]) {
+      expect(issuesOf(toEffectiveSettings(defaults, { foxEndWarningMarks: [line] }))[0]?.path, line).toBe(
+        "foxEndWarningMarks.0",
+      );
+    }
+    expect(issuesOf(toEffectiveSettings(defaults, { foxEndWarningMarks: ["x"] }))[0]?.message).toBe(
+      "chaque ligne doit être un nombre entier de minutes, 1 ou plus",
+    );
+  });
+
+  it("refusent l'ancien curseur foxEndWarning : le réglage n'existe plus", () => {
+    const local = toNextLocal({}, { foxEndWarning: 1_800_000 });
+    expect(local.ok).toBe(false);
+    expect(SettingsSchema.safeParse({ ...head, foxEndWarning: 1_800_000 }).success).toBe(false);
   });
 
   it("veulent une fin prévue HH:MM de 00:00 à 23:59, ou vide pour n'en avoir aucune", () => {
@@ -486,10 +510,12 @@ describe("les réglages fox*", () => {
     }
   });
 
-  it("changent les cinq listes de l'heure du live dans settings.local.json, chacune pouvant être vide", () => {
+  it("changent les sept listes de l'heure du live dans settings.local.json, chacune pouvant être vide", () => {
     const keys = [
       "foxHourPhrases",
       "foxEndWarningPhrases",
+      "foxEndSoonPhrases",
+      "foxEndPanicPhrases",
       "foxEndPhrases",
       "foxOvertimePhrases",
       "foxBedtimePhrases",

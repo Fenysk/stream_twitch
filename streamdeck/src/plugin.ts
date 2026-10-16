@@ -1,4 +1,7 @@
 import streamDeck from "@elgato/streamdeck";
+import { END_LATER_ACTION_UUID, END_SOONER_ACTION_UUID } from "./action-ids";
+import { EndTimeAction } from "./end-time-action";
+import { EndTimeKeys } from "./end-time-keys";
 import { CYCLE_BEHAVIOUR, PRESET_BEHAVIOUR, TOGGLE_BEHAVIOUR } from "./key-behaviours";
 import { PhraseAction } from "./phrase-action";
 import { SettingKeyAction } from "./setting-key-action";
@@ -14,5 +17,8 @@ streamDeck.actions.registerAction(new SettingKeyAction(feed, TOGGLE_BEHAVIOUR));
 streamDeck.actions.registerAction(new SettingKeyAction(feed, CYCLE_BEHAVIOUR));
 streamDeck.actions.registerAction(new SettingKeyAction(feed, PRESET_BEHAVIOUR));
 streamDeck.actions.registerAction(new PhraseAction(serverUrl));
+const endKeys = new EndTimeKeys(feed, Date.now, streamDeck.logger);
+streamDeck.actions.registerAction(new EndTimeAction(END_LATER_ACTION_UUID, "later", endKeys));
+streamDeck.actions.registerAction(new EndTimeAction(END_SOONER_ACTION_UUID, "sooner", endKeys));
 
 await streamDeck.connect();

@@ -17,8 +17,10 @@ const settings: Settings = {
   delay: 250,
   foxHourPhrases: ["Ding ! {heures} de live."],
   foxEndTime: "00:00",
-  foxEndWarning: 30 * MINUTE,
+  foxEndWarningMarks: ["30"],
   foxEndWarningPhrases: ["Plus que {minutes} minutes."],
+  foxEndSoonPhrases: ["Pressant : {reste}."],
+  foxEndPanicPhrases: ["Panique : {reste} !"],
   foxEndPhrases: ["{fin}. Le live est fini."],
   foxOvertimeGap: 10 * MINUTE,
   foxOvertimePhrases: ["On avait dit {fin}. Il est {maintenant}. {retard} de rab."],
@@ -291,6 +293,162 @@ describe("createFoxHours : la fin prévue", () => {
     expect(texts().filter((text) => !text.startsWith("Ding"))).toEqual([
       "On avait dit minuit. Il est minuit 21. 21 minutes de rab.",
     ]);
+  });
+});
+
+describe("createFoxHours : les paliers d'avertissement de la fin", () => {
+  const MARKS = ["60", "30", "15", "10", "5", "2", "1"];
+  // Une fin à 23 h, un ton par liste : le texte dit quelle liste a parlé.
+  const escalating: Settings = {
+    ...withoutHours,
+    foxEndTime: "23:00",
+    foxEndWarningMarks: MARKS,
+    foxEndWarningPhrases: ["Calme {reste}."],
+    foxEndSoonPhrases: ["Pressant {reste}."],
+    foxEndPanicPhrases: ["Panique {reste} !"],
+  };
+  const clockOf = (when: number): string => new Date(when).toTimeString().slice(0, 5);
+
+  // Le temps passe minute par minute de `from` à `to` : chaque annonce avec l'heure à laquelle elle est tombée.
+  const run = (
+    { goTo, state, texts }: ReturnType<typeof setup>,
+    from: number,
+    to: number,
+  ): [string, string][] => {
+    const said: [string, string][] = [];
+    for (let when = from; when <= to; when += MINUTE) {
+      const before = texts().length;
+      goTo(when);
+      for (const text of texts().slice(before)) said.push([clockOf(state.now), text]);
+    }
+    return said;
+  };
+
+  it("dit chaque palier à sa minute, dans la liste de son ton, puis la fin : un live commencé à 21 h pour une fin à 23 h", () => {
+    expect(run(setup(escalating), at(14, 21, 1), at(14, 23))).toEqual([
+      ["22:00", "Calme 1 heure."],
+      ["22:30", "Calme 30 minutes."],
+      ["22:45", "Pressant 15 minutes."],
+      ["22:50", "Pressant 10 minutes."],
+      ["22:55", "Pressant 5 minutes."],
+      ["22:58", "Panique 2 minutes !"],
+      ["22:59", "Panique 1 minute !"],
+      ["23:00", "23 heures. Le live est fini."],
+    ]);
+  });
+
+  it("ne dit pas un palier antérieur au début du live : commencé à 22 h 40, seuls 15, 10, 5, 2 et 1 sonnent", () => {
+    const live = setup(escalating, null);
+    live.state.now = at(14, 22, 40);
+    live.state.broadcast({ isLive: true, duration: 0 });
+    expect(run(live, at(14, 22, 41), at(14, 22, 59)).map(([, text]) => text)).toEqual([
+      "Pressant 15 minutes.",
+      "Pressant 10 minutes.",
+      "Pressant 5 minutes.",
+      "Panique 2 minutes !",
+      "Panique 1 minute !",
+    ]);
+  });
+
+  it("ne dit pas un palier déjà passé à la découverte d'un live en cours", () => {
+    const live = setup(escalating, null);
+    live.state.now = at(14, 22, 52);
+    live.state.broadcast({ isLive: true, duration: 2 * HOUR });
+    live.goTo(at(14, 22, 53));
+    expect(live.texts()).toEqual([]);
+    expect(run(live, at(14, 22, 54), at(14, 22, 59)).map(([, text]) => text)).toEqual([
+      "Pressant 5 minutes.",
+      "Panique 2 minutes !",
+      "Panique 1 minute !",
+    ]);
+  });
+
+  it("ne redit rien de passé quand les paliers changent en plein live, et dit les nouveaux à venir", () => {
+    const live = setup(escalating);
+    const first = run(live, at(14, 21, 1), at(14, 22, 35));
+    expect(first.map(([, text]) => text)).toEqual(["Calme 1 heure.", "Calme 30 minutes."]);
+    live.hours.update({ ...escalating, foxEndWarningMarks: ["60", "45", "30", "20", "10"] });
+    live.goTo(at(14, 22, 36));
+    expect(live.texts()).toHaveLength(2);
+    expect(run(live, at(14, 22, 37), at(14, 22, 59)).map(([clock, text]) => `${clock} ${text}`)).toEqual([
+      "22:40 Calme 20 minutes.",
+      "22:50 Pressant 10 minutes.",
+    ]);
+  });
+
+  it("ne dit que le dernier quand plusieurs paliers sont dus d'un coup", () => {
+    const { goTo, texts } = setup(escalating);
+    goTo(at(14, 22, 47));
+    expect(texts()).toEqual(["Pressant 15 minutes."]);
+  });
+
+  it("lit les paliers sans doublon ni ordre : « 1 », « 5 », « 5 », « 60 » disent trois avertissements", () => {
+    const live = setup({ ...escalating, foxEndWarningMarks: ["1", "5", "5", "60"] });
+    expect(run(live, at(14, 21, 1), at(14, 22, 59)).map(([clock, text]) => `${clock} ${text}`)).toEqual([
+      "22:00 Calme 1 heure.",
+      "22:55 Pressant 5 minutes.",
+      "22:59 Panique 1 minute !",
+    ]);
+  });
+
+  it("n'avertit pas sans palier, mais annonce la fin", () => {
+    const live = setup({ ...escalating, foxEndWarningMarks: [] });
+    expect(run(live, at(14, 21, 1), at(14, 23)).map(([, text]) => text)).toEqual([
+      "23 heures. Le live est fini.",
+    ]);
+  });
+
+  it("tourne chaque avertissement vers Fenysk, urgent et jamais coupé par sa voix", () => {
+    const { goTo, pushed } = setup(escalating);
+    for (const [hours, minutes] of [
+      [22, 0],
+      [22, 45],
+      [22, 58],
+    ] as const)
+      goTo(at(14, hours, minutes));
+    expect(pushed).toHaveLength(3);
+    for (const item of pushed) {
+      expect(item).toMatchObject({ kind: "hours", isCuttable: false, isUrgent: true });
+      expect(item.toShow()).toEqual(ADDRESS_MODE);
+    }
+  });
+
+  it("garde le nombre dans {minutes} et l'heure de la fin dans {fin} pour les trois tons", () => {
+    const { goTo, texts } = setup({
+      ...escalating,
+      foxEndWarningPhrases: ["{minutes} min avant {fin}."],
+      foxEndSoonPhrases: ["{minutes} min avant {fin} !"],
+      foxEndPanicPhrases: ["{minutes} min avant {fin} !!"],
+    });
+    for (const [hours, minutes] of [
+      [22, 30],
+      [22, 50],
+      [22, 59],
+    ] as const)
+      goTo(at(14, hours, minutes));
+    expect(texts()).toEqual([
+      "30 min avant 23 heures.",
+      "10 min avant 23 heures !",
+      "1 min avant 23 heures !!",
+    ]);
+  });
+
+  it("nomme chaque ton dans le journal, et le dit quand une liste est vide", () => {
+    const { goTo, logs } = setup({ ...escalating, foxEndSoonPhrases: [] });
+    goTo(at(14, 22, 30));
+    expect(logs.at(-1)).toBe("Renard : avertissement calme de la fin prévue : « Calme 30 minutes. »");
+    goTo(at(14, 22, 45));
+    expect(logs.at(-1)).toBe(
+      "Renard : aucune phrase possible pour avertissement pressant de la fin prévue, rien n'est dit.",
+    );
+    goTo(at(14, 22, 58));
+    expect(logs.at(-1)).toBe("Renard : avertissement paniqué de la fin prévue : « Panique 2 minutes ! »");
+  });
+
+  it("tire les phrases de chaque ton sans répéter avant d'avoir tout dit", () => {
+    const { goTo, texts } = setup({ ...escalating, foxEndSoonPhrases: ["A {reste}", "B {reste}"] });
+    for (const minutes of [45, 50, 55]) goTo(at(14, 22, minutes));
+    expect(texts()).toEqual(["A 15 minutes", "B 10 minutes", "A 5 minutes"]);
   });
 });
 
