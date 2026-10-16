@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { RawMessage } from "./chat.types";
 import type { Settings } from "./settings.schema";
-import { isFoxReward, isLurk, SOMEONE, toRewardKind, toThanksPlan, toThanksRules } from "./thanks.rules";
+import {
+  isFlinchReward,
+  isFoxReward,
+  isLurk,
+  SOMEONE,
+  toRewardKind,
+  toThanksPlan,
+  toThanksRules,
+} from "./thanks.rules";
 
 const message: RawMessage = {
   id: "m",
@@ -336,6 +344,24 @@ describe("isFoxReward : les récompenses du renard, d'après les réglages", () 
   it("ne reconnaît pas une autre récompense, ni rien quand les listes manquent", () => {
     expect(isFoxReward("À boire !", settings)).toBe(false);
     expect(isFoxReward("Clasher Fenysk", {})).toBe(false);
+  });
+});
+
+describe("isFlinchReward : les récompenses qui choquent le renard, d'après les réglages", () => {
+  const settings = { foxFlinchRewards: ["Prout.", "Ouille"] };
+
+  it("reconnaît un titre de la liste, sans tenir compte des majuscules ni des espaces aux bords", () => {
+    expect(isFlinchReward("Prout.", settings)).toBe(true);
+    expect(isFlinchReward("  prout. ", settings)).toBe(true);
+    expect(isFlinchReward("OUILLE", settings)).toBe(true);
+  });
+
+  it("ne reconnaît ni un autre titre, ni un titre qui contient seulement le bon, ni rien quand la liste manque ou est vide", () => {
+    expect(isFlinchReward("À boire !", settings)).toBe(false);
+    expect(isFlinchReward("Prout", settings)).toBe(false);
+    expect(isFlinchReward("Prout. deux fois", settings)).toBe(false);
+    expect(isFlinchReward("Prout.", {})).toBe(false);
+    expect(isFlinchReward("Prout.", { foxFlinchRewards: [] })).toBe(false);
   });
 });
 

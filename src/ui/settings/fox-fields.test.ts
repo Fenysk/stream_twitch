@@ -17,7 +17,7 @@ import { SLIDER_KEYS } from "./head-fields";
 import { isDefaultTab, toChanges, toFieldErrors } from "./settings-changes";
 
 // Les réglages de chaque onglet, comme les onglets les désignent à « Revenir aux valeurs par défaut » : la tête (ses six
-// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses cinquante-neuf curseurs, ses quarante-trois listes, ses deux heures, la voix et six cases).
+// curseurs et l'expression), le tchat (ses quatre curseurs, deux choix et une case), le renard (ses soixante curseurs, ses quarante-quatre listes, ses deux heures, la voix et six cases).
 const HEAD_KEYS = [...SLIDER_KEYS, "expression"];
 const CHAT_KEYS = [
   ...CHAT_SLIDERS.map(({ key }) => key),
@@ -37,7 +37,7 @@ const labelsOf = (key: string): string[] => spec(key).steps.map(({ label }) => l
 const valuesOf = (key: string): number[] => spec(key).steps.map(({ value }) => value);
 
 describe("les curseurs de l'onglet Renard", () => {
-  it("sont cinquante-neuf : cinquante-quatre pour l'animation en dix-huit groupes, cinq pour la lecture du tchat", () => {
+  it("sont soixante : cinquante-cinq pour l'animation en dix-huit groupes, cinq pour la lecture du tchat", () => {
     expect(FOX_GROUPS.map(({ title }) => title)).toEqual([
       "Quand il parle",
       "Au repos",
@@ -93,6 +93,7 @@ describe("les curseurs de l'onglet Renard", () => {
       "foxJoyDuration",
       "foxRaidDuration",
       "foxTalkativeMessages",
+      "foxFlinchDelay",
       "foxShoutThreshold",
       "foxShoutMerge",
       "foxShoutCount",
@@ -135,6 +136,14 @@ describe("les curseurs de l'onglet Renard", () => {
     expect(labelsOf("foxReadGap").at(-1)).toBe("60 s");
     expect(valuesOf("foxReadGap")).toContain(10_000);
     expect(valuesOf("foxReadQueueSize")).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  it("règlent le délai du flinch de 0 à 3 s par pas de 100 ms, avec 1 s en repli", () => {
+    expect(labelsOf("foxFlinchDelay").slice(0, 3)).toEqual(["0 s", "0,1 s", "0,2 s"]);
+    expect(labelsOf("foxFlinchDelay").at(-1)).toBe("3 s");
+    expect(spec("foxFlinchDelay").steps).toHaveLength(31);
+    expect(valuesOf("foxFlinchDelay")).toContain(1000);
+    expect(spec("foxFlinchDelay").fallback).toBe(1000);
   });
 
   it("règlent les majuscules permises de 5 à 60 caractères, par pas de 5", () => {
@@ -185,6 +194,7 @@ describe("les curseurs de l'onglet Renard", () => {
       "Durée du saut de joie",
       "Durée du long coucou d'un raid",
       "Messages d'un viewer très impliqué",
+      "Délai avant qu'il se retourne",
       "Seuil d'un cri",
       "Cris collés : écart maximum",
       "Nombre de cris avant une phrase",
@@ -317,6 +327,7 @@ describe("les listes de phrases de l'onglet Renard", () => {
       "foxWakeRewards",
       "foxThanksWakeAsleep",
       "foxThanksWakeAwake",
+      "foxFlinchRewards",
       "foxShouts",
       "foxTunnelToFenysk",
       "foxTunnelToChat",
@@ -372,6 +383,7 @@ describe("les listes de phrases de l'onglet Renard", () => {
       "foxWakeRewards",
       "foxThanksWakeAsleep",
       "foxThanksWakeAwake",
+      "foxFlinchRewards",
     ]);
     expect(FOX_GROUPS.find(({ title }) => title === "Relance")?.lists?.map(({ key }) => key)).toEqual([
       "foxJabs",
@@ -433,13 +445,15 @@ describe("les listes de phrases de l'onglet Renard", () => {
 });
 
 describe("les clés de chaque onglet", () => {
-  it("sont cent onze pour le renard : ses cinquante-neuf curseurs, ses quarante-trois listes, ses deux heures, les cases de l'accueil, des remerciements, du retour et du bilan, la voix et les deux cases de la lecture du tchat", () => {
-    expect(FOX_KEYS).toHaveLength(111);
+  it("sont cent treize pour le renard : ses soixante curseurs, ses quarante-quatre listes, ses deux heures, les cases de l'accueil, des remerciements, du retour et du bilan, la voix et les deux cases de la lecture du tchat", () => {
+    expect(FOX_KEYS).toHaveLength(113);
+    expect(FOX_KEYS).toContain("foxFlinchDelay");
     expect(FOX_KEYS).toContain("chatBots");
     expect(FOX_KEYS).toContain("foxThanksPrediction");
     expect(FOX_KEYS).toContain("foxThanksPredictionNoLoser");
     expect(FOX_KEYS).toContain("foxClashRewards");
     expect(FOX_KEYS).toContain("foxWakeRewards");
+    expect(FOX_KEYS).toContain("foxFlinchRewards");
     expect(FOX_KEYS).toContain("foxRaidDuration");
     expect(FOX_KEYS).toContain("foxThanksRaid");
     expect(FOX_KEYS).toContain("foxThanksRaidGeneric");

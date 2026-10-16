@@ -151,6 +151,8 @@ const FOX_KEYS: readonly string[] = [
   "foxClashRewards",
   "foxClashIntros",
   "foxWakeRewards",
+  "foxFlinchRewards",
+  "foxFlinchDelay",
   "foxThanksWakeAsleep",
   "foxThanksWakeAwake",
   "foxThanksPrediction",
@@ -423,10 +425,13 @@ export const SettingsFieldsSchema = z
     foxThanksRaid: phraseList(true).optional(),
     foxThanksRaidGeneric: phraseList(true).optional(),
     // Les récompenses de points de chaîne, reconnues par leur titre (une liste vide : ignorées) : « Clasher Fenysk » (une pique
-    // tout de suite, précédée d'une phrase d'intro) et « Réveiller Jean-Renard » (une phrase selon qu'il dormait ou non).
+    // tout de suite, précédée d'une phrase d'intro), « Réveiller Jean-Renard » (une phrase selon qu'il dormait ou non) et celles
+    // qui le choquent, le délai (ms) après le départ de leur son (0 : en même temps).
     foxClashRewards: phraseList(false).optional(),
     foxClashIntros: phraseList(true).optional(),
     foxWakeRewards: phraseList(false).optional(),
+    foxFlinchRewards: phraseList(false).optional(),
+    foxFlinchDelay: nonNegative().int("doit être un nombre entier").optional(),
     foxThanksWakeAsleep: phraseList(true).optional(),
     foxThanksWakeAwake: phraseList(true).optional(),
     // Une prédiction terminée : la phrase dite au tchat avec les perdants et l'issue qu'ils ont choisie, et celle de personne.
@@ -644,6 +649,8 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   foxClashRewards: true,
   foxClashIntros: true,
   foxWakeRewards: true,
+  foxFlinchRewards: true,
+  foxFlinchDelay: true,
   foxThanksWakeAsleep: true,
   foxThanksWakeAwake: true,
   foxThanksPrediction: true,

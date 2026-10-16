@@ -665,3 +665,89 @@ describe("createSoundQueue : la phrase du renard suit le son", () => {
     expect(settled).toEqual(["red-1@reward-rire:CANCELED"]);
   });
 });
+
+describe("createSoundQueue : onPlay suit le départ du son", () => {
+  it("l'appelle une fois, juste après avoir envoyé le son à la page", () => {
+    const { queue, connect } = setup();
+    const page = connect();
+    const sent: number[] = [];
+    queue.redeem(spend("red-1", "rire0001"), undefined, () => sent.push(page.events.length));
+    expect(sent).toEqual([1]);
+    expect(page.events[0]).toMatchObject({ kind: "play", soundId: "rire0001" });
+    queue.finish("play1", "ended");
+    expect(sent).toEqual([1]);
+  });
+
+  it("ne l'appelle pas tant qu'un autre son joue devant lui, puis l'appelle quand c'est son tour", () => {
+    const { queue, connect } = setup();
+    connect();
+    let count = 0;
+    queue.redeem(spend("red-1", "rire0001"));
+    queue.redeem(spend("red-2", "bravo002"), undefined, () => {
+      count += 1;
+    });
+    expect(count).toBe(0);
+    queue.finish("play1", "ended");
+    expect(count).toBe(1);
+    queue.finish("play2", "ended");
+    expect(count).toBe(1);
+  });
+
+  it("l'appelle aussi quand le son rate ensuite : le départ a eu lieu", () => {
+    const { queue, connect } = setup();
+    connect();
+    let count = 0;
+    queue.redeem(spend("red-1", "rire0001"), undefined, () => {
+      count += 1;
+    });
+    queue.finish("play1", "failed", "fichier illisible");
+    expect(count).toBe(1);
+  });
+
+  it("ne l'appelle jamais sans page /sounds connectée", async () => {
+    const { queue, connect } = setup();
+    let count = 0;
+    queue.redeem(spend("red-1", "rire0001"), undefined, () => {
+      count += 1;
+    });
+    await flush();
+    connect();
+    await flush();
+    expect(count).toBe(0);
+  });
+
+  it("ne l'appelle jamais quand le fichier du son manque", async () => {
+    const { queue, connect, missingFiles } = setup();
+    connect();
+    missingFiles.add("rire0001");
+    let count = 0;
+    queue.redeem(spend("red-1", "rire0001"), undefined, () => {
+      count += 1;
+    });
+    await flush();
+    expect(count).toBe(0);
+  });
+
+  it("ne l'appelle jamais quand le son est supprimé pendant l'attente, coupé avant de jouer, ou que la page se ferme avant", async () => {
+    const { queue, connect, library } = setup();
+    const page = connect();
+    let count = 0;
+    const onPlay = () => {
+      count += 1;
+    };
+    queue.redeem(spend("red-1", "rire0001"));
+    queue.redeem(spend("red-2", "bravo002"), undefined, onPlay);
+    library.delete("bravo002");
+    queue.finish("play1", "ended");
+    await flush();
+    queue.redeem(spend("red-3", "rire0001"));
+    queue.redeem(spend("red-4", "zut00003"), undefined, onPlay);
+    queue.stop();
+    await flush();
+    queue.redeem(spend("red-5", "rire0001"));
+    queue.redeem(spend("red-6", "clash0004"), undefined, onPlay);
+    page.disconnect();
+    await flush();
+    expect(count).toBe(0);
+  });
+});

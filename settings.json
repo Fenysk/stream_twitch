@@ -338,6 +338,8 @@
   "foxClashRewards": ["Clasher Fenysk"],
   "foxClashIntros": ["{user} m'a payé pour te dire ça :"],
   "foxWakeRewards": ["Réveiller Jean-Renard"],
+  "foxFlinchRewards": ["Prout."],
+  "foxFlinchDelay": 1000,
   "foxThanksWakeAsleep": ["Quoi ?! Je dormais, moi !", "Qui m'a réveillé ? C'est toi, {user} ?"],
   "foxThanksWakeAwake": ["Je dors pas, {user}. Je réfléchis."],
   "foxThanksPrediction": [

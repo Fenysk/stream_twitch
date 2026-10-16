@@ -485,7 +485,15 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
   },
   {
     title: "Récompenses de points de chaîne",
-    sliders: [],
+    sliders: [
+      {
+        key: "foxFlinchDelay",
+        label: "Délai avant qu'il se retourne",
+        help: "Compté depuis le départ du son.",
+        steps: toSteps(0, 3000, 100, toSeconds),
+        fallback: 1000,
+      },
+    ],
     lists: [
       {
         key: "foxClashRewards",
@@ -516,6 +524,12 @@ export const FOX_GROUPS: readonly FoxGroup[] = [
         label: "Réveil : il était visible",
         help: "Dite au tchat, sans rien montrer avant.",
         rows: 3,
+      },
+      {
+        key: "foxFlinchRewards",
+        label: "Titres des récompenses qui le choquent",
+        help: "Un titre par ligne, comme sur Twitch (majuscules ignorées). Après le délai ci-dessus (0 : en même temps), compté depuis le départ du son de la récompense, il se tourne vers Fenysk, la tête choquée, le temps d'une réaction. Sans son relié : tout de suite. Liste vide : rien.",
+        rows: 2,
       },
     ],
   },

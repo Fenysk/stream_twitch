@@ -4,7 +4,7 @@ import { toChatChannel } from "../../domain/chat-settings.rules";
 import type { ExpressionRef } from "../../domain/head.types";
 import { toInstant } from "../../domain/instant.rules";
 import type { Settings } from "../../domain/settings.schema";
-import { isFoxReward } from "../../domain/thanks.rules";
+import { isFlinchReward, isFoxReward } from "../../domain/thanks.rules";
 import { createChatClient } from "../../infra/chat.client";
 import { createEmoteClient } from "../../infra/emotes.client";
 import { createEmoteStore } from "../../infra/emotes.repository";
@@ -481,6 +481,9 @@ export function startRuntime(): Runtime {
     jab,
     insults,
     isReserved,
+    isFlinch: (title) => isFlinchReward(title, settings.getState().effective),
+    getFlinchDelay: () => settings.getState().effective.foxFlinchDelay ?? 0,
+    schedule,
     random: Math.random,
     log,
   });

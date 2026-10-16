@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-16 — Une récompense de `foxFlinchRewards` choque le renard `foxFlinchDelay` après le départ de son son
+
+**Contexte.** « Prout. » joue déjà un son de la soundboard ; Fenysk veut que Jean-Renard se tourne vers lui, choqué, mais pas au même instant : testé dans OBS, 1 s après le départ du son.
+**Décision.** `foxFlinchRewards` (une liste de titres, comme `foxClashRewards`) : le titre d'un rachat qui y figure déclenche `flinch` (`mode.flash`) `foxFlinchDelay` ms (1000 par défaut, 0 : en même temps, lu au départ du son) après que la queue a envoyé le son à la page /sounds (`redeem(…, onPlay)`), tout de suite si la récompense n'a pas de son. La récompense n'est pas réservée : son son et ses phrases restent. `lexique.json` : le sens de `flinch` et de `reward` s'élargit.
+**Renoncement.** Un `flinch` au rachat, avant le son : il aurait fini avant que le son ne parte si la queue attend. Un mécanisme réservé comme clash et wake : « Prout. » perdrait ses phrases. Un délai en dur : Fenysk le règle d'après le son.
+
 ## 2026-10-16 — La fin prévue garde sa date : `foxEndTime` (« HH:MM ») devient `foxEndAt` (un instant), et le serveur l'efface une fois le live fini
 
 **Contexte.** « 15:00 » n'a pas de date : la fin réglée aujourd'hui s'appliquerait aussi au live de demain. La valeur survit déjà aux redémarrages (settings.local.json), elle doit en plus s'effacer une fois passée.

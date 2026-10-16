@@ -91,6 +91,8 @@ const fox = {
   foxClashRewards: ["Clasher Fenysk"],
   foxClashIntros: ["{user} m'a payé pour te dire ça :"],
   foxWakeRewards: ["Réveiller Jean-Renard"],
+  foxFlinchRewards: ["Prout."],
+  foxFlinchDelay: 1000,
   foxThanksWakeAsleep: ["Quoi ?! Je dormais, moi !"],
   foxThanksWakeAwake: ["Je dors pas, {user}. Je réfléchis."],
   foxThanksPrediction: ["Perdants sur « {issue} » : {perdants}. Courage."],
@@ -424,10 +426,20 @@ describe("les réglages fox*", () => {
       expect(issuesOf(toEffectiveSettings(defaults, { [key]: [] }))[0]?.path, key).toBe(key);
       expect(issuesOf(toEffectiveSettings(defaults, { [key]: [""] }))[0]?.path, key).toBe(`${key}.0`);
     }
-    for (const key of ["foxClashRewards", "foxWakeRewards"] as const) {
+    for (const key of ["foxClashRewards", "foxWakeRewards", "foxFlinchRewards"] as const) {
       expect(issuesOf(toEffectiveSettings(defaults, { [key]: [""] }))[0]?.path, key).toBe(`${key}.0`);
       expect(toEffectiveSettings(defaults, { [key]: [] }).ok, key).toBe(true);
       expect(toEffectiveSettings(defaults, { [key]: ["Un titre", "Un autre"] }).ok, key).toBe(true);
+    }
+  });
+
+  it("règlent le délai du flinch : un entier de ms, 0 compris (pas de délai), ni négatif ni décimal", () => {
+    expect(toEffectiveSettings(defaults, { foxFlinchDelay: 0 }).ok).toBe(true);
+    expect(toEffectiveSettings(defaults, { foxFlinchDelay: 1500 }).ok).toBe(true);
+    for (const value of [-1, 0.5]) {
+      expect(issuesOf(toEffectiveSettings(defaults, { foxFlinchDelay: value }))[0]?.path, `${value}`).toBe(
+        "foxFlinchDelay",
+      );
     }
   });
 

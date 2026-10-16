@@ -117,12 +117,16 @@ const startStack = () => {
         spoken.tested.push(text);
         return { ok: true, url: "/api/fox/speech/1", durationMs: 1000 };
       },
+      flash: () => 0,
     },
     sounds: queue,
     phrases,
     jab: { noteActivity: () => undefined },
     insults: toInsultList("connard"),
     isReserved,
+    isFlinch: () => false,
+    getFlinchDelay: () => 0,
+    schedule,
     random: () => 0,
     log: (line) => logs.push(line),
   });

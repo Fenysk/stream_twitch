@@ -33,8 +33,10 @@ export type SoundQueue = {
   play(soundId: string): PlayResult;
   // Une redemption : le son de son reward rejoint la queue, et ses points sont gardés (FULFILLED) s'il joue jusqu'au bout,
   // rendus (CANCELED) sinon. Avec `afterSound`, la queue le lance dès que le son est passé (fini ou raté, jamais coupé) : le
-  // son raté garde alors les points si la phrase est dite. Rend faux, sans rien faire, pour un reward qui n'a pas de son.
-  redeem(redemption: RewardEvent, afterSound?: AfterSound): boolean;
+  // son raté garde alors les points si la phrase est dite. Avec `onPlay`, la queue l'appelle une fois, quand elle envoie le son à
+  // la page /sounds : jamais si le son ne joue pas (pas de page, fichier manquant, son supprimé, coupé avant). Rend faux, sans
+  // rien faire, pour un reward qui n'a pas de son.
+  redeem(redemption: RewardEvent, afterSound?: AfterSound, onPlay?: () => void): boolean;
   // « Couper le son » : le son en cours s'arrête dans la page, la queue se vide.
   stop(): void;
   // La réponse de la page : le son a fini, ou n'a pas pu jouer.
@@ -45,8 +47,14 @@ export type SoundQueue = {
 
 // Une demande de lecture : un son, avec la redemption à marquer quand il a joué (aucune pour « Jouer dans OBS ») et `isManaged` :
 // l'app a créé la récompense et peut marquer ses rachats. Sinon (une récompense qu'Alexis a faite sur Twitch), Twitch le refuse :
-// le son joue, aucun statut n'est demandé. `afterSound` : la phrase du renard qui suit le son.
-type Request = { soundId: string; redemption?: RewardEvent; isManaged?: boolean; afterSound?: AfterSound };
+// le son joue, aucun statut n'est demandé. `afterSound` : la phrase du renard qui suit le son. `onPlay` : appelé quand le son part.
+type Request = {
+  soundId: string;
+  redemption?: RewardEvent;
+  isManaged?: boolean;
+  afterSound?: AfterSound;
+  onPlay?: () => void;
+};
 
 // La fin d'une demande : le son a joué jusqu'au bout, n'a pas pu jouer, ou on l'a coupé (« Couper le son », son supprimé).
 type Ending = "ended" | "failed" | "cut";
@@ -133,6 +141,7 @@ export function createSoundQueue({ library, rewards, createId, schedule, log }: 
       };
       log(`Son « ${sound.title} » : envoyé à la page /sounds.`);
       screen({ kind: "play", playId, soundId: sound.id, version: sound.version, fader: sound.fader });
+      request.onPlay?.();
     }
   };
 
@@ -166,7 +175,7 @@ export function createSoundQueue({ library, rewards, createId, schedule, log }: 
       next();
       return { ok: true };
     },
-    redeem(redemption, afterSound) {
+    redeem(redemption, afterSound, onPlay) {
       const sound = library.getByReward(redemption.rewardId);
       if (!sound) return false;
       const request: Request = {
@@ -174,6 +183,7 @@ export function createSoundQueue({ library, rewards, createId, schedule, log }: 
         redemption,
         isManaged: sound.isManaged,
         ...(afterSound ? { afterSound } : {}),
+        ...(onPlay ? { onPlay } : {}),
       };
       const what = `Rachat « ${redemption.title} » de ${redemption.user}`;
       if (screens.length === 0) {

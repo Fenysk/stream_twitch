@@ -1,4 +1,5 @@
 import { type InsultList, toInsultMatch } from "../domain/chat-insults.rules";
+import { FLINCH_MODE } from "../domain/fox-mode.rules";
 import { isFillable, toFilledPhrase } from "../domain/phrase.rules";
 import { toNextPick } from "../domain/pick.rules";
 import type { RewardEvent } from "../domain/reward.types";
@@ -13,9 +14,9 @@ import type { SoundQueue } from "./sound-queue.usecase";
 
 export type FoxRewardDeps = {
   queue: Pick<FoxQueue, "push">;
-  // « Tester » : le renard dit la phrase tout de suite, comme « Faire parler ».
-  mode: Pick<FoxModeController, "say">;
-  // Le sound de la récompense, s'il en a un : la phrase part quand il se termine.
+  // « Tester » : le renard dit la phrase tout de suite, comme « Faire parler ». `flash` : le flinch d'une récompense qui choque.
+  mode: Pick<FoxModeController, "say" | "flash">;
+  // Le sound de la récompense, s'il en a un : le flinch part peu après son départ, la phrase quand il se termine.
   sounds: Pick<SoundQueue, "redeem">;
   phrases: Pick<RewardPhraseLibrary, "get">;
   // Un rachat est quelque chose qui se passe dans le live : le silence de la relance repart.
@@ -23,13 +24,21 @@ export type FoxRewardDeps = {
   insults: InsultList;
   // Le titre est celui d'une récompense du renard (clash, wake) : son mécanisme reste celui des remerciements.
   isReserved: (title: string) => boolean;
+  // Le titre est celui d'une récompense qui choque le renard (foxFlinchRewards) : elle n'est pas réservée, son sound et ses phrases restent.
+  isFlinch: (title: string) => boolean;
+  // Le délai (ms) entre le départ du sound et le flinch : lu à chaque rachat, 0 : en même temps.
+  getFlinchDelay: () => number;
+  // Programme `callback` dans `ms` ; rend de quoi l'annuler.
+  schedule: (callback: () => void, ms: number) => () => void;
   random: () => number;
   log: (message: string) => void;
 };
 
 export type FoxReward = {
   // Un rachat : son sound se joue (la queue des sounds s'occupe des points), puis le renard dit une phrase de la récompense.
-  // Sans sound, la phrase part tout de suite. La récompense d'un renard (clash, wake) n'a pas de phrase ici.
+  // Sans sound, la phrase part tout de suite. La récompense d'un renard (clash, wake) n'a pas de phrase ici. Une récompense qui
+  // choque le renard (flinch) le tourne vers Fenysk foxFlinchDelay après le départ de son sound, sans sound tout de suite,
+  // avant la phrase.
   redeem(redemption: RewardEvent): void;
   // « Tester » : une phrase de la récompense dite tout de suite, avec Fenysk pour {user}.
   test(rewardId: string): Promise<SpeakResult>;
@@ -45,6 +54,9 @@ export function createFoxReward({
   jab,
   insults,
   isReserved,
+  isFlinch,
+  getFlinchDelay,
+  schedule,
   random,
   log,
 }: FoxRewardDeps): FoxReward {
@@ -84,11 +96,27 @@ export function createFoxReward({
     });
   };
 
+  // Caché ou occupé par un autre show, le renard ne montre rien : le journal ne le dit pas.
+  const flinch = ({ title }: RewardEvent): void => {
+    if (mode.flash(FLINCH_MODE) > 0)
+      log(`Renard : récompense « ${title} », il se tourne vers Fenysk, choqué.`);
+  };
+
+  const flinchAfterDelay = (run: () => void): void => {
+    const delay = getFlinchDelay();
+    if (delay > 0) schedule(run, delay);
+    else run();
+  };
+
   return {
     redeem(redemption) {
       const list = isReserved(redemption.title) ? [] : phrases.get(redemption.rewardId);
       const afterSound = list.length > 0 ? () => say(redemption, list) : undefined;
-      if (sounds.redeem(redemption, afterSound)) return;
+      const flinchNow = isFlinch(redemption.title) ? () => flinch(redemption) : undefined;
+      // Le délai est lu au départ du sound, pas au rachat : la queue peut avoir attendu.
+      const onPlay = flinchNow && (() => flinchAfterDelay(flinchNow));
+      if (sounds.redeem(redemption, afterSound, onPlay)) return;
+      flinchNow?.();
       if (afterSound) void afterSound();
     },
     async test(rewardId) {

@@ -136,13 +136,16 @@ export type RewardKind = "clash" | "wake";
 
 const toTitle = (title: string): string => title.trim().toLowerCase();
 
-// Le titre d'une récompense dit ce qu'elle fait, sans tenir compte des majuscules ni des espaces aux bords ; un autre titre est
-// ignoré. Le même titre dans les deux listes donne le clash.
-export function toRewardKind(title: string, { clash, wake }: RewardTitles): RewardKind | null {
+// Le titre est dans la liste, sans tenir compte des majuscules ni des espaces aux bords.
+const isTitled = (title: string, titles: readonly string[]): boolean => {
   const wanted = toTitle(title);
-  const isTitled = (titles: readonly string[]): boolean => titles.some((other) => toTitle(other) === wanted);
-  if (isTitled(clash)) return "clash";
-  return isTitled(wake) ? "wake" : null;
+  return titles.some((other) => toTitle(other) === wanted);
+};
+
+// Le titre d'une récompense dit ce qu'elle fait ; un autre titre est ignoré. Le même titre dans les deux listes donne le clash.
+export function toRewardKind(title: string, { clash, wake }: RewardTitles): RewardKind | null {
+  if (isTitled(title, clash)) return "clash";
+  return isTitled(title, wake) ? "wake" : null;
 }
 
 // La récompense est l'une de celles du renard (clash, wake) : ses phrases se règlent dans l'onglet Renard, pas avec celles d'une
@@ -151,6 +154,12 @@ export const isFoxReward = (
   title: string,
   { foxClashRewards, foxWakeRewards }: Pick<Settings, "foxClashRewards" | "foxWakeRewards">,
 ): boolean => toRewardKind(title, { clash: foxClashRewards ?? [], wake: foxWakeRewards ?? [] }) !== null;
+
+// Le titre est celui d'une récompense qui choque le renard (`flinch`) : même correspondance que le clash et le réveil.
+export const isFlinchReward = (
+  title: string,
+  { foxFlinchRewards }: Pick<Settings, "foxFlinchRewards">,
+): boolean => isTitled(title, foxFlinchRewards ?? []);
 
 // Les réglages des remerciements : la case, le délai entre deux remerciements nominatifs de follow (ms), le nombre de messages
 // d'un viewer très impliqué, les titres des récompenses, et les phrases de chaque sorte d'évènement.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toInsultList } from "../domain/chat-insults.rules";
+import { FLINCH_MODE, type Show } from "../domain/fox-mode.rules";
 import type { RewardEvent } from "../domain/reward.types";
 import type { Settings } from "../domain/settings.schema";
 import type { SpeakResult } from "./fox.usecase";
@@ -20,32 +21,61 @@ const insults = toInsultList("connard\nsalope");
 
 // Le usecase seul : une file qui garde ce qu'on y pousse, une queue des sons qui ne connaît que certaines récompenses.
 const setup = (
-  options: { phrases?: Record<string, string[]>; soundRewards?: string[]; random?: () => number } = {},
+  options: {
+    phrases?: Record<string, string[]>;
+    soundRewards?: string[];
+    flinchTitles?: string[];
+    // Le délai (ms) du flinch après le départ du sound ; sans lui, 0.
+    flinchDelay?: number;
+    // Ce que `flash` rend : 0, le renard n'est pas visible et rien n'est montré.
+    flashMs?: number;
+    random?: () => number;
+  } = {},
 ) => {
   const phrases: Record<string, string[]> = options.phrases ?? {
     "reward-drink": ["Bois un coup de la part de {user} !"],
   };
   const soundRewards = new Set(options.soundRewards ?? []);
+  const flinchTitles = new Set(options.flinchTitles ?? []);
   const state = {
     activity: 0,
     said: [] as string[],
     speak: { ok: true, url: "/s/1", durationMs: 1000 } as SpeakResult,
+    flinchDelay: options.flinchDelay ?? 0,
   };
+  const timers: { ms: number; callback: () => void }[] = [];
   const pushed: QueueItem[] = [];
-  const soundCalls: { rewardId: string; afterSound: AfterSound | undefined }[] = [];
+  const soundCalls: {
+    rewardId: string;
+    afterSound: AfterSound | undefined;
+    onPlay: (() => void) | undefined;
+  }[] = [];
   const logs: string[] = [];
+  const flashes: Show[] = [];
+  // Ce qui part, dans l'ordre : le flinch du renard et la phrase poussée dans sa file.
+  const events: string[] = [];
   const reward = createFoxReward({
-    queue: { push: (item) => pushed.push(item) },
+    queue: {
+      push(item) {
+        pushed.push(item);
+        events.push("phrase");
+      },
+    },
     mode: {
       async say(text) {
         state.said.push(text);
         return state.speak;
       },
+      flash(show) {
+        flashes.push(show);
+        events.push("flash");
+        return options.flashMs ?? 1000;
+      },
     },
     sounds: {
-      redeem(event, afterSound) {
+      redeem(event, afterSound, onPlay) {
         if (!soundRewards.has(event.rewardId)) return false;
-        soundCalls.push({ rewardId: event.rewardId, afterSound });
+        soundCalls.push({ rewardId: event.rewardId, afterSound, onPlay });
         return true;
       },
     },
@@ -57,10 +87,16 @@ const setup = (
     },
     insults,
     isReserved: (title) => title === "Clasher Fenysk",
+    isFlinch: (title) => flinchTitles.has(title),
+    getFlinchDelay: () => state.flinchDelay,
+    schedule: (callback, ms) => {
+      timers.push({ ms, callback });
+      return () => undefined;
+    },
     random: options.random ?? (() => 0),
     log: (line) => logs.push(line),
   });
-  return { reward, state, pushed, soundCalls, logs };
+  return { reward, state, pushed, soundCalls, logs, flashes, events, timers };
 };
 
 describe("createFoxReward : un rachat sans sound dit une phrase de la récompense", () => {
@@ -167,6 +203,111 @@ describe("createFoxReward : un rachat avec un sound dit sa phrase quand le sound
   });
 });
 
+describe("createFoxReward : une récompense de foxFlinchRewards choque le renard", () => {
+  const prout = { rewardId: "reward-prout", title: "Prout." };
+  const withPhrase = { flinchTitles: ["Prout."], phrases: { "reward-prout": ["Pouah, {user} !"] } };
+
+  it("avec un sound : le flinch part quand la queue envoie le sound à la page, pas avant", () => {
+    const { reward, flashes, soundCalls, logs } = setup({ ...withPhrase, soundRewards: ["reward-prout"] });
+    reward.redeem(spend(prout));
+    expect(soundCalls).toHaveLength(1);
+    expect(flashes).toEqual([]);
+    soundCalls[0]?.onPlay?.();
+    expect(flashes).toEqual([FLINCH_MODE]);
+    expect(logs).toContain("Renard : récompense « Prout. », il se tourne vers Fenysk, choqué.");
+  });
+
+  it("sans sound : le flinch part tout de suite, avant la phrase de la récompense", () => {
+    const { reward, flashes, events, pushed, logs } = setup(withPhrase);
+    reward.redeem(spend(prout));
+    expect(flashes).toEqual([FLINCH_MODE]);
+    expect(events).toEqual(["flash", "phrase"]);
+    expect(pushed.map(({ text }) => text)).toEqual(["Pouah, Alice !"]);
+    expect(logs).toContain("Renard : récompense « Prout. », il se tourne vers Fenysk, choqué.");
+  });
+
+  it("sans sound ni phrases : le flinch part seul", () => {
+    const { reward, flashes, pushed } = setup({ flinchTitles: ["Prout."], phrases: {} });
+    reward.redeem(spend(prout));
+    expect(flashes).toEqual([FLINCH_MODE]);
+    expect(pushed).toEqual([]);
+  });
+
+  it("garde son sound et ses phrases : la phrase est toujours dite après le sound, le flinch n'y change rien", () => {
+    const { reward, soundCalls, pushed, events } = setup({ ...withPhrase, soundRewards: ["reward-prout"] });
+    reward.redeem(spend(prout));
+    soundCalls[0]?.onPlay?.();
+    expect(pushed).toEqual([]);
+    void soundCalls[0]?.afterSound?.();
+    expect(pushed.map(({ text }) => text)).toEqual(["Pouah, Alice !"]);
+    expect(events).toEqual(["flash", "phrase"]);
+  });
+
+  it("ne choque pas pour un titre qui n'est pas dans la liste, avec ou sans sound", () => {
+    const { reward, flashes, soundCalls, logs } = setup({ ...withPhrase, soundRewards: ["reward-drink"] });
+    reward.redeem(spend());
+    reward.redeem(spend({ rewardId: "reward-stretch", title: "Étirement !" }));
+    expect(soundCalls).toHaveLength(1);
+    expect(soundCalls[0]?.onPlay).toBeUndefined();
+    expect(flashes).toEqual([]);
+    expect(logs.filter((line) => line.includes("choqué"))).toEqual([]);
+  });
+
+  it("n'écrit rien dans le journal quand le renard n'est pas visible : rien n'est montré", () => {
+    const { reward, flashes, logs } = setup({ ...withPhrase, flashMs: 0 });
+    reward.redeem(spend(prout));
+    expect(flashes).toEqual([FLINCH_MODE]);
+    expect(logs.filter((line) => line.includes("choqué"))).toEqual([]);
+  });
+});
+
+describe("createFoxReward : le flinch attend foxFlinchDelay après le départ du sound", () => {
+  const prout = { rewardId: "reward-prout", title: "Prout." };
+  const withSound = { flinchTitles: ["Prout."], soundRewards: ["reward-prout"] };
+
+  it("avec un délai de 1000 ms : rien au départ du sound, le flinch part 1000 ms plus tard", () => {
+    const { reward, flashes, soundCalls, timers, logs } = setup({ ...withSound, flinchDelay: 1000 });
+    reward.redeem(spend(prout));
+    soundCalls[0]?.onPlay?.();
+    expect(flashes).toEqual([]);
+    expect(timers.map(({ ms }) => ms)).toEqual([1000]);
+    timers[0]?.callback();
+    expect(flashes).toEqual([FLINCH_MODE]);
+    expect(logs).toContain("Renard : récompense « Prout. », il se tourne vers Fenysk, choqué.");
+  });
+
+  it("avec un délai de 0 : le flinch part au départ du sound, sans minuterie", () => {
+    const { reward, flashes, soundCalls, timers } = setup({ ...withSound, flinchDelay: 0 });
+    reward.redeem(spend(prout));
+    soundCalls[0]?.onPlay?.();
+    expect(flashes).toEqual([FLINCH_MODE]);
+    expect(timers).toEqual([]);
+  });
+
+  it("lit le délai au départ du sound : un réglage changé pendant l'attente de la queue s'applique", () => {
+    const { reward, state, flashes, soundCalls, timers } = setup({ ...withSound, flinchDelay: 1000 });
+    reward.redeem(spend(prout));
+    state.flinchDelay = 250;
+    soundCalls[0]?.onPlay?.();
+    expect(flashes).toEqual([]);
+    expect(timers.map(({ ms }) => ms)).toEqual([250]);
+  });
+
+  it("sans sound : le flinch part tout de suite malgré le délai, sans minuterie", () => {
+    const { reward, flashes, timers } = setup({ flinchTitles: ["Prout."], flinchDelay: 1000 });
+    reward.redeem(spend(prout));
+    expect(flashes).toEqual([FLINCH_MODE]);
+    expect(timers).toEqual([]);
+  });
+
+  it("ne programme rien pour un titre qui n'est pas dans la liste", () => {
+    const { reward, soundCalls, timers } = setup({ ...withSound, flinchDelay: 1000 });
+    reward.redeem(spend({ rewardId: "reward-prout", title: "Autre titre" }));
+    expect(soundCalls[0]?.onPlay).toBeUndefined();
+    expect(timers).toEqual([]);
+  });
+});
+
 describe("createFoxReward : « Tester »", () => {
   it("dit une phrase de la récompense tout de suite, avec Fenysk pour {user}", async () => {
     const { reward, state, pushed } = setup();
@@ -260,7 +401,7 @@ const setupQueue = (options: { hasSound?: boolean } = {}) => {
   const afterSounds: AfterSound[] = [];
   const reward = createFoxReward({
     queue,
-    mode: { say: async () => ({ ok: true, url: "/s/1", durationMs: 1000 }) },
+    mode: { say: async () => ({ ok: true, url: "/s/1", durationMs: 1000 }), flash: () => 0 },
     sounds: {
       redeem(_event, afterSound) {
         if (options.hasSound && afterSound) afterSounds.push(afterSound);
@@ -271,6 +412,9 @@ const setupQueue = (options: { hasSound?: boolean } = {}) => {
     jab: { noteActivity: () => undefined },
     insults,
     isReserved: () => false,
+    isFlinch: () => false,
+    getFlinchDelay: () => 0,
+    schedule: () => () => undefined,
     random: () => 0,
     log: () => undefined,
   });
