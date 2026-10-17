@@ -5,6 +5,7 @@ import {
   type ConfirmedSummary,
   type ConfirmRequest,
 } from "./clip.schema";
+import { isLaughFader } from "./laugh.rules";
 import { STEP_SECONDS } from "./trim.rules";
 
 const EXTENSION = /\.[^./\\]+$/;
@@ -92,7 +93,10 @@ export const toStoredConfirmation = (clip: ConfirmedSummary): ClipConfirmation =
 export const LAUGH_MAX_LENGTH = 64;
 export const LAUGHS_MAX_COUNT = 50;
 
-export type ConfirmChoice = Pick<ClipConfirmation, "title" | "phrase" | "start" | "end" | "laughs">;
+export type ConfirmChoice = Pick<
+  ClipConfirmation,
+  "title" | "phrase" | "start" | "end" | "laughs" | "laughFader"
+>;
 export type ConfirmCheck = { ok: true; value: ConfirmChoice } | { ok: false; message: string };
 
 const toSeconds = (seconds: number): string => `${Number(seconds.toFixed(2))} s`;
@@ -107,7 +111,7 @@ const toLaughsRefusal = (laughs: readonly ClipLaugh[]): string | false =>
     "l'instant d'un rire doit être un nombre positif ou nul");
 
 // Ce qu'Alexis valide : un titre (obligatoire), une phrase (facultative : vide, Jean-Renard se tait), la partie gardée du clip, de
-// `start` à `end`, d'une image au moins, dans la durée du clip, et les rires posés (facultatifs), triés par instant.
+// `start` à `end`, d'une image au moins, dans la durée du clip, les rires posés (facultatifs), triés par instant, et leur volume (facultatif).
 export const toConfirmChoice = (request: ConfirmRequest, duration: number): ConfirmCheck => {
   const title = request.title.trim();
   const phrase = request.phrase.trim();
@@ -120,6 +124,9 @@ export const toConfirmChoice = (request: ConfirmRequest, duration: number): Conf
     (title.length > TITLE_MAX_LENGTH && `le titre ne peut pas dépasser ${TITLE_MAX_LENGTH} caractères`) ||
     (phrase.length > PHRASE_MAX_LENGTH && `la phrase ne peut pas dépasser ${PHRASE_MAX_LENGTH} caractères`) ||
     toLaughsRefusal(laughs) ||
+    (request.laughFader !== undefined &&
+      !isLaughFader(request.laughFader) &&
+      "le volume des rires doit être un nombre entier de 0 à 100") ||
     (start < 0 && "le début ne peut pas être négatif") ||
     (end - start < STEP_SECONDS - 1e-9 && "le début doit précéder la fin d'au moins une image") ||
     (end > duration + END_TOLERANCE_SECONDS &&
@@ -127,7 +134,14 @@ export const toConfirmChoice = (request: ConfirmRequest, duration: number): Conf
   if (refusal) return { ok: false, message: refusal };
   return {
     ok: true,
-    value: { title, phrase, start, end: Math.min(end, duration), ...(laughs.length === 0 ? {} : { laughs }) },
+    value: {
+      title,
+      phrase,
+      start,
+      end: Math.min(end, duration),
+      ...(laughs.length === 0 ? {} : { laughs }),
+      ...(request.laughFader === undefined ? {} : { laughFader: request.laughFader }),
+    },
   };
 };
 

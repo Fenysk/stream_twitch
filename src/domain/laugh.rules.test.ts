@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { ClipConfirmationSchema } from "./clip.schema";
 import {
+  DEFAULT_LAUGH_FADER,
+  isLaughFader,
   isLaughKept,
   isLaughOverEnd,
   toDefaultSound,
   toKnownLaughs,
   toLaughAt,
+  toLaughFader,
   toLaughRank,
   toLaughsJson,
 } from "./laugh.rules";
@@ -183,5 +186,29 @@ describe("toLaughsJson : le JSON d'avant les rires placés", () => {
     expect(toLaughsJson(null)).toBeNull();
     expect(toLaughsJson("texte")).toBe("texte");
     expect(toLaughsJson([legacy])).toEqual([legacy]);
+  });
+});
+
+describe("le volume des rires", () => {
+  it("vaut 100 % tant qu'il n'est pas réglé : le son de la soundboard tel quel", () => {
+    expect(DEFAULT_LAUGH_FADER).toBe(100);
+    expect(toLaughFader(80, undefined)).toBe(80);
+    expect(toLaughFader(80, DEFAULT_LAUGH_FADER)).toBe(80);
+  });
+
+  it("multiplie le fader du sound par le volume des rires : la soundboard reste la base entre les sounds", () => {
+    expect(toLaughFader(80, 50)).toBe(40);
+    expect(toLaughFader(60, 50)).toBe(30);
+    expect(toLaughFader(100, 25)).toBe(25);
+  });
+
+  it("se tait à 0 %", () => {
+    expect(toLaughFader(80, 0)).toBe(0);
+  });
+
+  it("n'accepte qu'un entier de 0 à 100", () => {
+    for (const value of [0, 1, 55, 100]) expect(isLaughFader(value)).toBe(true);
+    for (const value of [-1, 101, 55.5, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(isLaughFader(value)).toBe(false);
   });
 });

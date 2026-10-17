@@ -12,7 +12,8 @@ export type ClipLaugh = z.infer<typeof ClipLaughSchema>;
 // Le JSON écrit à côté d'un clip confirmé (même nom, `.json`) : tout ce qu'Alexis a choisi, et d'où le clip vient. `processedName` :
 // le nom réel du clip brut dans Traités (renommé « (2) » quand le nom y était pris) ; absent des JSON d'avant, `rawName` le remplace.
 // `playCount` : combien de fois l'émission l'a passé (absent : jamais), de quoi passer les moins vus d'abord. `laughs` : les rires posés
-// sur le clip, triés par `at` (absent ou vide : aucun rire). `rawDuration` : la durée du clip brut (s), de quoi placer le tchat sur le
+// sur le clip, triés par `at` (absent ou vide : aucun rire). `laughFader` : le volume de tous les rires du clip, de 0 à 100 % (absent : 100).
+// `rawDuration` : la durée du clip brut (s), de quoi placer le tchat sur le
 // clip. `spikes` : les instants (ms depuis le début du clip confirmé) où son son fait sursauter Jean-Renard ; calculés une fois,
 // absents tant qu'ils ne l'ont pas été.
 export const ClipConfirmationSchema = z.object({
@@ -25,6 +26,7 @@ export const ClipConfirmationSchema = z.object({
   confirmedAt: z.string().min(1),
   playCount: z.number().int().min(0).optional(),
   laughs: z.array(ClipLaughSchema).optional(),
+  laughFader: z.number().int().min(0).max(100).optional(),
   rawDuration: z.number().positive().optional(),
   spikes: z.array(z.number().int().min(0)).optional(),
 });
@@ -59,7 +61,7 @@ export type ClipList = z.infer<typeof ClipListSchema>;
 
 // Ce que l'interface envoie pour valider : le clip brut, son titre, la phrase de Jean-Renard (vide : il se tait) et la partie gardée.
 // Pour modifier un clip confirmé, la même forme : `name` est alors celui de sa vidéo dans Confirmés. `laughs` : les rires posés sur le
-// clip (absent : aucun) ; leur forme se vérifie dans `toConfirmChoice`, qui refuse en français.
+// clip (absent : aucun), `laughFader` : leur volume (absent : 100) ; leur forme se vérifie dans `toConfirmChoice`, qui refuse en français.
 export const ConfirmRequestSchema = z.object({
   name: z.string(),
   title: z.string(),
@@ -67,6 +69,7 @@ export const ConfirmRequestSchema = z.object({
   start: z.number(),
   end: z.number(),
   laughs: z.array(z.object({ at: z.number(), sound: z.string() })).optional(),
+  laughFader: z.number().optional(),
 });
 export type ConfirmRequest = z.infer<typeof ConfirmRequestSchema>;
 

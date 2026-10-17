@@ -218,6 +218,47 @@ describe("les rires d'un clip confirmé", () => {
   });
 });
 
+describe("le volume des rires d'un clip confirmé", () => {
+  it("règle le volume sans recoder, et garde le reste du JSON", async () => {
+    const { library, state, trims } = setup({
+      confirmed: [{ ...clip, laughs: [{ at: 14, sound: "abcd1234" }], spikes: [1000], playCount: 3 }],
+    });
+    expect(
+      (await library.revise({ ...request, laughs: [{ at: 14, sound: "abcd1234" }], laughFader: 40 })).ok,
+    ).toBe(true);
+    expect(trims).toEqual([]);
+    expect(state.updated[0]?.confirmation).toMatchObject({ laughFader: 40, spikes: [1000], playCount: 3 });
+  });
+
+  it("n'a pas besoin du clip brut pour le changer", async () => {
+    const { library, state } = setup({ confirmed: [{ ...clip, processedName: null }] });
+    expect((await library.revise({ ...request, laughFader: 0 })).ok).toBe(true);
+    expect(state.updated[0]?.confirmation.laughFader).toBe(0);
+  });
+
+  it("l'efface quand la demande n'en a pas : absent vaut 100", async () => {
+    const { library, state } = setup({ confirmed: [{ ...clip, laughFader: 40 }] });
+    await library.revise(request);
+    expect(state.updated[0]?.confirmation).not.toHaveProperty("laughFader");
+  });
+
+  it("refuse un volume qui n'est pas un entier de 0 à 100, sans rien écrire", async () => {
+    const { library, state } = setup();
+    expect(await library.revise({ ...request, laughFader: 101 })).toEqual({
+      ok: false,
+      status: 400,
+      message: "le volume des rires doit être un nombre entier de 0 à 100",
+    });
+    expect(state.updated).toEqual([]);
+  });
+
+  it("l'applique aussi quand le début ou la fin changent : le JSON recodé le garde", async () => {
+    const { library, state } = setup();
+    await library.revise({ ...request, start: 20, end: 50, laughFader: 70 });
+    expect(state.replaced[0]?.confirmation).toMatchObject({ laughFader: 70 });
+  });
+});
+
 describe("changer le début ou la fin d'un clip confirmé", () => {
   const moved = { ...request, start: 20, end: 50 };
 

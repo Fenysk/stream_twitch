@@ -142,3 +142,8 @@
 .laugh-panel p {
   margin: 0;
 }
+
+/* Le volume des rires : un curseur sous la ligne des boutons, pas plus large qu'un champ */
+.laugh-fader {
+  max-width: 360px;
+}

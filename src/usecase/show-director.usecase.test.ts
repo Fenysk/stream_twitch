@@ -183,6 +183,30 @@ describe("createShowDirector : le démarrage", () => {
     ]);
   });
 
+  it("joue chaque rire au fader de son sound fois le volume des rires du clip : la soundboard reste la base entre les sounds", () => {
+    const laughs = [
+      { at: 2, sound: "abcd1234" },
+      { at: 4, sound: "efgh5678" },
+    ];
+    const { director, send } = setup({
+      clips: [
+        { ...confirmed("a.mp4"), laughs, laughFader: 50 },
+        { ...confirmed("b.mp4"), laughs },
+        { ...confirmed("c.mp4"), laughs, laughFader: 0 },
+      ],
+      sounds: { abcd1234: { version: "1", fader: 80 }, efgh5678: { version: "1", fader: 60 } },
+      custom: { showClipCount: 3 },
+    });
+    send(true);
+    const faders = director
+      .getState()
+      .lineup.map(({ laughs: clipLaughs }) => clipLaughs.map(({ fader }) => fader));
+    expect(faders.map((list) => list.length)).toEqual([2, 2, 2]);
+    expect(faders).toContainEqual([40, 30]);
+    expect(faders).toContainEqual([80, 60]);
+    expect(faders).toContainEqual([0, 0]);
+  });
+
   it("saute un rire dont le sound a été supprimé depuis, sans erreur, et garde les autres", () => {
     const { director, send } = setup({
       clips: [

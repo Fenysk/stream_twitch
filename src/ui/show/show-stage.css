@@ -140,7 +140,9 @@
   opacity: 1;
 }
 
-/* Jean-Renard : un seul élément, grand à droite pendant le bandeau, petit dans un coin pendant le clip (la toile du renard fait 648 × 920) */
+/* Jean-Renard : un seul élément, grand à droite pendant le bandeau (les pieds à 3vw du bas), plus petit dans un coin pendant le clip, où il
+   descend sous le bord bas de l'écran : la toile du renard fait 648 × 920, les mains finissent vers 680, donc 6vw sur les 23,4vw de sa
+   hauteur à 16,5vw de large cachent le bas du ventre et les pattes. La scène coupe ce qui dépasse. */
 .show-fox {
   position: absolute;
   right: var(--fox-right);
@@ -157,13 +159,13 @@
 .show-fox.is-beside {
   --fox-width: 26vw;
   --fox-right: 5vw;
-  --fox-bottom: 0vw;
+  --fox-bottom: 3vw;
 }
 
 .show-fox.is-corner {
-  --fox-width: 11vw;
+  --fox-width: 16.5vw;
   --fox-right: 1.5vw;
-  --fox-bottom: 1.5vw;
+  --fox-bottom: -6vw;
 }
 
 /* Hors émission, la page ne montre rien : OBS voit la scène à travers */

@@ -1,6 +1,8 @@
+import { Children, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { SoundSummary } from "../../domain/sound.schema";
+import { Slider } from "../design/slider";
 import { ClipTimelineSection, NO_SOUND_TEXT } from "./clip-timeline-section";
 import type { ClipLaughs } from "./use-clip-laughs";
 
@@ -21,6 +23,8 @@ const NO_LAUGHS: ClipLaughs = {
   canCreate: true,
   isSoundboardEmpty: false,
   requests: [],
+  usedSounds: [],
+  seconds: new Map(),
   create: () => undefined,
   choose: () => undefined,
   move: () => undefined,
@@ -30,7 +34,7 @@ const NO_LAUGHS: ClipLaughs = {
 
 const render = (
   laughs: Partial<ClipLaughs> = {},
-  options: { isTrimLocked?: boolean; isWorking?: boolean } = {},
+  options: { isTrimLocked?: boolean; isWorking?: boolean; laughFader?: number } = {},
 ) =>
   renderToStaticMarkup(
     <ClipTimelineSection
@@ -40,6 +44,8 @@ const render = (
       isTrimLocked={options.isTrimLocked ?? false}
       isWorking={options.isWorking ?? false}
       laughs={{ ...NO_LAUGHS, ...laughs }}
+      laughFader={options.laughFader ?? 100}
+      onLaughFaderChange={() => undefined}
       sounds={[sound]}
       onSeek={() => undefined}
       onStartChange={() => undefined}
@@ -136,3 +142,69 @@ describe("le rire choisi", () => {
     expect(isGrayed(render({ details }, { isWorking: true }), "Retirer")).toBe(true);
   });
 });
+
+describe("le volume des rires", () => {
+  it("est un curseur « Volume des rires » avec sa valeur en %, sous la ligne de « Rire ici »", () => {
+    const html = render({}, { laughFader: 35 });
+    expect(html).toContain("Volume des rires");
+    expect(html).toContain("35 %");
+    expect(html).toContain('aria-valuetext="35 %"');
+    expect(html.indexOf("Rire ici")).toBeLessThan(html.indexOf("Volume des rires"));
+  });
+
+  it("va de 0 à 100 % et montre ses deux bouts", () => {
+    const html = render();
+    expect(html).toMatch(/type="range"[^>]*min="0"|min="0"[^>]*type="range"/);
+    expect(html).toMatch(/type="range"[^>]*max="100"|max="100"[^>]*type="range"/);
+    expect(html).toContain("0 %");
+    expect(html).toContain("100 %");
+  });
+
+  it("montre 100 % quand le clip n'a pas de volume réglé", () => {
+    expect(render()).toMatch(/lp-type-numeric">100 %/);
+  });
+
+  it("est toujours visible : sans rire, sans rire choisi, soundboard vide", () => {
+    expect(render()).toContain("Volume des rires");
+    expect(render({ canCreate: false, isSoundboardEmpty: true })).toContain("Volume des rires");
+  });
+
+  it("se grise pendant qu'un clip est traité, et seulement alors", () => {
+    expect(render({}, { isWorking: true })).toMatch(/<input[^>]*type="range"[^>]*disabled=""/);
+    expect(render()).not.toMatch(/<input[^>]*type="range"[^>]*disabled=""/);
+  });
+
+  it("rend le volume choisi, au relâchement comme à chaque cran franchi", () => {
+    const chosen: number[] = [];
+    const element = ClipTimelineSection({
+      duration: 118.55,
+      trim: { start: 10, end: 60 },
+      time: 25,
+      isTrimLocked: false,
+      isWorking: false,
+      laughs: NO_LAUGHS,
+      laughFader: 100,
+      sounds: [sound],
+      onSeek: () => undefined,
+      onLaughFaderChange: (fader) => chosen.push(fader),
+      onStartChange: () => undefined,
+      onEndChange: () => undefined,
+      onPlayKept: () => undefined,
+    });
+    const [slider] = listElements(element.props.children, Slider);
+    type SliderHandlers = { onPick: (value: number) => void; onMove: (value: number) => void };
+    expect(isValidElement<SliderHandlers>(slider)).toBe(true);
+    if (isValidElement<SliderHandlers>(slider)) {
+      slider.props.onMove(60);
+      slider.props.onPick(45);
+    }
+    expect(chosen).toEqual([60, 45]);
+  });
+});
+
+// Les éléments d'un type dans l'arbre qu'un composant sans état rend (sans le monter).
+const listElements = (node: ReactNode, type: unknown): unknown[] =>
+  Children.toArray(node).flatMap((child) => {
+    if (!isValidElement<{ children?: ReactNode }>(child)) return [];
+    return [...(child.type === type ? [child] : []), ...listElements(child.props.children, type)];
+  });

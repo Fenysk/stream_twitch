@@ -1,15 +1,23 @@
-// Sous le lecteur, une fois la durée connue : la timeline (pistes Coupe et Rires), « Lire la sélection », « Rire ici » et le rire choisi.
+// Sous le lecteur, une fois la durée connue : la timeline (pistes Coupe et Rires), « Lire la sélection », « Rire ici », le volume des rires
+// et le rire choisi.
 
 import { Laugh, Play } from "lucide-react";
 import type { SoundSummary } from "../../domain/sound.schema";
 import type { Trim } from "../../domain/trim.rules";
 import { Button } from "../design/button";
+import { Slider, type SliderStep } from "../design/slider";
 import { toTimecodeText } from "./clip-text";
 import { ClipTimeline, TimelineTrack } from "./clip-timeline";
 import { LaughPanel } from "./laugh-panel";
 import { LaughTrack } from "./laugh-track";
 import { TrimBar } from "./trim-bar";
 import type { ClipLaughs } from "./use-clip-laughs";
+
+// Le volume des rires : chaque pourcent de 0 à 100, `onMove` à chaque cran franchi pour l'entendre changer pendant que les rires jouent.
+const FADER_STEPS: readonly SliderStep[] = Array.from({ length: 101 }, (_, value) => ({
+  value,
+  label: `${value} %`,
+}));
 
 export const NO_SOUND_TEXT = "Aucun sound dans la soundboard : ajoute-en un dans l'onglet Points de chaîne.";
 
@@ -23,8 +31,11 @@ type ClipTimelineSectionProps = {
   // Un clip (celui-ci ou un autre) est en cours de traitement : rien ne se change.
   isWorking: boolean;
   laughs: ClipLaughs;
+  // Le volume des rires du clip, de 0 à 100.
+  laughFader: number;
   sounds: readonly SoundSummary[] | null;
   onSeek: (time: number) => void;
+  onLaughFaderChange: (fader: number) => void;
   onStartChange: (time: number) => void;
   onEndChange: (time: number) => void;
   onPlayKept: () => void;
@@ -37,8 +48,10 @@ export const ClipTimelineSection = ({
   isTrimLocked,
   isWorking,
   laughs,
+  laughFader,
   sounds,
   onSeek,
+  onLaughFaderChange,
   onStartChange,
   onEndChange,
   onPlayKept,
@@ -77,6 +90,16 @@ export const ClipTimelineSection = ({
           ? `Durée ${toTimecodeText(trim.end - trim.start)}`
           : `Début ${toTimecodeText(trim.start)} · Fin ${toTimecodeText(trim.end)} · Gardé ${toTimecodeText(trim.end - trim.start)}`}
       </p>
+    </div>
+    <div className="laugh-fader">
+      <Slider
+        label="Volume des rires"
+        steps={FADER_STEPS}
+        value={laughFader}
+        onPick={onLaughFaderChange}
+        onMove={onLaughFaderChange}
+        isDisabled={isWorking}
+      />
     </div>
     {laughs.isSoundboardEmpty && <p className="lp-type-body lp-muted">{NO_SOUND_TEXT}</p>}
     {laughs.details && (

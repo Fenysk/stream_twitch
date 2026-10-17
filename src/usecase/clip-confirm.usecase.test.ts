@@ -161,6 +161,24 @@ describe("valider un clip", () => {
     expect(trims).toEqual([]);
   });
 
+  it("garde le volume des rires dans le JSON, et rien quand la demande n'en a pas", async () => {
+    const { library, state } = setup();
+    await library.confirm({ ...request, laughFader: 35 });
+    await library.confirm(request);
+    expect(state.committed.map((confirmation) => confirmation.laughFader)).toEqual([35, undefined]);
+    expect(state.committed[1]).not.toHaveProperty("laughFader");
+  });
+
+  it("refuse un volume des rires hors de 0 à 100, sans rien recoder", async () => {
+    const { library, trims } = setup();
+    expect(await library.confirm({ ...request, laughFader: -5 })).toEqual({
+      ok: false,
+      status: 400,
+      message: "le volume des rires doit être un nombre entier de 0 à 100",
+    });
+    expect(trims).toEqual([]);
+  });
+
   it("fait mesurer le son du clip confirmé une fois rangé, jamais quand le recodage ou le rangement échoue", async () => {
     const done = setup();
     await done.library.confirm(request);

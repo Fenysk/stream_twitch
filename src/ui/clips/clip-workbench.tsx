@@ -16,9 +16,18 @@ import { ClipTimelineSection } from "./clip-timeline-section";
 import { useClipKeys } from "./use-clip-keys";
 import { useClipLaughs } from "./use-clip-laughs";
 import { useClipVideo } from "./use-clip-video";
+import { useLaughFader } from "./use-laugh-fader";
+import { useLaughPreview } from "./use-laugh-preview";
 
-// Ce qu'Alexis a écrit et choisi au moment d'une action. `laughs` : les rires posés (leur instant en secondes du clip brut, et le sound).
-export type EditorValues = { title: string; phrase: string; trim: Trim; laughs: ClipLaugh[] };
+// Ce qu'Alexis a écrit et choisi au moment d'une action. `laughs` : les rires posés (leur instant en secondes du clip brut, et le sound) ;
+// `laughFader` : leur volume, de 0 à 100.
+export type EditorValues = {
+  title: string;
+  phrase: string;
+  trim: Trim;
+  laughs: ClipLaugh[];
+  laughFader: number;
+};
 
 export type EditorAction = {
   label: string;
@@ -40,6 +49,8 @@ type ClipWorkbenchProps = {
   initialPhrase: string;
   // Les rires déjà posés sur le clip ; sans eux, aucun.
   initialLaughs?: readonly ClipLaugh[] | undefined;
+  // Le volume des rires déjà enregistré (0 à 100) ; sans lui (un clip brut), le dernier volume choisi, et 100 au tout début.
+  initialLaughFader?: number | undefined;
   // L'instant du clip brut où la vidéo lue commence : 0 (le défaut) pour le clip brut, le début gardé quand la vidéo lue est le clip
   // confirmé (les rires restent en secondes du clip brut).
   videoStart?: number | undefined;
@@ -70,6 +81,7 @@ export const ClipWorkbench = ({
   initialTitle,
   initialPhrase,
   initialLaughs,
+  initialLaughFader,
   videoStart = 0,
   sounds,
   initialTrim,
@@ -90,11 +102,16 @@ export const ClipWorkbench = ({
   const [refusal, setRefusal] = useState<string | null>(null);
   const { duration } = video;
   const trim = chosen ?? initialTrim ?? (duration === null ? null : { start: 0, end: duration });
-  const laughs = useClipLaughs({
-    initial: initialLaughs,
-    sounds,
+  const kept = trim && { start: trim.start + videoStart, end: trim.end + videoStart };
+  const laughs = useClipLaughs({ initial: initialLaughs, sounds, video, kept, origin: videoStart });
+  const laughFader = useLaughFader(initialLaughFader);
+  useLaughPreview({
     video,
-    kept: trim && { start: trim.start + videoStart, end: trim.end + videoStart },
+    laughs: laughs.requests,
+    usedSounds: laughs.usedSounds,
+    seconds: laughs.seconds,
+    laughFader: laughFader.fader,
+    kept,
     origin: videoStart,
   });
   useClipKeys({
@@ -121,7 +138,7 @@ export const ClipWorkbench = ({
 
   const run = async (kind: Which, action: EditorAction) => {
     if (!trim) return;
-    const values = { title, phrase, trim, laughs: laughs.requests };
+    const values = { title, phrase, trim, laughs: laughs.requests, laughFader: laughFader.fader };
     setWhich(kind);
     setRefusal(null);
     const message = await action.run(values);
@@ -143,7 +160,9 @@ export const ClipWorkbench = ({
           isTrimLocked={isTrimLocked}
           isWorking={isWorking}
           laughs={laughs}
+          laughFader={laughFader.fader}
           sounds={sounds}
+          onLaughFaderChange={laughFader.update}
           onSeek={video.seek}
           onStartChange={(time) => moveStart(trim, time)}
           onEndChange={(time) => moveEnd(trim, time, duration)}

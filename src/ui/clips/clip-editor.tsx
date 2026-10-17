@@ -34,8 +34,8 @@ export const ClipEditor = ({ clip, sounds, isWorking, onConfirm, onDiscard, onDo
       label: "Valider",
       icon: Check,
       working: "Recodage en cours, jusqu'à une minute…",
-      run: ({ title, phrase, trim, laughs }) =>
-        onConfirm({ name: clip.name, title, phrase, start: trim.start, end: trim.end, laughs }),
+      run: ({ title, phrase, trim, laughs, laughFader }) =>
+        onConfirm({ name: clip.name, title, phrase, start: trim.start, end: trim.end, laughs, laughFader }),
       notice: ({ title }) => `« ${title.trim()} » est confirmé.`,
     }}
     secondary={{

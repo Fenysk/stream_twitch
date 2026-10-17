@@ -94,17 +94,28 @@ describe("les actions de l'éditeur d'un clip brut", () => {
     return { props: element.props, confirmed, discarded };
   };
 
-  it("n'a aucun rire au départ et lit le clip brut depuis son début : la vidéo n'est pas décalée", () => {
+  it("n'a aucun rire au départ, part du dernier volume choisi (pas de volume enregistré) et lit le clip brut depuis son début : la vidéo n'est pas décalée", () => {
     const { props } = setup();
     expect(props.initialLaughs).toBeUndefined();
     expect(props.videoStart).toBeUndefined();
+    expect(props.initialLaughFader).toBeUndefined();
   });
 
-  it("valide avec le titre, la phrase, la partie gardée et les rires posés", async () => {
+  it("valide avec le titre, la phrase, la partie gardée, les rires posés et leur volume", async () => {
     const { props, confirmed } = setup();
-    expect(await props.primary.run({ title: "Le saut", phrase: "Quel saut !", trim, laughs })).toBeNull();
+    expect(
+      await props.primary.run({ title: "Le saut", phrase: "Quel saut !", trim, laughs, laughFader: 35 }),
+    ).toBeNull();
     expect(confirmed).toEqual([
-      { name: clip.name, title: "Le saut", phrase: "Quel saut !", start: 3, end: 40.5, laughs },
+      {
+        name: clip.name,
+        title: "Le saut",
+        phrase: "Quel saut !",
+        start: 3,
+        end: 40.5,
+        laughs,
+        laughFader: 35,
+      },
     ]);
   });
 

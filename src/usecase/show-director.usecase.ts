@@ -1,3 +1,4 @@
+import { toLaughFader } from "../domain/laugh.rules";
 import type { Settings } from "../domain/settings.schema";
 import {
   DEFAULT_SHOW_CLIP_COUNT,
@@ -143,12 +144,14 @@ export function createShowDirector({
     return names.flatMap((name) => listed.value.find((candidate) => candidate.name === name) ?? []);
   };
 
-  // Les rires du clip qui jouent dans l'émission, chacun avec son sound tel que la soundboard l'a aujourd'hui ; un sound supprimé depuis est
-  // sauté.
+  // Les rires du clip qui jouent dans l'émission, chacun avec son sound tel que la soundboard l'a aujourd'hui (son fader fois le volume des
+  // rires du clip) ; un sound supprimé depuis est sauté.
   const toLaughs = (clip: ConfirmedClip): ShowLaugh[] =>
     toLaughSchedule(clip.laughs ?? [], clip).flatMap(({ at, sound: id }) => {
       const sound = sounds.get(id);
-      return sound ? [{ id: sound.id, version: sound.version, fader: sound.fader, at }] : [];
+      return sound
+        ? [{ id: sound.id, version: sound.version, fader: toLaughFader(sound.fader, clip.laughFader), at }]
+        : [];
     });
 
   const begin = () => {

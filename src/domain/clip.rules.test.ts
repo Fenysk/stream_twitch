@@ -194,6 +194,24 @@ describe("toConfirmChoice", () => {
     expect(toConfirmChoice({ ...request, laughs: [{ at: 0, sound: "aaaa0001" }] }, 100).ok).toBe(true);
   });
 
+  it("garde le volume des rires, de 0 à 100 %, et n'en écrit aucun quand la demande n'en a pas : absent vaut 100", () => {
+    for (const laughFader of [0, 35, 100]) {
+      expect(toConfirmChoice({ ...request, laughFader }, 100)).toMatchObject({
+        ok: true,
+        value: { laughFader },
+      });
+    }
+    const result = toConfirmChoice(request, 100);
+    expect(result.ok && "laughFader" in result.value).toBe(false);
+  });
+
+  it("refuse un volume des rires qui n'est pas un entier de 0 à 100", () => {
+    const message = "le volume des rires doit être un nombre entier de 0 à 100";
+    for (const laughFader of [-1, 101, 55.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(toConfirmChoice({ ...request, laughFader }, 100)).toEqual({ ok: false, message });
+    }
+  });
+
   it("accepte 50 rires au plus", () => {
     const laughs = (count: number) => Array.from({ length: count }, (_, at) => ({ at, sound: "aaaa0001" }));
     expect(toConfirmChoice({ ...request, laughs: laughs(50) }, 100).ok).toBe(true);

@@ -113,6 +113,12 @@ describe("l'éditeur d'un clip de l'émission", () => {
     expect(shallow().props.initialLaughs).toBeUndefined();
   });
 
+  it("montre le volume des rires enregistré avec le clip, et 100 % quand il n'en a pas", () => {
+    expect(shallow({ laughFader: 35 }).props.initialLaughFader).toBe(35);
+    expect(shallow({ laughFader: 0 }).props.initialLaughFader).toBe(0);
+    expect(shallow().props.initialLaughFader).toBe(100);
+  });
+
   it("lit le clip brut depuis son début quand il est dans Traités : la partie gardée est celle du JSON", () => {
     const { props } = shallow();
     expect(props.videoStart).toBe(0);
@@ -130,17 +136,39 @@ describe("l'éditeur d'un clip de l'émission", () => {
   it("enregistre les rires posés avec le début et la fin du JSON quand le clip brut n'est plus là, sans rien recoder", async () => {
     const { props, revised } = shallow({ processedName: null });
     const laughs = [{ at: 40, sound: "aaaa0001" }];
-    await props.primary.run({ title: "Le saut", phrase: "Quel saut !", trim: { start: 0, end: 60 }, laughs });
+    await props.primary.run({
+      title: "Le saut",
+      phrase: "Quel saut !",
+      trim: { start: 0, end: 60 },
+      laughs,
+      laughFader: 60,
+    });
     expect(revised).toEqual([
-      { name: clip.name, title: "Le saut", phrase: "Quel saut !", start: 12.5, end: 72.5, laughs },
+      {
+        name: clip.name,
+        title: "Le saut",
+        phrase: "Quel saut !",
+        start: 12.5,
+        end: 72.5,
+        laughs,
+        laughFader: 60,
+      },
     ]);
   });
 
   it("enregistre le début et la fin choisis, avec les rires posés, quand le clip brut est dans Traités", async () => {
     const { props, revised } = shallow();
     const laughs = [{ at: 20, sound: "aaaa0001" }];
-    await props.primary.run({ title: "Le saut", phrase: "", trim: { start: 15, end: 70 }, laughs });
-    expect(revised).toEqual([{ name: clip.name, title: "Le saut", phrase: "", start: 15, end: 70, laughs }]);
+    await props.primary.run({
+      title: "Le saut",
+      phrase: "",
+      trim: { start: 15, end: 70 },
+      laughs,
+      laughFader: 100,
+    });
+    expect(revised).toEqual([
+      { name: clip.name, title: "Le saut", phrase: "", start: 15, end: 70, laughs, laughFader: 100 },
+    ]);
   });
 
   it("grise tout pendant qu'un clip est traité", () => {

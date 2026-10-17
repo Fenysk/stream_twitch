@@ -17,7 +17,7 @@ import {
   toLaughRequests,
   toUsedSounds,
 } from "./clip-laughs";
-import { getLastLaughSound, updateLastLaughSound } from "./last-laugh-sound";
+import { getLastLaughSound, updateLastLaughSound } from "./last-laugh-choice";
 import type { ClipVideo } from "./use-clip-video";
 import { useSoundSeconds } from "./use-sound-seconds";
 
@@ -43,6 +43,9 @@ export type ClipLaughs = {
   isSoundboardEmpty: boolean;
   // Ce que le serveur reçoit : les rires dont le sound est encore dans la soundboard.
   requests: ClipLaugh[];
+  // Les sounds que ces rires utilisent, et la durée de ceux dont le fichier est lu : de quoi les jouer dans l'aperçu.
+  usedSounds: readonly SoundSummary[];
+  seconds: ReadonlyMap<string, number>;
   // Pose un rire à la position de lecture, avec le dernier sound choisi, et le choisit.
   create: () => void;
   choose: (key: number) => void;
@@ -78,6 +81,8 @@ export const useClipLaughs = ({ initial, sounds, video, kept, origin }: ClipLaug
     canCreate: kept !== null && defaultSound !== undefined,
     isSoundboardEmpty: sounds !== null && sounds.length === 0,
     requests: toLaughRequests(known),
+    usedSounds: used,
+    seconds,
     create: () => {
       if (!kept || defaultSound === undefined) return;
       dispatch({

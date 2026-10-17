@@ -62,3 +62,12 @@ export const toLaughsJson = (json: unknown): unknown => {
   const { end } = current;
   return sound === "" || typeof end !== "number" ? current : { ...current, laughs: [{ at: end, sound }] };
 };
+
+// Le volume des rires d'un clip, de 0 à 100 % (absent : 100, le son de la soundboard tel quel).
+export const DEFAULT_LAUGH_FADER = 100;
+
+export const isLaughFader = (value: number): boolean => Number.isInteger(value) && value >= 0 && value <= 100;
+
+// La force à laquelle un rire joue : le fader de son sound (la base entre les sounds) fois le volume des rires du clip.
+export const toLaughFader = (soundFader: number, laughFader: number | undefined): number =>
+  (soundFader * (laughFader ?? DEFAULT_LAUGH_FADER)) / 100;

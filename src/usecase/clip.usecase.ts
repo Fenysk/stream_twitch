@@ -185,10 +185,10 @@ const toStoreFailure = (error: unknown): ClipFailure => ({
   message: `le clip n'a pas pu être rangé : ${toMessage(error)}`,
 });
 
-// Ce que le JSON d'un clip confirmé garde : ce qu'Alexis vient de choisir (ses rires compris : sans eux, plus de rires), et le reste tel
+// Ce que le JSON d'un clip confirmé garde : ce qu'Alexis vient de choisir (ses rires et leur volume compris : sans eux, plus de rires ni de volume), et le reste tel
 // quel (date de validation, clip brut, nombre de passages, spikes).
 const toConfirmation = (clip: ConfirmedClip, choice: ConfirmChoice): ClipConfirmation => {
-  const { laughs, ...stored } = toStoredConfirmation(clip);
+  const { laughs, laughFader, ...stored } = toStoredConfirmation(clip);
   return { ...stored, ...choice };
 };
 

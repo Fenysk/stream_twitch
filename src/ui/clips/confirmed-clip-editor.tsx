@@ -6,6 +6,7 @@
 import { CircleMinus, Save } from "lucide-react";
 import { isSameTrim } from "../../domain/clip.rules";
 import type { ConfirmedSummary, ConfirmRequest } from "../../domain/clip.schema";
+import { DEFAULT_LAUGH_FADER } from "../../domain/laugh.rules";
 import type { SoundSummary } from "../../domain/sound.schema";
 import { toProcessedVideoUrl } from "../clips-api";
 import { toShowVideoUrl } from "../show-api";
@@ -50,6 +51,7 @@ export const ConfirmedClipEditor = ({
       initialTitle={clip.title}
       initialPhrase={clip.phrase}
       initialLaughs={clip.laughs}
+      initialLaughFader={clip.laughFader ?? DEFAULT_LAUGH_FADER}
       videoStart={hasRaw ? 0 : clip.start}
       sounds={sounds}
       initialTrim={hasRaw ? saved : lockedTrim}
@@ -63,9 +65,17 @@ export const ConfirmedClipEditor = ({
         working:
           "Enregistrement en cours (un nouveau début ou une nouvelle fin recode le clip : jusqu'à une minute)…",
         // Sans clip brut, le début et la fin restent ceux d'avant : le serveur ne recode pas.
-        run: ({ title, phrase, trim, laughs }) => {
+        run: ({ title, phrase, trim, laughs, laughFader }) => {
           const next = hasRaw ? trim : saved;
-          return onRevise({ name: clip.name, title, phrase, start: next.start, end: next.end, laughs });
+          return onRevise({
+            name: clip.name,
+            title,
+            phrase,
+            start: next.start,
+            end: next.end,
+            laughs,
+            laughFader,
+          });
         },
         notice: ({ title, trim }) =>
           hasRaw && !isSameTrim(trim, saved)

@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-17 — Un curseur règle la force des rires d'un clip : `laughFader` entre dans son JSON
+
+**Contexte.** Au premier test, les rires couvraient le son du clip ; Alexis veut un seul curseur, simple et bien placé.
+**Décision.** `laughFader` (entier de 0 à 100 %, absent : 100) dans le JSON du clip et dans `confirm` et `revise`. Un rire joue au fader de son sound × `laughFader` / 100, dans l'aperçu de l'éditeur comme dans `/show`, où le serveur met ce produit dans `ShowLaugh.fader`. Le curseur « Volume des rires » est sous la piste Rires ; un clip brut part de la dernière valeur choisie.
+**Renoncement.** Un curseur par rire, ou un seul réglage pour toute l'émission : Alexis a choisi un curseur par clip.
+
 ## 2026-10-17 — L'éditeur de clips devient une timeline à pistes, et un clip a plusieurs rires placés
 
 **Contexte.** Alexis veut placer plusieurs rires où il veut dans un clip, aussi simplement que la coupe, puis ajouter d'autres outils de montage (une piste Zoom, plus tard).

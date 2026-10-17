@@ -108,7 +108,7 @@ describe("les clips confirmés", () => {
     expect(store.listConfirmed(folder)).toEqual([]);
   });
 
-  it("rend les rires, la durée du clip brut, les spikes et le nombre de passages que le JSON garde", () => {
+  it("rend les rires et leur volume, la durée du clip brut, les spikes et le nombre de passages que le JSON garde", () => {
     const { folder, store } = setup();
     const confirmed = join(folder, CONFIRMED_FOLDER);
     mkdirSync(confirmed);
@@ -119,6 +119,7 @@ describe("les clips confirmés", () => {
         { at: 2.5, sound: "abcd1234" },
         { at: 4, sound: "efgh5678" },
       ],
+      laughFader: 40,
       rawDuration: 118.55,
       spikes: [1000, 5000],
       playCount: 2,
