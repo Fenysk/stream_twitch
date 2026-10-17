@@ -14,6 +14,7 @@ import { Route as ChatRouteImport } from './routes/chat'
 import { Route as FoxRouteImport } from './routes/fox'
 import { Route as HeadRouteImport } from './routes/head'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ShowRouteImport } from './routes/show'
 import { Route as SoundsRouteImport } from './routes/sounds'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsChatRouteImport } from './routes/settings.chat'
@@ -21,6 +22,7 @@ import { Route as SettingsCutRouteImport } from './routes/settings.cut'
 import { Route as SettingsFoxRouteImport } from './routes/settings.fox'
 import { Route as SettingsHeadRouteImport } from './routes/settings.head'
 import { Route as SettingsRewardsRouteImport } from './routes/settings.rewards'
+import { Route as SettingsShowRouteImport } from './routes/settings.show'
 import { Route as SettingsTwitchRouteImport } from './routes/settings.twitch'
 
 const IndexRoute = IndexRouteImport.update({
@@ -46,6 +48,11 @@ const HeadRoute = HeadRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShowRoute = ShowRouteImport.update({
+  id: '/show',
+  path: '/show',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SoundsRoute = SoundsRouteImport.update({
@@ -83,6 +90,11 @@ const SettingsRewardsRoute = SettingsRewardsRouteImport.update({
   path: '/rewards',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsShowRoute = SettingsShowRouteImport.update({
+  id: '/show',
+  path: '/show',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsTwitchRoute = SettingsTwitchRouteImport.update({
   id: '/twitch',
   path: '/twitch',
@@ -95,12 +107,14 @@ export interface FileRoutesByFullPath {
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/show': typeof ShowRoute
   '/sounds': typeof SoundsRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/rewards': typeof SettingsRewardsRoute
+  '/settings/show': typeof SettingsShowRoute
   '/settings/twitch': typeof SettingsTwitchRoute
   '/settings/': typeof SettingsIndexRoute
 }
@@ -109,12 +123,14 @@ export interface FileRoutesByTo {
   '/chat': typeof ChatRoute
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
+  '/show': typeof ShowRoute
   '/sounds': typeof SoundsRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/rewards': typeof SettingsRewardsRoute
+  '/settings/show': typeof SettingsShowRoute
   '/settings/twitch': typeof SettingsTwitchRoute
   '/settings': typeof SettingsIndexRoute
 }
@@ -125,12 +141,14 @@ export interface FileRoutesById {
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/show': typeof ShowRoute
   '/sounds': typeof SoundsRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
   '/settings/rewards': typeof SettingsRewardsRoute
+  '/settings/show': typeof SettingsShowRoute
   '/settings/twitch': typeof SettingsTwitchRoute
   '/settings/': typeof SettingsIndexRoute
 }
@@ -142,12 +160,14 @@ export interface FileRouteTypes {
     | '/fox'
     | '/head'
     | '/settings'
+    | '/show'
     | '/sounds'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
     | '/settings/head'
     | '/settings/rewards'
+    | '/settings/show'
     | '/settings/twitch'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
@@ -156,12 +176,14 @@ export interface FileRouteTypes {
     | '/chat'
     | '/fox'
     | '/head'
+    | '/show'
     | '/sounds'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
     | '/settings/head'
     | '/settings/rewards'
+    | '/settings/show'
     | '/settings/twitch'
     | '/settings'
   id:
@@ -171,12 +193,14 @@ export interface FileRouteTypes {
     | '/fox'
     | '/head'
     | '/settings'
+    | '/show'
     | '/sounds'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
     | '/settings/head'
     | '/settings/rewards'
+    | '/settings/show'
     | '/settings/twitch'
     | '/settings/'
   fileRoutesById: FileRoutesById
@@ -187,6 +211,7 @@ export interface RootRouteChildren {
   FoxRoute: typeof FoxRoute
   HeadRoute: typeof HeadRoute
   SettingsRoute: typeof SettingsRouteWithChildren
+  ShowRoute: typeof ShowRoute
   SoundsRoute: typeof SoundsRoute
 }
 
@@ -225,6 +250,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/show': {
+      id: '/show'
+      path: '/show'
+      fullPath: '/show'
+      preLoaderRoute: typeof ShowRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sounds': {
@@ -276,6 +308,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRewardsRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/show': {
+      id: '/settings/show'
+      path: '/show'
+      fullPath: '/settings/show'
+      preLoaderRoute: typeof SettingsShowRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/twitch': {
       id: '/settings/twitch'
       path: '/twitch'
@@ -292,6 +331,7 @@ interface SettingsRouteChildren {
   SettingsFoxRoute: typeof SettingsFoxRoute
   SettingsHeadRoute: typeof SettingsHeadRoute
   SettingsRewardsRoute: typeof SettingsRewardsRoute
+  SettingsShowRoute: typeof SettingsShowRoute
   SettingsTwitchRoute: typeof SettingsTwitchRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
@@ -302,6 +342,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsFoxRoute: SettingsFoxRoute,
   SettingsHeadRoute: SettingsHeadRoute,
   SettingsRewardsRoute: SettingsRewardsRoute,
+  SettingsShowRoute: SettingsShowRoute,
   SettingsTwitchRoute: SettingsTwitchRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
@@ -316,6 +357,7 @@ const rootRouteChildren: RootRouteChildren = {
   FoxRoute: FoxRoute,
   HeadRoute: HeadRoute,
   SettingsRoute: SettingsRouteWithChildren,
+  ShowRoute: ShowRoute,
   SoundsRoute: SoundsRoute,
 }
 export const routeTree = rootRouteImport

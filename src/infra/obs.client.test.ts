@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createObsClient,
   isOwnPage,
+  isShowPage,
   type ObsClientDeps,
   type ObsConnection,
   type ObsInputPeaks,
   type ObsPage,
+  type ObsSceneItem,
   type ObsSocket,
 } from "./obs.client";
 
@@ -21,10 +23,17 @@ const createFakeSocket = (connections: ObsConnection[]) => {
   const closedListeners: Array<() => void> = [];
   const streamListeners: Array<(isLive: boolean) => void> = [];
   const muteListeners: Array<(name: string, isMuted: boolean) => void> = [];
+  const replayListeners: Array<(path: string) => void> = [];
+  const sceneListeners: Array<() => void> = [];
   const state = {
     attempts: 0,
     pages: [] as ObsPage[],
     listError: undefined as Error | undefined,
+    // La scène du programme, et ce que contient chaque scène ou groupe (par son nom) ; `sceneError` : OBS refuse de répondre.
+    programScene: "jeu",
+    scenes: {} as Record<string, ObsSceneItem[]>,
+    sceneError: undefined as Error | undefined,
+    queried: [] as string[],
     stream: { isLive: false, durationMs: 0 },
     streamError: undefined as Error | undefined,
     // Les entrées coupées dans OBS ; `muteError` : OBS refuse de dire (entrée inconnue).
@@ -44,6 +53,16 @@ const createFakeSocket = (connections: ObsConnection[]) => {
     async refreshPage(name) {
       refreshed.push(name);
     },
+    async getProgramScene() {
+      if (state.sceneError) throw state.sceneError;
+      return state.programScene;
+    },
+    async listSceneItems(sceneName) {
+      if (state.sceneError) throw state.sceneError;
+      state.queried.push(sceneName);
+      return state.scenes[sceneName] ?? [];
+    },
+    onSceneChanged: (listener) => sceneListeners.push(listener),
     async getInputMute(name) {
       if (state.muteError) throw state.muteError;
       return state.muted.has(name);
@@ -54,6 +73,7 @@ const createFakeSocket = (connections: ObsConnection[]) => {
       return state.stream;
     },
     onStreamState: (listener) => streamListeners.push(listener),
+    onReplaySaved: (listener) => replayListeners.push(listener),
     onLevels: (listener) => levelListeners.push(listener),
     onExitStarted: (listener) => exitListeners.push(listener),
     onClosed: (listener) => closedListeners.push(listener),
@@ -67,6 +87,12 @@ const createFakeSocket = (connections: ObsConnection[]) => {
     },
     sendStreamState: (isLive: boolean) => {
       for (const listener of streamListeners) listener(isLive);
+    },
+    sendReplaySaved: (path: string) => {
+      for (const listener of replayListeners) listener(path);
+    },
+    sendSceneChanged: () => {
+      for (const listener of sceneListeners) listener();
     },
     sendInputMute: (name: string, isMuted: boolean) => {
       for (const listener of muteListeners) listener(name, isMuted);
@@ -651,6 +677,31 @@ describe("createObsClient : micro changé en direct", () => {
   });
 });
 
+describe("createObsClient : le tampon de relecture", () => {
+  it("donne le chemin du clip à chaque abonné quand OBS dit qu'il a sauvegardé le tampon", async () => {
+    const { fake, client } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    const first: string[] = [];
+    const second: string[] = [];
+    client.replay.subscribe(({ path }) => first.push(path));
+    client.replay.subscribe(({ path }) => second.push(path));
+    fake.sendReplaySaved("C:/Users/alexi/Videos/Clips OBS/Replay 2026-10-15 15-09-05.mp4");
+    expect(first).toEqual(["C:/Users/alexi/Videos/Clips OBS/Replay 2026-10-15 15-09-05.mp4"]);
+    expect(second).toEqual(first);
+  });
+
+  it("ne donne plus rien à un abonné qui s'est désabonné", async () => {
+    const { fake, client } = setup([connected]);
+    await vi.advanceTimersByTimeAsync(0);
+    const paths: string[] = [];
+    const unsubscribe = client.replay.subscribe(({ path }) => paths.push(path));
+    fake.sendReplaySaved("a.mp4");
+    unsubscribe();
+    fake.sendReplaySaved("b.mp4");
+    expect(paths).toEqual(["a.mp4"]);
+  });
+});
+
 describe("createObsClient : état", () => {
   it("dit si OBS est joint, et quelles entrées audio sont passées", async () => {
     const { fake, client } = setup([unreachable, connected]);
@@ -669,5 +720,170 @@ describe("createObsClient : état", () => {
     await vi.advanceTimersByTimeAsync(0);
     fake.sendClosed();
     expect(client.getStatus().isLinked).toBe(false);
+  });
+});
+
+describe("isShowPage", () => {
+  const hosts = ["localhost:4747", "127.0.0.1:4747"];
+
+  it("reconnaît la page /show du serveur, avec ou sans barre finale ni paramètres", () => {
+    expect(isShowPage("http://localhost:4747/show", hosts)).toBe(true);
+    expect(isShowPage("http://127.0.0.1:4747/show/", hosts)).toBe(true);
+    expect(isShowPage("http://localhost:4747/show?x=1", hosts)).toBe(true);
+  });
+
+  it("refuse une autre page du serveur, le chemin d'un autre, un autre port, une adresse absente ou illisible", () => {
+    expect(isShowPage("http://localhost:4747/fox", hosts)).toBe(false);
+    expect(isShowPage("http://localhost:4747/shows", hosts)).toBe(false);
+    expect(isShowPage("http://localhost:4747/show/autre", hosts)).toBe(false);
+    expect(isShowPage("http://localhost:3000/show", hosts)).toBe(false);
+    expect(isShowPage(undefined, hosts)).toBe(false);
+    expect(isShowPage("pas une adresse", hosts)).toBe(false);
+  });
+});
+
+type Visibilities = boolean[];
+
+describe("createObsClient : la page /show à l'antenne", () => {
+  const SHOW_PAGE: ObsPage = { name: "Émission", url: "http://localhost:4747/show" };
+  const item = (name: string, overrides: Partial<ObsSceneItem> = {}): ObsSceneItem => ({
+    name,
+    kind: "input",
+    isEnabled: true,
+    ...overrides,
+  });
+
+  // Un client connecté dont la source /show est dans la scène « jeu » ; `changes` note chaque changement dit aux abonnés.
+  const startWithShow = async (
+    scenes: Record<string, ObsSceneItem[]>,
+    custom: Partial<ObsClientDeps> = {},
+  ) => {
+    const made = setup([connected], custom);
+    made.fake.state.pages = [SHOW_PAGE, { name: "Chat", url: "http://localhost:4747/chat" }];
+    made.fake.state.scenes = scenes;
+    const changes: Visibilities = [];
+    made.client.show.subscribe((isVisible) => changes.push(isVisible));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(200);
+    return { ...made, changes };
+  };
+
+  const settle = () => vi.advanceTimersByTimeAsync(200);
+
+  it("dit qu'elle est à l'antenne dès la connexion si la scène du programme la montre", async () => {
+    const { changes } = await startWithShow({ jeu: [item("Émission")] });
+    expect(changes).toEqual([true]);
+  });
+
+  it("ne dit rien quand la source est cachée dans la scène du programme", async () => {
+    const { changes } = await startWithShow({ jeu: [item("Émission", { isEnabled: false })] });
+    expect(changes).toEqual([]);
+  });
+
+  it("ne dit rien quand elle est dans une autre scène que celle du programme", async () => {
+    const { changes } = await startWithShow({ jeu: [item("Caméra")], pause: [item("Émission")] });
+    expect(changes).toEqual([]);
+  });
+
+  it("ne prend pas une autre page du serveur pour /show", async () => {
+    const { changes } = await startWithShow({ jeu: [item("Chat")] });
+    expect(changes).toEqual([]);
+  });
+
+  it("dit qu'elle y est quand la scène devient celle du programme, puis qu'elle n'y est plus quand elle la quitte", async () => {
+    const { fake, changes } = await startWithShow({ jeu: [item("Caméra")], pause: [item("Émission")] });
+    fake.state.programScene = "pause";
+    fake.sendSceneChanged();
+    await settle();
+    expect(changes).toEqual([true]);
+    fake.state.programScene = "jeu";
+    fake.sendSceneChanged();
+    await settle();
+    expect(changes).toEqual([true, false]);
+  });
+
+  it("suit la visibilité de la source dans la scène du programme", async () => {
+    const { fake, changes } = await startWithShow({ jeu: [item("Émission", { isEnabled: false })] });
+    fake.state.scenes = { jeu: [item("Émission")] };
+    fake.sendSceneChanged();
+    await settle();
+    fake.state.scenes = { jeu: [item("Émission", { isEnabled: false })] };
+    fake.sendSceneChanged();
+    await settle();
+    expect(changes).toEqual([true, false]);
+  });
+
+  it("la trouve dans une scène imbriquée ou un groupe visibles, pas dans ceux qui sont cachés", async () => {
+    const scenes = {
+      jeu: [item("fond", { kind: "scene" }), item("cadre", { kind: "group" })],
+      fond: [item("Caméra")],
+      cadre: [item("Émission")],
+    };
+    const { fake, changes } = await startWithShow(scenes);
+    expect(changes).toEqual([true]);
+    fake.state.scenes = {
+      ...scenes,
+      jeu: [item("fond", { kind: "scene" }), item("cadre", { kind: "group", isEnabled: false })],
+    };
+    fake.sendSceneChanged();
+    await settle();
+    expect(changes).toEqual([true, false]);
+  });
+
+  it("n'interroge pas OBS en boucle quand une scène se contient elle-même", async () => {
+    const { fake, changes } = await startWithShow({ jeu: [item("jeu", { kind: "scene" })] });
+    expect(changes).toEqual([]);
+    expect(fake.state.queried.length).toBeLessThanOrEqual(4);
+  });
+
+  it("ne dit que les changements, et n'interroge OBS qu'une fois pour une rafale d'évènements", async () => {
+    const { fake, changes } = await startWithShow({ jeu: [item("Émission")] });
+    const before = fake.state.queried.length;
+    for (let burst = 0; burst < 5; burst += 1) fake.sendSceneChanged();
+    await settle();
+    expect(changes).toEqual([true]);
+    expect(fake.state.queried.length).toBe(before + 1);
+  });
+
+  it("ne pointe que les pages du port du serveur : un serveur d'essai ne voit pas la source du stream", async () => {
+    const { changes } = await startWithShow(
+      { jeu: [item("Émission")] },
+      { pageHosts: ["localhost:4748", "127.0.0.1:4748"] },
+    );
+    expect(changes).toEqual([]);
+  });
+
+  it("dit qu'elle n'est plus à l'antenne quand la connexion à OBS tombe", async () => {
+    const { fake, changes } = await startWithShow({ jeu: [item("Émission")] });
+    fake.sendClosed();
+    expect(changes).toEqual([true, false]);
+  });
+
+  it("journalise une fois une scène illisible, sans rien dire aux abonnés", async () => {
+    const made = setup([connected]);
+    made.fake.state.pages = [SHOW_PAGE];
+    made.fake.state.sceneError = new Error("RequestFailed");
+    const changes: Visibilities = [];
+    made.client.show.subscribe((isVisible) => changes.push(isVisible));
+    await vi.advanceTimersByTimeAsync(200);
+    made.fake.sendSceneChanged();
+    await settle();
+    expect(changes).toEqual([]);
+    expect(
+      made.messages.filter(
+        (message) => message === "Émission : la scène du programme est illisible, RequestFailed",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("ne dit plus rien à un abonné qui s'est désabonné", async () => {
+    const { fake, client } = await startWithShow({ jeu: [item("Caméra")] });
+    const heard: Visibilities = [];
+    const unsubscribe = client.show.subscribe((isVisible) => heard.push(isVisible));
+    unsubscribe();
+    fake.state.scenes = { jeu: [item("Émission")] };
+    fake.sendSceneChanged();
+    await settle();
+    expect(heard).toEqual([]);
   });
 });

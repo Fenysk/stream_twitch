@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { Settings } from "./settings.schema";
-import { isSpike, type Sample, type StartleRules, toRecentSamples, toStartleRules } from "./startle.rules";
+import {
+  isSpike,
+  LEVEL_STEP_MS,
+  type Sample,
+  type StartleRules,
+  toRecentSamples,
+  toSpikes,
+  toStartleRules,
+} from "./startle.rules";
 
 const rules: StartleRules = { rise: 20, within: 300, level: -15, gap: 30_000 };
 
@@ -96,5 +104,43 @@ describe("isSpike : 20 dB en moins de 300 ms, jusqu'au-dessus de -15 dB", () => 
     const sensitive: StartleRules = { ...rules, rise: 10, level: -30 };
     expect(isSpike([{ at: 1000, level: -45 }], -28, sensitive)).toBe(true);
     expect(isSpike([{ at: 1000, level: -45 }], -28, rules)).toBe(false);
+  });
+});
+
+describe("toSpikes", () => {
+  // Un son calme (-60 dB) de 2 s, une explosion à 1 s (-5 dB), un pas de 50 ms.
+  const quiet = (count: number): number[] => Array.from({ length: count }, () => -60);
+  const withBlast = (count: number, blastAt: number, level = -5): number[] =>
+    quiet(count).map((value, index) => (index === blastAt ? level : value));
+
+  it("trouve l'instant de l'explosion, en ms depuis le début", () => {
+    expect(toSpikes(withBlast(40, 20), LEVEL_STEP_MS, rules)).toEqual([1000]);
+  });
+
+  it("n'en trouve aucun dans un son qui ne fait que monter doucement, ni dans le silence", () => {
+    const ramp = Array.from({ length: 40 }, (_, index) => -60 + index);
+    expect(toSpikes(ramp, LEVEL_STEP_MS, rules)).toEqual([]);
+    expect(toSpikes(quiet(40), LEVEL_STEP_MS, rules)).toEqual([]);
+    expect(toSpikes([], LEVEL_STEP_MS, rules)).toEqual([]);
+  });
+
+  it("ignore une explosion qui reste sous le level réglé", () => {
+    expect(toSpikes(withBlast(40, 20, -30), LEVEL_STEP_MS, rules)).toEqual([]);
+  });
+
+  it("n'en garde qu'un par écart : la seconde explosion trop proche passe, la suivante assez loin compte", () => {
+    const levels = quiet(1500);
+    levels[20] = -5;
+    levels[60] = -5;
+    levels[1000] = -5;
+    expect(toSpikes(levels, LEVEL_STEP_MS, rules)).toEqual([1000, 50_000]);
+  });
+
+  it("ne trouve rien au tout premier échantillon : rien ne dit d'où il monte", () => {
+    expect(toSpikes([-5, -5, -5], LEVEL_STEP_MS, rules)).toEqual([]);
+  });
+
+  it("applique le pas donné : 100 ms par mesure", () => {
+    expect(toSpikes(withBlast(40, 20), 100, rules)).toEqual([2000]);
   });
 });

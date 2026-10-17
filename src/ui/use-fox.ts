@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { FOX_START, isFoxMuted, toFoxDisplay, toNextFox } from "../domain/fox.rules";
 import {
   type Attitude,
@@ -40,13 +40,21 @@ type FoxLoopDeps = {
   body: () => HTMLElement | null;
   onImage: (image: FoxImage) => void;
   onMuted: (isMuted: boolean) => void;
+  // L'émission passe : le renard n'est plus à montrer ici (`/fox` et l'aperçu), il est dans `/show`.
+  onHidden: (isHidden: boolean) => void;
 };
+
+// Ce que la page `/show` ne reçoit pas du serveur : le renard y est toujours là, au repos tant que la page ne lui donne pas un mode.
+const SHOW_POSE: PresencePose = { kind: "visible", elapsed: 0, from: { offset: 0, angle: 0 } };
+
+type FoxLoop = { stop: () => void; setMode: (mode: FoxMode) => void };
 
 // Fait vivre le renard : les règles, les voix, le mode et la présence arrivent du flux du serveur ; à chaque image de
 // l'écran, le pas de l'animation (domain) choisit l'image, l'échelle du corps et sa place (il glisse hors de la source,
 // ou saute pour revenir). Rien ne s'affiche avant que les 12 images soient chargées
-// (aucun clignotement au premier changement d'image). Rend de quoi tout arrêter.
-const startFox = ({ place, body, onImage, onMuted }: FoxLoopDeps): (() => void) => {
+// (aucun clignotement au premier changement d'image). Rend de quoi tout arrêter, et (pour `/show`, où le serveur ne dit pas le
+// mode) de quoi lui en donner un.
+const startFox = ({ place, body, onImage, onMuted, onHidden }: FoxLoopDeps): FoxLoop => {
   let isLive = true;
   let isReady = false;
   let rules: FoxRules | undefined;
@@ -58,11 +66,10 @@ const startFox = ({ place, body, onImage, onMuted }: FoxLoopDeps): (() => void) 
   let mirror = MIRROR_START;
   // La phase de présence et l'instant de la page où elle a commencé (moins le temps déjà écoulé côté serveur). Caché tant que
   // le serveur n'a rien dit : une page qui se connecte ne montre pas un renard parti.
-  let pose: PresencePose = {
-    kind: toPresenceView(toStartPresence(0)),
-    elapsed: 0,
-    from: { offset: 0, angle: 0 },
-  };
+  let pose: PresencePose =
+    place === "show"
+      ? SHOW_POSE
+      : { kind: toPresenceView(toStartPresence(0)), elapsed: 0, from: { offset: 0, angle: 0 } };
   let poseAt = 0;
   let shown: FoxImage | undefined;
   const output = getSoundOutput();
@@ -123,6 +130,11 @@ const startFox = ({ place, body, onImage, onMuted }: FoxLoopDeps): (() => void) 
         onMuted(isMuted);
         break;
       }
+      case "show":
+        // Le renard passe dans `/show` : ici il se tait et se cache, le serveur ne lui envoie plus de phrase.
+        if (foxEvent.isOn) player?.stop();
+        onHidden(foxEvent.isOn);
+        break;
     }
   };
 
@@ -163,30 +175,51 @@ const startFox = ({ place, body, onImage, onMuted }: FoxLoopDeps): (() => void) 
   animation = requestAnimationFrame(tick);
   // Dans un navigateur ordinaire, le premier clic dans la page autorise le son (OBS n'en a pas besoin).
   window.addEventListener("pointerdown", unlockSound);
-  return () => {
-    isLive = false;
-    cancelAnimationFrame(animation);
-    source.close();
-    player?.stop();
-    window.removeEventListener("pointerdown", unlockSound);
+  return {
+    stop() {
+      isLive = false;
+      cancelAnimationFrame(animation);
+      source.close();
+      player?.stop();
+      window.removeEventListener("pointerdown", unlockSound);
+    },
+    setMode(next) {
+      mode = next;
+    },
   };
 };
 
 export type FoxView = {
-  // L'image à montrer ; `null` tant que les images ne sont pas chargées ou que les règles n'ont pas encore été reçues.
+  // L'image à montrer ; `null` tant que les images ne sont pas chargées ou que les règles n'ont pas encore été reçues, ou quand
+  // l'émission passe (`/fox` et l'aperçu cèdent le renard à `/show`).
   image: FoxImage | null;
   bodyRef: RefObject<HTMLDivElement | null>;
   // La voix ne sort pas de cette page : une autre page `/fox` est connectée et parle à sa place.
   isMuted: boolean;
+  // Ce qu'il montre en plus de sa bouche, donné par la page elle-même : seule la page `/show` s'en sert (le serveur ne le lui dit pas).
+  updateMode: (mode: FoxMode) => void;
 };
 
 export const useFox = (place: FoxPlace): FoxView => {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [image, setImage] = useState<FoxImage | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  useEffect(
-    () => startFox({ place, body: () => bodyRef.current, onImage: setImage, onMuted: setIsMuted }),
-    [place],
-  );
-  return { image, bodyRef, isMuted };
+  const [isHidden, setIsHidden] = useState(false);
+  const loop = useRef<FoxLoop | undefined>(undefined);
+  useEffect(() => {
+    const started = startFox({
+      place,
+      body: () => bodyRef.current,
+      onImage: setImage,
+      onMuted: setIsMuted,
+      onHidden: setIsHidden,
+    });
+    loop.current = started;
+    return () => {
+      loop.current = undefined;
+      started.stop();
+    };
+  }, [place]);
+  const updateMode = useCallback((mode: FoxMode) => loop.current?.setMode(mode), []);
+  return { image: isHidden ? null : image, bodyRef, isMuted, updateMode };
 };

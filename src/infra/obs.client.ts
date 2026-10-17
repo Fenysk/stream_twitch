@@ -1,9 +1,11 @@
 import OBSWebSocket, { EventSubscription, OBSWebSocketError } from "obs-websocket-js/json";
 import { z } from "zod";
 import { toLevel } from "../domain/mic.rules";
+import type { ReplayPort } from "../usecase/clip-chat.usecase";
 import type { DesktopPort } from "../usecase/fox-balance.usecase";
 import type { Broadcast, BroadcastPort } from "../usecase/fox-hours.usecase";
 import type { MicPort } from "../usecase/head.usecase";
+import type { ShowScenePort } from "../usecase/show-director.usecase";
 
 const PASSWORD_REFUSED_CODE = 4009;
 const RETRY_MS = 2000;
@@ -12,6 +14,8 @@ const MIC_UNSEEN_MS = 5000;
 
 export type ObsInputPeaks = { name: string; peaks: number[] };
 export type ObsPage = { name: string; url: string | undefined };
+// Ce qu'une scène (ou un groupe) contient : une source, une autre scène ou un groupe, et si cet élément est visible dans elle.
+export type ObsSceneItem = { name: string; kind: "input" | "scene" | "group"; isEnabled: boolean };
 export type ObsConnection =
   | { ok: true; version: string }
   | { ok: false; isPasswordRefused: boolean; reason: string };
@@ -21,6 +25,13 @@ export type ObsSocket = {
   connect(): Promise<ObsConnection>;
   listPages(): Promise<ObsPage[]>;
   refreshPage(name: string): Promise<void>;
+  // La scène du programme (celle qui passe à l'antenne, pas l'aperçu du mode studio).
+  getProgramScene(): Promise<string>;
+  // Les éléments d'une scène, ou d'un groupe (`isGroup`), tels qu'OBS les range.
+  listSceneItems(sceneName: string, isGroup: boolean): Promise<ObsSceneItem[]>;
+  // Quelque chose a changé qui peut changer ce que le programme montre : la scène du programme, la visibilité d'un élément, une
+  // source ou une scène créée, retirée, renommée, l'adresse d'une source navigateur.
+  onSceneChanged(listener: () => void): void;
   onLevels(listener: (inputs: ObsInputPeaks[]) => void): void;
   // L'entrée est-elle coupée à l'instant ? Une entrée inconnue d'OBS fait échouer la demande.
   getInputMute(name: string): Promise<boolean>;
@@ -30,6 +41,8 @@ export type ObsSocket = {
   getStreamStatus(): Promise<{ isLive: boolean; durationMs: number }>;
   // La diffusion démarre (`true`) ou s'arrête (`false`) ; ses autres états (démarrage, coupure réseau) ne comptent pas.
   onStreamState(listener: (isLive: boolean) => void): void;
+  // OBS vient de sauvegarder le tampon de relecture : le chemin du clip qu'il a écrit (évènement ReplayBufferSaved).
+  onReplaySaved(listener: (path: string) => void): void;
   onExitStarted(listener: () => void): void;
   onClosed(listener: () => void): void;
 };
@@ -46,8 +59,33 @@ const InputMuteEventSchema = z.object({ inputName: z.string(), inputMuted: z.boo
 // _STOPPING, _RECONNECTING, _RECONNECTED, que le renard laisse de côté : une coupure réseau garde la durée).
 const StreamStatusSchema = z.object({ outputActive: z.boolean(), outputDuration: z.number() });
 const StreamStateSchema = z.object({ outputState: z.string() });
+// ReplayBufferSaved : `savedReplayPath` est le fichier que le tampon de relecture vient d'écrire.
+const ReplaySavedSchema = z.object({ savedReplayPath: z.string() });
 const STREAM_STARTED = "OBS_WEBSOCKET_OUTPUT_STARTED";
 const STREAM_STOPPED = "OBS_WEBSOCKET_OUTPUT_STOPPED";
+
+// GetCurrentProgramScene : `sceneName` (obs-websocket 5.4+), `currentProgramSceneName` avant.
+const ProgramSceneSchema = z.object({
+  sceneName: z.string().optional(),
+  currentProgramSceneName: z.string().optional(),
+});
+// GetSceneItemList et GetGroupSceneItemList : `sourceType` dit si l'élément est une source ou une scène, `isGroup` un groupe.
+const SceneItemsSchema = z.object({
+  sceneItems: z.array(
+    z.object({
+      sourceName: z.string(),
+      sourceType: z.string(),
+      sceneItemEnabled: z.boolean(),
+      isGroup: z.boolean().nullable().optional(),
+    }),
+  ),
+});
+const SCENE_SOURCE_TYPE = "OBS_SOURCE_TYPE_SCENE";
+
+const toSceneItemKind = (sourceType: string, isGroup: boolean | null | undefined): ObsSceneItem["kind"] => {
+  if (sourceType !== SCENE_SOURCE_TYPE) return "input";
+  return isGroup ? "group" : "scene";
+};
 
 export function createObsSocket(options: {
   address: string;
@@ -85,6 +123,34 @@ export function createObsSocket(options: {
     },
     async refreshPage(name) {
       await obs.call("PressInputPropertiesButton", { inputName: name, propertyName: "refreshnocache" });
+    },
+    async getProgramScene() {
+      const parsed = ProgramSceneSchema.parse(await obs.call("GetCurrentProgramScene"));
+      const name = parsed.sceneName ?? parsed.currentProgramSceneName;
+      if (name === undefined) throw new Error("OBS n'a pas dit quelle scène passe à l'antenne");
+      return name;
+    },
+    async listSceneItems(sceneName, isGroup) {
+      const answer = isGroup
+        ? await obs.call("GetGroupSceneItemList", { sceneName })
+        : await obs.call("GetSceneItemList", { sceneName });
+      return SceneItemsSchema.parse(answer).sceneItems.map((item) => ({
+        name: item.sourceName,
+        kind: toSceneItemKind(item.sourceType, item.isGroup),
+        isEnabled: item.sceneItemEnabled,
+      }));
+    },
+    onSceneChanged(listener) {
+      const notify = () => listener();
+      obs.on("CurrentProgramSceneChanged", notify);
+      obs.on("SceneItemEnableStateChanged", notify);
+      obs.on("SceneItemCreated", notify);
+      obs.on("SceneItemRemoved", notify);
+      obs.on("SceneRemoved", notify);
+      obs.on("SceneNameChanged", notify);
+      obs.on("InputSettingsChanged", notify);
+      obs.on("InputRemoved", notify);
+      obs.on("InputNameChanged", notify);
     },
     onLevels(listener) {
       obs.on("InputVolumeMeters", (data) => {
@@ -124,6 +190,12 @@ export function createObsSocket(options: {
         else if (parsed.data.outputState === STREAM_STOPPED) listener(false);
       });
     },
+    onReplaySaved(listener) {
+      obs.on("ReplayBufferSaved", (data) => {
+        const parsed = ReplaySavedSchema.safeParse(data);
+        if (parsed.success) listener(parsed.data.savedReplayPath);
+      });
+    },
     onExitStarted(listener) {
       obs.on("ExitStarted", listener);
     },
@@ -136,6 +208,36 @@ export function createObsSocket(options: {
 // La page du serveur : une source navigateur dont l'URL pointe vers l'un de ses hôtes (localhost:4747, 127.0.0.1:4747).
 export function isOwnPage(url: string | undefined, hosts: string[]): boolean {
   return url !== undefined && URL.canParse(url) && hosts.includes(new URL(url).host);
+}
+
+// La page de l'émission : une page du serveur dont le chemin est /show.
+export function isShowPage(url: string | undefined, hosts: string[]): boolean {
+  return url !== undefined && isOwnPage(url, hosts) && new URL(url).pathname.replace(/\/+$/, "") === "/show";
+}
+
+// Les scènes dans les scènes (et les groupes) se suivent sur trois niveaux : au-delà, ou en boucle, rien n'est cherché.
+const SCENE_DEPTH_MAX = 3;
+// Un changement de scène envoie plusieurs évènements à la suite : OBS n'est interrogé qu'une fois, 150 ms après le dernier.
+const SCENE_SETTLE_MS = 150;
+
+// L'une des sources `names` est-elle visible dans cette scène (ou ce groupe), de son propre chef et dans chaque scène ou groupe visible
+// qu'elle contient ?
+async function hasVisibleSource(
+  socket: ObsSocket,
+  scene: { name: string; isGroup: boolean },
+  names: ReadonlySet<string>,
+  depth: number,
+): Promise<boolean> {
+  const items = await socket.listSceneItems(scene.name, scene.isGroup);
+  for (const item of items.filter(({ isEnabled }) => isEnabled)) {
+    if (item.kind === "input") {
+      if (names.has(item.name)) return true;
+    } else if (depth < SCENE_DEPTH_MAX) {
+      const inside = { name: item.name, isGroup: item.kind === "group" };
+      if (await hasVisibleSource(socket, inside, names, depth + 1)) return true;
+    }
+  }
+  return false;
 }
 
 export type ObsClientDeps = {
@@ -155,6 +257,10 @@ export type ObsClient = {
   mic: MicPort;
   desktop: DesktopPort;
   broadcast: BroadcastPort;
+  // Les clips que le tampon de relecture sauvegarde.
+  replay: ReplayPort;
+  // La page /show à l'antenne ou non.
+  show: ShowScenePort;
   start(): void;
   stop(): void;
   updateMicName(name: string): void;
@@ -276,9 +382,47 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
     }
   };
 
+  const replayListeners = new Set<(event: { path: string }) => void>();
+  socket.onReplaySaved((path) => {
+    for (const listener of replayListeners) listener({ path });
+  });
+
+  // La page /show est à l'antenne quand une source navigateur vers /show est visible dans la scène du programme (scènes et groupes
+  // compris). OBS est interrogé après chaque évènement utile, et seul un changement part aux abonnés ; une connexion perdue la retire.
+  const showListeners = new Set<(isVisible: boolean) => void>();
+  let isShowVisible = false;
+  let isShowFailureLogged = false;
+  let showTimer: ReturnType<typeof setTimeout> | undefined;
+  const emitShow = (isVisible: boolean) => {
+    if (isVisible === isShowVisible) return;
+    isShowVisible = isVisible;
+    for (const listener of showListeners) listener(isVisible);
+  };
+  const refreshShow = async () => {
+    try {
+      const names = new Set(
+        (await socket.listPages()).filter((page) => isShowPage(page.url, pageHosts)).map(({ name }) => name),
+      );
+      const scene = { name: await socket.getProgramScene(), isGroup: false };
+      emitShow(names.size > 0 && (await hasVisibleSource(socket, scene, names, 0)));
+    } catch (error) {
+      if (isShowFailureLogged) return;
+      isShowFailureLogged = true;
+      log(
+        `Émission : la scène du programme est illisible, ${error instanceof Error ? error.message : error}`,
+      );
+    }
+  };
+  const scheduleShowRefresh = () => {
+    clearTimeout(showTimer);
+    showTimer = setTimeout(() => void refreshShow(), SCENE_SETTLE_MS);
+  };
+  socket.onSceneChanged(scheduleShowRefresh);
+
   const clearTimers = () => {
     clearTimeout(retryTimer);
     clearTimeout(giveUpTimer);
+    clearTimeout(showTimer);
     mic.disarm();
     desktop.disarm();
   };
@@ -317,6 +461,7 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
     desktop.arm();
     void refreshBroadcast();
     void refreshPages();
+    scheduleShowRefresh();
   };
 
   const onFailed = (connection: { isPasswordRefused: boolean }) => {
@@ -352,6 +497,8 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
     isLinked = false;
     mic.disarm();
     desktop.disarm();
+    clearTimeout(showTimer);
+    emitShow(false);
     log("Connexion à OBS perdue : nouvel essai toutes les 2 s, arrêt du serveur dans 30 s sans retour.");
     giveUpTimer = setTimeout(() => exit("OBS ne revient pas depuis 30 s : arrêt du serveur."), GIVE_UP_MS);
     scheduleRetry();
@@ -373,6 +520,22 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
         broadcastListeners.add(listener);
         return () => {
           broadcastListeners.delete(listener);
+        };
+      },
+    },
+    replay: {
+      subscribe(listener) {
+        replayListeners.add(listener);
+        return () => {
+          replayListeners.delete(listener);
+        };
+      },
+    },
+    show: {
+      subscribe(listener) {
+        showListeners.add(listener);
+        return () => {
+          showListeners.delete(listener);
         };
       },
     },

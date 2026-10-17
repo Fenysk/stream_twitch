@@ -1,0 +1,133 @@
+/* L'éditeur d'un clip brut : le lecteur, la timeline (clip-timeline.css), les champs et les boutons */
+
+.clip-editor {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  max-width: 960px;
+}
+
+.clip-editor p {
+  margin: 0;
+}
+
+.clip-trim-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.clip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.clip-working {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.clip-spinner {
+  width: 18px;
+  height: 18px;
+  animation: clip-spin 1s linear infinite;
+}
+
+@keyframes clip-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clip-spinner {
+    animation: none;
+  }
+}
+
+/* La marge de chaque côté d'une zone de la timeline : la place des poignées, qui sortent de la partie gardée vers l'extérieur */
+.clip-timeline,
+.trim-bar {
+  --trim-handle-width: 14px;
+}
+
+/* La barre de la piste Coupe */
+.trim-bar {
+  box-sizing: border-box;
+  padding: 0 var(--trim-handle-width);
+  user-select: none;
+}
+
+.trim-area {
+  position: relative;
+  height: 44px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.trim-track,
+.trim-range {
+  position: absolute;
+  top: 50%;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: var(--radius-pill);
+}
+
+.trim-track {
+  left: 0;
+  right: 0;
+  background: var(--chip-hover);
+}
+
+.trim-range {
+  background: var(--accent);
+}
+
+/* La position de lecture : un trait, sans prise */
+.trim-playhead {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--danger);
+  pointer-events: none;
+}
+
+.trim-handle {
+  position: absolute;
+  top: 0;
+  box-sizing: border-box;
+  width: var(--trim-handle-width);
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--accent);
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+/* Le début se pose à gauche de son instant, la fin à droite du sien : jamais l'une sur l'autre */
+.trim-handle--start {
+  transform: translateX(-100%);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.trim-handle--end {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.trim-handle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.trim-handle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

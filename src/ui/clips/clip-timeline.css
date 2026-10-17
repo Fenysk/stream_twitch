@@ -1,0 +1,144 @@
+/* La timeline sous le lecteur : une règle, puis une piste par ligne (son nom à gauche, sa zone à droite), et un seul trait de lecture */
+
+.clip-timeline {
+  --timeline-name-width: 64px;
+  position: relative;
+  display: grid;
+  gap: var(--space-1);
+  user-select: none;
+}
+
+/* Une ligne : le nom, puis la zone. Toutes les lignes (la règle comprise) ont les mêmes colonnes. */
+.timeline-track {
+  display: grid;
+  grid-template-columns: var(--timeline-name-width) minmax(0, 1fr);
+  align-items: center;
+}
+
+.timeline-name {
+  padding-right: var(--space-2);
+}
+
+/* La marge latérale est celle de la barre de coupe (.trim-bar) : un même instant tombe à la même abscisse sur chaque ligne */
+.timeline-zone {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 0 var(--trim-handle-width);
+}
+
+.timeline-lane {
+  position: relative;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.timeline-track--ruler .timeline-lane {
+  height: 26px;
+}
+
+.timeline-tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 6px;
+  background: var(--muted);
+}
+
+.timeline-tick-label {
+  position: absolute;
+  bottom: 8px;
+  left: 0;
+  transform: translateX(-50%);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* La piste Rires : un fond comme celui de la barre de coupe, les blocs posés dessus */
+.timeline-track:not(.timeline-track--ruler) .timeline-lane {
+  height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--chip);
+}
+
+.laugh-block {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 var(--space-1);
+  overflow: hidden;
+  border: 1px solid var(--muted);
+  border-radius: var(--radius-sm);
+  background: var(--pill-surface);
+  color: var(--ink);
+  cursor: grab;
+  touch-action: none;
+}
+
+.laugh-block-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hors de la partie gardée : il ne sera pas joué */
+.laugh-block--faded {
+  opacity: 0.4;
+}
+
+.laugh-block--selected {
+  outline: 2px solid var(--accent);
+}
+
+.laugh-block:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.laugh-block:disabled {
+  cursor: not-allowed;
+}
+
+/* La position de lecture : un trait rouge sur la règle et toutes les pistes, au-dessus des blocs, sans prise */
+.timeline-playhead-layer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--timeline-name-width);
+  right: 0;
+  box-sizing: border-box;
+  padding: 0 var(--trim-handle-width);
+  pointer-events: none;
+}
+
+.timeline-axis {
+  position: relative;
+  height: 100%;
+}
+
+.timeline-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--danger);
+}
+
+/* Le trait de la barre de coupe est remplacé par celui de la timeline */
+.clip-timeline .trim-playhead {
+  display: none;
+}
+
+.laugh-panel {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.laugh-panel p {
+  margin: 0;
+}

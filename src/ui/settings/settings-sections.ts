@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Clapperboard,
   Coins,
+  Film,
   MessageSquare,
   PawPrint,
   Radio,
@@ -29,6 +30,7 @@ export const SECTION_GROUPS = [
       { id: "chat", label: "Tchat", icon: MessageSquare, path: "/settings/chat" },
       { id: "fox", label: "Renard", icon: PawPrint, path: "/settings/fox" },
       { id: "rewards", label: "Points de chaîne", icon: Coins, path: "/settings/rewards" },
+      { id: "show", label: "Émission", icon: Film, path: "/settings/show" },
     ],
   },
   {

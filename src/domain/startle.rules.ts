@@ -10,7 +10,9 @@ export function toStartleRules({
   foxStartleWithin,
   foxStartleLevel,
   foxStartleGap,
-}: Settings): StartleRules | undefined {
+}: Pick<Settings, "foxStartleRise" | "foxStartleWithin" | "foxStartleLevel" | "foxStartleGap">):
+  | StartleRules
+  | undefined {
   if (
     foxStartleRise === undefined ||
     foxStartleWithin === undefined ||
@@ -33,4 +35,25 @@ export const toRecentSamples = (samples: readonly Sample[], now: number, within:
 export function isSpike(recent: readonly Sample[], current: number, { rise, level }: StartleRules): boolean {
   if (recent.length === 0 || current <= level) return false;
   return current - Math.min(...recent.map((sample) => sample.level)) >= rise;
+}
+
+// Le pas en ms entre deux mesures du son d'un clip : celui des mesures d'OBS (InputVolumeMeters, toutes les 50 ms).
+export const LEVEL_STEP_MS = 50;
+
+// Les instants (ms depuis le début) où une suite de levels, un par `stepMs`, ferait sursauter le renard : le même calcul que le sursaut du
+// jeu en direct (hausse brusque jusqu'à un level fort, au plus un par `gap`), appliqué au son d'un clip.
+export function toSpikes(levels: readonly number[], stepMs: number, rules: StartleRules): number[] {
+  const spikes: number[] = [];
+  let samples: Sample[] = [];
+  let lastAt: number | null = null;
+  levels.forEach((level, index) => {
+    const at = index * stepMs;
+    const recent = toRecentSamples(samples, at, rules.within);
+    samples = [...recent, { at, level }];
+    if (!isSpike(recent, level, rules)) return;
+    if (lastAt !== null && at - lastAt < rules.gap) return;
+    lastAt = at;
+    spikes.push(at);
+  });
+  return spikes;
 }

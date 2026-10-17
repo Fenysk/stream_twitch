@@ -47,10 +47,17 @@ export type Fox = {
   // De nouveaux réglages, appliqués aussitôt : les règles changées partent aux pages, la voix sert au prochain texte.
   update(settings: Settings): void;
   listVoices(): Promise<VoicesResult>;
-  // Dit le texte : le WAV est produit, gardé en mémoire, et son adresse part aux pages (l'aperçu et OBS).
+  // Dit le texte : le WAV est produit, gardé en mémoire, et son adresse part aux pages (l'aperçu et OBS). Refusé (409) pendant
+  // l'émission : le renard n'est alors que dans `/show`.
   speak(text: string, options?: SpeakPlan): Promise<SpeakResult>;
-  // La phrase en cours s'arrête dans toutes les pages.
+  // La phrase en cours s'arrête dans les pages `/fox` et l'aperçu.
   stop(): void;
+  // L'émission passe (`true`) ou s'arrête (`false`) : les pages `/fox` et l'aperçu cachent le renard et se taisent, `/show`
+  // devient seule à le montrer. L'arrêt coupe aussi la phrase en cours dans `/show`.
+  updateShow(isOn: boolean): void;
+  isShowOn(): boolean;
+  // Dit le texte dans les pages `/show` seulement (même synthèse que `speak`) ; refusé (409) hors émission.
+  speakInShow(text: string): Promise<SpeakResult>;
   // Ce qu'il montre en plus de sa bouche : part aux pages quand il change.
   getMode(): FoxMode;
   updateMode(mode: FoxMode): void;
@@ -72,12 +79,27 @@ const SAMPLE_BYTES_PER_MS = 32;
 
 const toMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+// Les pages qui montrent le renard hors émission, et celles de l'émission.
+const STAGE_PLACES: readonly FoxPlace[] = ["screen", "preview"];
+const SHOW_PLACES: readonly FoxPlace[] = ["show"];
+const ALL_PLACES: readonly FoxPlace[] = [...STAGE_PLACES, ...SHOW_PLACES];
+
+type Refusal = Extract<SpeakResult, { ok: false }>;
+
+const IN_SHOW: Refusal = {
+  ok: false,
+  status: 409,
+  message: "Jean-Renard est dans l'émission : il parlera quand elle sera finie",
+};
+const NOT_IN_SHOW: Refusal = { ok: false, status: 409, message: "l'émission n'est pas en cours" };
+
 export function createFox({ voices, settings: initial, clock, createId, toSpeechUrl, log }: FoxDeps): Fox {
   let settings = initial;
   let rules = toFoxRules(initial);
   let pronunciations = toPronunciations(initial.foxPronunciations ?? []);
-  const listeners = new Set<(event: FoxEvent) => void>();
+  const listeners = new Set<{ place: FoxPlace; send: (event: FoxEvent) => void }>();
   let screens = 0;
+  let isShow = false;
   let mode: FoxMode = IDLE_MODE;
   let attitude: Attitude = "plain";
   const start = toStartPresence(clock());
@@ -86,8 +108,9 @@ export function createFox({ voices, settings: initial, clock, createId, toSpeech
   const speeches = new Map<string, { bytes: Uint8Array; expiresAt: number }>();
   let installed: Promise<Voice[]> | undefined;
 
-  const publish = (event: FoxEvent) => {
-    for (const listener of listeners) listener(event);
+  // L'évènement part aux pages de ces places seulement (par défaut, aux pages hors émission).
+  const publish = (event: FoxEvent, places: readonly FoxPlace[] = STAGE_PLACES) => {
+    for (const { place, send } of listeners) if (places.includes(place)) send(event);
   };
 
   const forgetExpired = () => {
@@ -100,11 +123,69 @@ export function createFox({ voices, settings: initial, clock, createId, toSpeech
     }
   };
 
+  // Le texte nettoyé et prononcé, puis son WAV ; sans voix choisie ou si la synthèse échoue, le refus dit pourquoi.
+  const synthesize = async (
+    raw: string,
+  ): Promise<{ ok: true; bytes: Uint8Array; text: string; voice: string } | Refusal> => {
+    const cleaned = toSpeechText(raw);
+    if (cleaned === null) return { ok: false, status: 400, message: "le texte est vide" };
+    // La prononciation : les abréviations et les noms se disent par leur forme parlée, pour tout ce que dit le renard.
+    const text = toSpokenText(cleaned, pronunciations);
+    const voice = settings.foxVoice;
+    if (voice === undefined) {
+      return {
+        ok: false,
+        status: 503,
+        message: "aucune voix choisie : settings.json n'a pas les réglages du renard",
+      };
+    }
+    try {
+      return { ok: true, bytes: await voices.synthesize({ text, voice }), text, voice };
+    } catch (error) {
+      log(`Renard : synthèse impossible avec « ${voice} », ${toMessage(error)}`);
+      return { ok: false, status: 502, message: `la synthèse a échoué : ${toMessage(error)}` };
+    }
+  };
+
+  // Hors émission, l'émission refuse ; pour la voix de l'émission (`isInShow`), c'est l'absence d'émission qui refuse.
+  const toShowRefusal = (isInShow: boolean): Refusal | undefined => {
+    if (isShow === isInShow) return undefined;
+    return isInShow ? NOT_IN_SHOW : IN_SHOW;
+  };
+
+  // Le texte devient un WAV gardé en mémoire dont l'adresse part aux pages hors émission, ou, pour la voix de l'émission
+  // (`isInShow`), aux pages `/show` seules. L'état de l'émission se relit après la synthèse : une émission finie entre-temps
+  // ne laisse rien partir.
+  const say = async (raw: string, options: SpeakPlan, isInShow: boolean): Promise<SpeakResult> => {
+    const refused = toShowRefusal(isInShow);
+    if (refused) return refused;
+    const startedAt = clock();
+    const made = await synthesize(raw);
+    if (!made.ok) return made;
+    await options.waitFor;
+    if (options.isCancelled?.()) return { ok: false, status: 409, message: "la phrase a été annulée" };
+    const refusedNow = toShowRefusal(isInShow);
+    if (refusedNow) return refusedNow;
+    const id = createId();
+    speeches.set(id, { bytes: made.bytes, expiresAt: clock() + SPEECH_KEPT_MS });
+    forgetExpired();
+    const url = toSpeechUrl(id);
+    log(
+      `Renard : ${Array.from(made.text).length} caractères dits par « ${made.voice} », WAV prêt en ${clock() - startedAt} ms.`,
+    );
+    publish({ kind: "speech", url }, isInShow ? SHOW_PLACES : STAGE_PLACES);
+    return {
+      ok: true,
+      url,
+      durationMs: toWavDuration(made.bytes) ?? Math.round(made.bytes.length / SAMPLE_BYTES_PER_MS),
+    };
+  };
+
   return {
     getRules: () => rules,
     subscribe(place, listener) {
       // Chaque connexion a son propre abonnement : se désabonner deux fois ne retranche qu'une page.
-      const entry = (event: FoxEvent) => listener(event);
+      const entry = { place, send: listener };
       listeners.add(entry);
       if (place === "screen") {
         screens += 1;
@@ -125,7 +206,7 @@ export function createFox({ voices, settings: initial, clock, createId, toSpeech
       const nextRules = toFoxRules(next);
       const isChanged = JSON.stringify(nextRules) !== JSON.stringify(rules);
       rules = nextRules;
-      if (nextRules !== undefined && isChanged) publish({ kind: "rules", rules: nextRules });
+      if (nextRules !== undefined && isChanged) publish({ kind: "rules", rules: nextRules }, ALL_PLACES);
     },
     async listVoices() {
       installed ??= voices.list();
@@ -137,44 +218,17 @@ export function createFox({ voices, settings: initial, clock, createId, toSpeech
         return { ok: false, message: `voix introuvables : ${toMessage(error)}` };
       }
     },
-    async speak(raw, options = {}) {
-      const cleaned = toSpeechText(raw);
-      if (cleaned === null) return { ok: false, status: 400, message: "le texte est vide" };
-      // La prononciation : les abréviations et les noms se disent par leur forme parlée, pour tout ce que dit le renard.
-      const text = toSpokenText(cleaned, pronunciations);
-      const voice = settings.foxVoice;
-      if (voice === undefined) {
-        return {
-          ok: false,
-          status: 503,
-          message: "aucune voix choisie : settings.json n'a pas les réglages du renard",
-        };
-      }
-      const startedAt = clock();
-      let bytes: Uint8Array;
-      try {
-        bytes = await voices.synthesize({ text, voice });
-      } catch (error) {
-        log(`Renard : synthèse impossible avec « ${voice} », ${toMessage(error)}`);
-        return { ok: false, status: 502, message: `la synthèse a échoué : ${toMessage(error)}` };
-      }
-      await options.waitFor;
-      if (options.isCancelled?.()) return { ok: false, status: 409, message: "la phrase a été annulée" };
-      const id = createId();
-      speeches.set(id, { bytes, expiresAt: clock() + SPEECH_KEPT_MS });
-      forgetExpired();
-      const url = toSpeechUrl(id);
-      log(
-        `Renard : ${Array.from(text).length} caractères dits par « ${voice} », WAV prêt en ${clock() - startedAt} ms.`,
-      );
-      publish({ kind: "speech", url });
-      return {
-        ok: true,
-        url,
-        durationMs: toWavDuration(bytes) ?? Math.round(bytes.length / SAMPLE_BYTES_PER_MS),
-      };
-    },
+    speak: (raw, options = {}) => say(raw, options, false),
+    speakInShow: (raw) => say(raw, {}, true),
     stop: () => publish({ kind: "stop" }),
+    isShowOn: () => isShow,
+    updateShow(isOn) {
+      if (isShow === isOn) return;
+      isShow = isOn;
+      publish({ kind: "show", isOn });
+      // La voix de l'émission en cours se coupe avec elle.
+      if (!isOn) publish({ kind: "stop" }, SHOW_PLACES);
+    },
     getMode: () => mode,
     updateMode(next) {
       if (isSameMode(mode, next)) return;

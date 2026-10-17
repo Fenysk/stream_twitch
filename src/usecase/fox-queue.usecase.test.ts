@@ -503,3 +503,114 @@ describe("createFoxQueue : un message qui attend trop longtemps n'est plus lu", 
     expect(logs).toEqual(["Renard : message de un expiré (attente de plus de 30 s)"]);
   });
 });
+
+describe("createFoxQueue : l'émission", () => {
+  // Une entrée qui note si elle a été dite (`true`), ou jetée (`false`).
+  type Outcomes = boolean[];
+  const noted = (text: string, overrides: Partial<QueueItem> = {}) => {
+    const outcomes: Outcomes = [];
+    return { outcomes, queued: item(text, { ...overrides, onDone: (isSaid) => outcomes.push(isSaid) }) };
+  };
+
+  it("arrête la lecture d'un message en cours et le jette sans le relire", async () => {
+    const { queue, spoken, stops, finishSynthesis, flush } = setup();
+    const { outcomes, queued } = noted("un");
+    queue.push(queued);
+    await finishSynthesis(0);
+    queue.hold();
+    await flush();
+    expect(stops.count).toBe(1);
+    expect(outcomes).toEqual([false]);
+    expect(queue.count(() => true)).toBe(0);
+    queue.release();
+    expect(spoken).toHaveLength(1);
+  });
+
+  it("garde un remerciement lu en cours et le relit depuis le début après l'émission", async () => {
+    const { queue, spoken, stops, finishSynthesis, advance, flush } = setup();
+    const { outcomes, queued } = noted("merci", { kind: "thanks", isCuttable: false, isUrgent: true });
+    queue.push(queued);
+    await finishSynthesis(0);
+    queue.hold();
+    await flush();
+    expect(stops.count).toBe(1);
+    expect(outcomes).toEqual([]);
+    expect(queue.count(() => true)).toBe(1);
+    await advance(5000);
+    expect(outcomes).toEqual([]);
+    queue.release();
+    expect(spoken.map(({ text }) => text)).toEqual(["merci", "merci"]);
+    await finishSynthesis(1, 500);
+    await advance(1000);
+    expect(outcomes).toEqual([true]);
+  });
+
+  it("jette ce qui attend sauf les remerciements, dont l'ordre reste", async () => {
+    const { queue, voice, spoken, tick } = setup();
+    talking(voice, 0);
+    const message = noted("message");
+    const jab = noted("pique", { kind: "jab" });
+    const first = noted("merci un", { kind: "thanks", isUrgent: true });
+    const second = noted("merci deux", { kind: "thanks", isUrgent: true });
+    for (const { queued } of [message, first, jab, second]) queue.push(queued);
+    queue.hold();
+    expect([message.outcomes, jab.outcomes, first.outcomes, second.outcomes]).toEqual([
+      [false],
+      [false],
+      [],
+      [],
+    ]);
+    expect(queue.count(() => true)).toBe(2);
+    Object.assign(voice, { isTalking: false, talkingFor: 0, silentFor: Number.POSITIVE_INFINITY });
+    queue.release();
+    await tick();
+    expect(spoken.map(({ text }) => text)).toEqual(["merci un"]);
+  });
+
+  it("jette sur-le-champ ce qui arrive pendant l'émission, et garde les remerciements sans les lire", async () => {
+    const { queue, spoken, calls, tick, flush } = setup();
+    queue.hold();
+    const message = noted("message");
+    const reward = noted("récompense", { kind: "thanks", isUrgent: true });
+    queue.push(message.queued);
+    queue.push(reward.queued);
+    await tick();
+    await flush();
+    expect(message.outcomes).toEqual([false]);
+    expect(reward.outcomes).toEqual([]);
+    expect(queue.count(() => true)).toBe(1);
+    expect(spoken).toEqual([]);
+    expect(calls.wakes).toBe(0);
+    queue.release();
+    expect(spoken.map(({ text }) => text)).toEqual(["récompense"]);
+  });
+
+  it("ne lit rien tant que l'émission dure, même quand Alexis se tait", async () => {
+    const { queue, spoken, tick, advance } = setup();
+    queue.hold();
+    queue.push(item("un", { kind: "thanks", isUrgent: true }));
+    await advance(60_000);
+    await tick();
+    expect(spoken).toEqual([]);
+  });
+
+  it("écrit au journal le début et la fin de l'émission, avec ce qui attend et ce qui est jeté", () => {
+    const { queue, logs } = setup();
+    queue.push(item("un", { kind: "thanks", isUrgent: true }));
+    queue.hold();
+    queue.push(item("deux"));
+    queue.release();
+    expect(logs).toEqual([
+      "Renard : l'émission commence, 1 remerciement(s) attendent sa fin.",
+      "Renard : l'émission est finie, 1 remerciement(s) à dire, 1 entrée(s) jetée(s) pendant.",
+    ]);
+  });
+
+  it("ne fait rien d'un second hold, ni d'un release sans hold", () => {
+    const { queue, logs } = setup();
+    queue.release();
+    queue.hold();
+    queue.hold();
+    expect(logs).toHaveLength(1);
+  });
+});

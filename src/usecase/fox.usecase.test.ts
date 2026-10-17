@@ -486,6 +486,99 @@ describe("createFox : les WAV", () => {
   });
 });
 
+describe("createFox : l'émission", () => {
+  // Une page par place, et ce que chacune reçoit.
+  const withPages = () => {
+    const made = setup();
+    const received: Record<"screen" | "preview" | "show", FoxEvent[]> = { screen: [], preview: [], show: [] };
+    for (const place of ["screen", "preview", "show"] as const) {
+      made.fox.subscribe(place, (event) => received[place].push(event));
+    }
+    for (const places of Object.values(received)) places.length = 0;
+    return { ...made, received };
+  };
+
+  it("n'est pas en cours au départ", () => {
+    expect(setup().fox.isShowOn()).toBe(false);
+  });
+
+  it("dit aux pages /fox et à l'aperçu que l'émission passe, pas à /show, et une seule fois", () => {
+    const { fox, received } = withPages();
+    fox.updateShow(true);
+    fox.updateShow(true);
+    expect(fox.isShowOn()).toBe(true);
+    expect(received.screen).toEqual([{ kind: "show", isOn: true }]);
+    expect(received.preview).toEqual([{ kind: "show", isOn: true }]);
+    expect(received.show).toEqual([]);
+  });
+
+  it("refuse de parler hors de /show pendant l'émission, sans rien synthétiser", async () => {
+    const { fox, sounds } = withPages();
+    fox.updateShow(true);
+    const result = await fox.speak("Salut");
+    expect(result).toMatchObject({ ok: false, status: 409 });
+    expect(sounds).toEqual([]);
+  });
+
+  it("envoie la voix de l'émission aux pages /show seules", async () => {
+    const { fox, received } = withPages();
+    fox.updateShow(true);
+    received.screen.length = 0;
+    received.preview.length = 0;
+    const result = await fox.speakInShow("Bonsoir");
+    expect(result).toMatchObject({ ok: true, durationMs: 500 });
+    expect(received.show).toEqual([{ kind: "speech", url: "/api/fox/speech/id1" }]);
+    expect(received.screen).toEqual([]);
+    expect(received.preview).toEqual([]);
+  });
+
+  it("refuse la voix de l'émission quand l'émission n'est pas en cours", async () => {
+    const { fox, sounds } = withPages();
+    const result = await fox.speakInShow("Bonsoir");
+    expect(result).toMatchObject({ ok: false, status: 409 });
+    expect(sounds).toEqual([]);
+  });
+
+  it("coupe /show quand l'émission s'arrête, et la phrase encore en synthèse ne part pas", async () => {
+    const { fox, received } = withPages();
+    fox.updateShow(true);
+    const pending = fox.speakInShow("Bonsoir");
+    fox.updateShow(false);
+    expect(await pending).toMatchObject({ ok: false, status: 409 });
+    expect(received.show).toEqual([{ kind: "stop" }]);
+    expect(received.screen).toEqual([
+      { kind: "show", isOn: true },
+      { kind: "show", isOn: false },
+    ]);
+  });
+
+  it("reparle hors de /show une fois l'émission finie", async () => {
+    const { fox, received } = withPages();
+    fox.updateShow(true);
+    fox.updateShow(false);
+    received.screen.length = 0;
+    expect(await fox.speak("Salut")).toMatchObject({ ok: true });
+    expect(received.screen).toEqual([{ kind: "speech", url: "/api/fox/speech/id1" }]);
+    expect(received.show).toEqual([{ kind: "stop" }]);
+  });
+
+  it("ne dit à /show ni le mode, ni la présence, ni l'humeur, ni les arrêts de /fox", () => {
+    const { fox, received } = withPages();
+    fox.updateMode({ kind: "yawn" });
+    fox.updatePresence("visible");
+    fox.updateAttitude("sulking");
+    fox.stop();
+    expect(received.show).toEqual([]);
+    expect(received.screen).toHaveLength(4);
+  });
+
+  it("donne les règles à toutes les places", () => {
+    const { fox, received } = withPages();
+    fox.update({ ...withFox, foxBounce: 0.1 });
+    for (const places of Object.values(received)) expect(places).toMatchObject([{ kind: "rules" }]);
+  });
+});
+
 describe("createFox : l'humeur", () => {
   it("commence ordinaire", () => {
     const { fox } = setup();

@@ -1,0 +1,63 @@
+/* L'onglet « Émission » : l'adresse de la source OBS, le lecteur d'un clip, puis la liste des clips bruts */
+
+.show-address {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--chip);
+  user-select: all;
+}
+
+.clip-video {
+  display: block;
+  width: 100%;
+  max-width: 960px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  background: #000;
+}
+
+.clip-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.clip-row {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--chip);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--lp-dur-fast);
+}
+
+@media (hover: hover) {
+  .clip-row:hover {
+    background: var(--chip-hover);
+  }
+}
+
+.clip-row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Le clip ouvert dans le lecteur */
+.clip-row.is-selected {
+  background: var(--chip-hover);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.clip-row-name {
+  overflow-wrap: anywhere;
+}

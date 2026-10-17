@@ -6,9 +6,11 @@ import { toInstant } from "../../domain/instant.rules";
 import type { Settings } from "../../domain/settings.schema";
 import { isFlinchReward, isFoxReward } from "../../domain/thanks.rules";
 import { createChatClient } from "../../infra/chat.client";
+import { createClipChatStore, createClipStore } from "../../infra/clip.repository";
 import { createEmoteClient } from "../../infra/emotes.client";
 import { createEmoteStore } from "../../infra/emotes.repository";
 import { createExpressionStore } from "../../infra/expression.repository";
+import { createFfmpegClient, createProcessRunner } from "../../infra/ffmpeg.client";
 import { getHeadFiles } from "../../infra/head-files.repository";
 import { getInsults } from "../../infra/insults.repository";
 import {
@@ -30,6 +32,9 @@ import { createTwitchTokenStore } from "../../infra/twitch-token.repository";
 import { createViewersClient } from "../../infra/twitch-viewers.client";
 import { createPowerShellRunner, createVoiceClient, sweepVoiceFiles } from "../../infra/voice.client";
 import { type Chat, createChat } from "../../usecase/chat.usecase";
+import { type ClipLibrary, createClipLibrary } from "../../usecase/clip.usecase";
+import { createClipAnalysis } from "../../usecase/clip-analysis.usecase";
+import { createClipChat } from "../../usecase/clip-chat.usecase";
 import { createEmoteSync } from "../../usecase/emote-sync.usecase";
 import { createExpressionLibrary, type ExpressionLibrary } from "../../usecase/expression.usecase";
 import { createFox, type Fox } from "../../usecase/fox.usecase";
@@ -53,6 +58,8 @@ import { createFoxTunnel } from "../../usecase/fox-tunnel.usecase";
 import { createHeadLoop, type HeadFeed } from "../../usecase/head.usecase";
 import { createRewardPhraseLibrary, type RewardPhraseLibrary } from "../../usecase/reward-phrase.usecase";
 import { createSettingsStore, type SettingsStore } from "../../usecase/settings.usecase";
+import { createShowVoice } from "../../usecase/show.usecase";
+import { createShowDirector, type ShowDirector } from "../../usecase/show-director.usecase";
 import { createShutdown } from "../../usecase/shutdown.usecase";
 import { createSoundLibrary, type SoundLibrary } from "../../usecase/sound.usecase";
 import { createSoundQueue, type SoundQueue } from "../../usecase/sound-queue.usecase";
@@ -85,6 +92,11 @@ export type Runtime = {
   // Les phrases de Jean-Renard de chaque récompense de la chaîne (data/reward-phrases.json), et ce qu'il fait d'un rachat.
   rewardPhrases: RewardPhraseLibrary;
   foxReward: FoxReward;
+  // L'émission de clips : les clips bruts du dossier d'OBS (ffprobe pour leur durée), servis en flux à l'onglet Émission.
+  clips: ClipLibrary;
+  // L'émission : elle commence quand la page /show passe à l'antenne d'OBS et s'arrête dès qu'elle n'y est plus ; Jean-Renard n'est
+  // alors que dans /show.
+  director: ShowDirector;
 };
 
 // Le plugin Nitro et les routes serveur partagent ce module : c'est le seul état du serveur.
@@ -181,6 +193,10 @@ export function startRuntime(): Runtime {
       regulars.update(effective);
       chat.update(effective);
       foxChat.update(effective);
+      clips.update(effective);
+      clipChat.update(effective);
+      director.update(effective);
+      showVoice.update(effective);
     },
     log,
   });
@@ -487,11 +503,60 @@ export function startRuntime(): Runtime {
     random: Math.random,
     log,
   });
+  // L'émission de clips : ffprobe et ffmpeg viennent du PATH ; un encodage en cours est tué avec le serveur.
+  const processes = createProcessRunner();
+  process.once("exit", processes.stop);
+  const ffmpeg = createFfmpegClient(processes.run, log);
+  const clipStore = createClipStore(log);
+  const clips = createClipLibrary({
+    store: clipStore,
+    probe: ffmpeg,
+    encoder: ffmpeg,
+    // Le son d'un clip se mesure avec ffmpeg (spikes) et son tchat se place sur le clip, à la demande de la page /show.
+    analysis: createClipAnalysis({ store: clipStore, probe: ffmpeg, levels: ffmpeg, log }),
+    clock: Date.now,
+    log,
+  });
+  clips.update(initial);
+  // Le tchat de chaque clip : OBS sauvegarde le tampon de relecture, le serveur écrit à côté du clip les messages de ses dernières minutes.
+  const clipChat = createClipChat({
+    chat,
+    replay: obs.replay,
+    probe: ffmpeg,
+    store: createClipChatStore(),
+    clock: Date.now,
+    schedule,
+    log,
+  });
+  clipChat.update(initial);
+  // Ce que Jean-Renard dit dans l'émission (ouverture, clôture, phrase de chaque clip) : sa voix sort de la page /show.
+  const showVoice = createShowVoice({
+    say: (text) => fox.speakInShow(text),
+    settings: initial,
+    random: Math.random,
+    log,
+  });
+  // L'émission : OBS dit quand la page /show passe à l'antenne ; Jean-Renard quitte alors /fox, la file de parole se tient.
+  const director = createShowDirector({
+    scene: obs.show,
+    clips,
+    fox,
+    queue,
+    voice: showVoice,
+    sounds,
+    settings: initial,
+    random: Math.random,
+    createId: () => randomBytes(8).toString("hex"),
+    schedule,
+    log,
+  });
   log(`Renard : liste d'insultes chargée (${insults.parts.length + insults.words.size} entrées).`);
   shown = start.head.expression;
   loop.start();
   if (!start.found) settings.update({ expression: null });
+  director.start();
   obs.start();
+  clipChat.start();
   mode.start();
   queue.start();
   void emotes.start();
@@ -512,7 +577,7 @@ export function startRuntime(): Runtime {
   void twitch.start();
   chat.start();
   log(
-    `Serveur démarré : http://localhost:${port}/head, /chat, /fox et /sounds (réglages : http://localhost:${port}/)`,
+    `Serveur démarré : http://localhost:${port}/head, /chat, /fox, /sounds et /show (réglages : http://localhost:${port}/)`,
   );
   log(`Sons : ${sounds.list().length} dans data/sounds/.`);
   log(`Réglages : micro « ${initial.micName} », seuil ${initial.threshold} dB, délai ${initial.delay} ms.`);
@@ -532,6 +597,8 @@ export function startRuntime(): Runtime {
     soundQueue,
     rewardPhrases,
     foxReward,
+    clips,
+    director,
   };
   return current;
 }

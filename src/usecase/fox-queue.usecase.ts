@@ -50,6 +50,11 @@ export type FoxQueue = {
   count(isCounted: (item: QueueItem) => boolean): number;
   // Retire de la file, et arrête la lecture si elle en fait partie. Avec `cause`, chaque retrait s'écrit au journal.
   removeWhere(isRemoved: (item: QueueItem) => boolean, cause?: string): void;
+  // L'émission passe : la lecture en cours s'arrête et rien n'est plus lu avant `release`. Les remerciements (`thanks`, dont les
+  // phrases des récompenses) attendent la fin de l'émission, le reste est jeté (`onDone(false)`), même ce qui arrive pendant.
+  hold(): void;
+  // L'émission est finie : les remerciements gardés se disent, dans l'ordre.
+  release(): void;
 };
 
 // Le silence entre deux entrées lues : la page met un instant à charger le WAV, et le renard reprend son souffle.
@@ -81,6 +86,17 @@ export function createFoxQueue({
   const waiting: Queued[] = [];
   let current: Reading | undefined;
   let unsubscribeTick: (() => void) | undefined;
+  // L'émission passe (`hold`) : rien n'est lu. `dropped` : les entrées jetées depuis, que le journal compte une fois à la fin.
+  let isHeld = false;
+  let dropped = 0;
+
+  // Ce que l'émission fait attendre au lieu de jeter : un remerciement ne se perd pas, un rachat y perdrait ses points.
+  const isKeptHeld = ({ kind }: QueueItem): boolean => kind === "thanks";
+
+  const drop = (item: QueueItem) => {
+    dropped += 1;
+    item.onDone?.(false);
+  };
 
   // D : on ne commence pas à lire tant qu'Alexis parle ; il doit se taire depuis `readSilence`.
   const isAlexisSilent = (): boolean => !modeRules || mode.getVoice().silentFor >= modeRules.readSilence;
@@ -106,7 +122,7 @@ export function createFoxQueue({
 
   const startNext = () => {
     deleteExpired();
-    if (current || !isAlexisSilent()) return;
+    if (isHeld || current || !isAlexisSilent()) return;
     const item = waiting.shift();
     if (!item) return;
     const intro = mode.introduce(item.toShow());
@@ -163,7 +179,7 @@ export function createFoxQueue({
       return;
     }
     deleteExpired();
-    if (waiting.length === 0) return;
+    if (isHeld || waiting.length === 0) return;
     mode.wake();
     startNext();
   };
@@ -192,8 +208,35 @@ export function createFoxQueue({
       maxWait = next.foxReadMaxWait;
     },
     push(item) {
+      if (isHeld && !isKeptHeld(item)) {
+        drop(item);
+        return;
+      }
       insert({ ...item, queuedAt: clock() });
+      if (isHeld) return;
       mode.wake();
+      startNext();
+    },
+    hold() {
+      if (isHeld) return;
+      isHeld = true;
+      dropped = 0;
+      const reading = current;
+      // La lecture en cours s'arrête ; un remerciement reprend en tête de file, depuis son début.
+      stopCurrent();
+      if (reading && isKeptHeld(reading.item)) waiting.unshift({ ...reading.item, queuedAt: clock() });
+      else if (reading) drop(reading.item);
+      const lost = waiting.filter((item) => !isKeptHeld(item));
+      waiting.splice(0, waiting.length, ...waiting.filter(isKeptHeld));
+      for (const item of lost) drop(item);
+      log(`Renard : l'émission commence, ${waiting.length} remerciement(s) attendent sa fin.`);
+    },
+    release() {
+      if (!isHeld) return;
+      isHeld = false;
+      log(
+        `Renard : l'émission est finie, ${waiting.length} remerciement(s) à dire, ${dropped} entrée(s) jetée(s) pendant.`,
+      );
       startNext();
     },
     count: (isCounted) => waiting.filter(isCounted).length + (current && isCounted(current.item) ? 1 : 0),

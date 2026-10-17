@@ -1,0 +1,173 @@
+/* La page `/show` : transparente hors émission ; pendant elle, un fond sobre (le void du design system), deux vidéos, un bandeau aux
+   couleurs du design system, le titre du clip dans un coin et Jean-Renard. Tailles en vw : la page suit la source OBS. */
+
+.show-stage {
+  --show-fade: 0.8s; /* le même temps que FADE_MS (show-run.ts) */
+  --show-slide: 0.6s;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  color: var(--ink);
+}
+
+.show-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--void);
+  transition: opacity var(--show-fade) ease;
+}
+
+.show-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  opacity: 0;
+  transition:
+    opacity var(--show-fade) ease,
+    filter var(--show-fade) ease,
+    transform var(--show-fade) ease;
+}
+
+.show-video.is-visible {
+  opacity: 1;
+}
+
+/* Le début du clip qui arrive, derrière le bandeau : flou et assombri (agrandi un peu, le flou ne laisse pas de bord clair) */
+.show-video.is-blurred {
+  filter: blur(2.4vw) brightness(0.45);
+  transform: scale(1.08);
+}
+
+/* Le bandeau : à gauche, aux couleurs d'accent du design system, il glisse depuis le bord de l'écran. Les trois premiers cinquièmes de
+   l'écran lui suffisent, Jean-Renard tient la droite. */
+.show-banner {
+  position: absolute;
+  top: 46%;
+  left: 0;
+  max-width: 66vw;
+  transform: translateX(-105%);
+  transition: transform var(--show-slide) var(--lp-ease);
+  pointer-events: none;
+}
+
+.show-banner.is-visible {
+  transform: none;
+}
+
+.show-banner-body {
+  box-sizing: border-box;
+  padding: 1.6vw 4vw 1.8vw 3.5vw;
+  border-radius: 0 3vw 3vw 0;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--pill-shadow);
+  font-family: var(--font-sans);
+  animation: show-banner-in var(--show-slide) var(--lp-ease) both;
+}
+
+@keyframes show-banner-in {
+  from {
+    transform: translateX(-30%);
+    opacity: 0;
+  }
+}
+
+/* Le petit texte au-dessus du titre : le jour du clip */
+.show-banner-kicker {
+  margin: 0 0 0.3vw;
+  font-size: 1.6vw;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.show-banner-title {
+  margin: 0;
+  font-size: 4.2vw;
+  line-height: 1.1;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+/* Le titre du clip pendant qu'il joue : une petite pill en haut à gauche, assez opaque pour se lire sur n'importe quelle image */
+.show-title {
+  position: absolute;
+  top: 1.5vw;
+  left: 1.5vw;
+  opacity: 0;
+  transition: opacity var(--show-fade) ease;
+  pointer-events: none;
+}
+
+.show-title.is-visible {
+  opacity: 1;
+}
+
+.show-title-pill {
+  --pill-opacity: 88%;
+  box-sizing: border-box;
+  max-width: 36vw;
+  padding: 0.6vw 1.4vw;
+  border-radius: 1.4vw;
+}
+
+.show-title-text {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.5vw;
+  line-height: 1.2;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+/* Le tchat d'origine du clip : la colonne du tchat du direct, en bas à gauche, sur le côté du clip (le centre reste libre) */
+.show-chat {
+  --chat-source-width: 24vw;
+  --chat-source-height: 50vh;
+  position: absolute;
+  bottom: 1.5vw;
+  left: 1.5vw;
+  opacity: 0;
+  transition: opacity var(--show-fade) ease;
+  pointer-events: none;
+}
+
+.show-chat.is-visible {
+  opacity: 1;
+}
+
+/* Jean-Renard : un seul élément, grand à droite pendant le bandeau, petit dans un coin pendant le clip (la toile du renard fait 648 × 920) */
+.show-fox {
+  position: absolute;
+  right: var(--fox-right);
+  bottom: var(--fox-bottom);
+  width: var(--fox-width);
+  pointer-events: none;
+  transition:
+    right var(--show-fade) ease,
+    bottom var(--show-fade) ease,
+    width var(--show-fade) ease,
+    opacity var(--show-fade) ease;
+}
+
+.show-fox.is-beside {
+  --fox-width: 26vw;
+  --fox-right: 5vw;
+  --fox-bottom: 0vw;
+}
+
+.show-fox.is-corner {
+  --fox-width: 11vw;
+  --fox-right: 1.5vw;
+  --fox-bottom: 1.5vw;
+}
+
+/* Hors émission, la page ne montre rien : OBS voit la scène à travers */
+.show-stage[data-view="none"] .show-backdrop,
+.show-stage[data-view="none"] .show-fox {
+  opacity: 0;
+}

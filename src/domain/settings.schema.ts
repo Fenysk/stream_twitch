@@ -493,6 +493,15 @@ export const SettingsFieldsSchema = z
     chatMaxMessages: positiveWhole().max(50, "doit être d'au plus 50").optional(),
     chatAnimation: ChatAnimationSchema.optional(),
     chatShouldShowHidden: z.boolean("doit être true ou false").optional(),
+    // L'émission de clips : le dossier des clips bruts d'OBS (leurs sous-dossiers Confirmés et Traités s'y créent). Aucun champ
+    // dans l'interface : settings.json le donne, settings.local.json peut le surcharger (un essai sur un autre dossier).
+    showClipsFolder: z.string("doit être un texte").min(1, "ne peut pas être vide").optional(),
+    // L'émission : combien de clips elle passe (les moins passés d'abord), les phrases d'ouverture et de clôture de Jean-Renard (une
+    // au hasard, sans répétition avant d'avoir tout dit), et l'avance du tchat d'un clip en ms (le tchat réagit après ce qu'il voit).
+    showClipCount: positiveWhole().max(20, "doit être d'au plus 20").optional(),
+    showOpeningPhrases: phraseList(true).optional(),
+    showClosingPhrases: phraseList(true).optional(),
+    showChatLead: nonNegative().optional(),
   })
   .strict();
 
@@ -676,6 +685,11 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   chatMaxMessages: true,
   chatAnimation: true,
   chatShouldShowHidden: true,
+  showClipsFolder: true,
+  showClipCount: true,
+  showOpeningPhrases: true,
+  showClosingPhrases: true,
+  showChatLead: true,
 });
 export type EditableSettings = z.infer<typeof EditableSettingsSchema>;
 

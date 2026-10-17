@@ -423,5 +423,16 @@
   "chatDuration": 60,
   "chatMaxMessages": 8,
   "chatAnimation": "rise",
-  "chatShouldShowHidden": false
+  "chatShouldShowHidden": false,
+  "showClipsFolder": "C:\\Users\\alexi\\Videos\\Clips OBS",
+  "showClipCount": 5,
+  "showOpeningPhrases": [
+    "Fenysk est parti. On va regarder ses bêtises sans lui !",
+    "Pendant que Fenysk se cache, voici ce qu'il voudrait qu'on oublie."
+  ],
+  "showClosingPhrases": [
+    "Fin des preuves. Fenysk reste en liberté, et c'est bien le problème.",
+    "C'est tout pour aujourd'hui. Le chat peut reprendre une activité normale."
+  ],
+  "showChatLead": 4000
 }

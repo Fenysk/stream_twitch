@@ -7,7 +7,7 @@ import { toSoundFileUrl } from "./sound-urls";
 const BLOCKED_REASON = "le navigateur bloque le son : un clic dans la page l'autorise";
 
 // Un son arrêté ne parle plus : la page libère le fichier, sans que `ended` ni `error` ne s'en mêlent.
-const release = (audio: HTMLAudioElement): void => {
+export const release = (audio: HTMLAudioElement): void => {
   audio.pause();
   audio.removeAttribute("src");
   audio.load();

@@ -80,9 +80,9 @@ export type Attitude = z.infer<typeof AttitudeSchema>;
 export const PresenceViewSchema = z.enum(["visible", "leaving", "away", "returning"]);
 export type PresenceView = z.infer<typeof PresenceViewSchema>;
 
-// Où une page montre le renard : `screen`, la page `/fox` (la source d'OBS) ; `preview`, l'aperçu de l'onglet Renard.
-// Chaque page le déclare en se connectant au flux.
-export const FoxPlaceSchema = z.enum(["screen", "preview"]);
+// Où une page montre le renard : `screen`, la page `/fox` (la source d'OBS) ; `preview`, l'aperçu de l'onglet Renard ; `show`,
+// la page `/show` pendant l'émission, où il est seul (voix et bouche). Chaque page le déclare en se connectant au flux.
+export const FoxPlaceSchema = z.enum(["screen", "preview", "show"]);
 export type FoxPlace = z.infer<typeof FoxPlaceSchema>;
 
 // Ce que le serveur envoie aux pages du renard : les règles appliquées (à la connexion, puis à chaque changement),
@@ -100,6 +100,9 @@ export const FoxEventSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("presence"), presence: PresenceViewSchema, elapsed: z.number().min(0) }),
   // Son humeur (à la connexion, puis à chaque changement).
   z.object({ kind: z.literal("attitude"), attitude: AttitudeSchema }),
+  // L'émission passe (`isOn`) : le renard est dans `/show`, `/fox` et l'aperçu le cachent et se taisent (aux places `screen` et
+  // `preview`, à la connexion puis à chaque changement).
+  z.object({ kind: z.literal("show"), isOn: z.boolean() }),
 ]);
 export type FoxEvent = z.infer<typeof FoxEventSchema>;
 
