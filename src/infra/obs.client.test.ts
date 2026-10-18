@@ -9,6 +9,7 @@ import {
   type ObsPage,
   type ObsSceneItem,
   type ObsSocket,
+  toSceneNames,
 } from "./obs.client";
 
 const connected: ObsConnection = { ok: true, version: "5.7.4" };
@@ -33,6 +34,10 @@ const createFakeSocket = (connections: ObsConnection[]) => {
     programScene: "jeu",
     scenes: {} as Record<string, ObsSceneItem[]>,
     sceneError: undefined as Error | undefined,
+    // Les noms des scènes qu'OBS liste, les scènes où le programme est passé, et `switchError` : OBS refuse de changer de scène.
+    sceneNames: [] as string[],
+    switched: [] as string[],
+    switchError: undefined as Error | undefined,
     queried: [] as string[],
     stream: { isLive: false, durationMs: 0 },
     streamError: undefined as Error | undefined,
@@ -56,6 +61,14 @@ const createFakeSocket = (connections: ObsConnection[]) => {
     async getProgramScene() {
       if (state.sceneError) throw state.sceneError;
       return state.programScene;
+    },
+    async listScenes() {
+      if (state.sceneError) throw state.sceneError;
+      return state.sceneNames;
+    },
+    async updateProgramScene(name) {
+      if (state.switchError) throw state.switchError;
+      state.switched.push(name);
     },
     async listSceneItems(sceneName) {
       if (state.sceneError) throw state.sceneError;
@@ -885,5 +898,116 @@ describe("createObsClient : la page /show à l'antenne", () => {
     fake.sendSceneChanged();
     await settle();
     expect(heard).toEqual([]);
+  });
+});
+
+describe("toSceneNames", () => {
+  it("range les scènes par leur place dans OBS, même quand la réponse arrive à l'envers", () => {
+    expect(
+      toSceneNames({
+        scenes: [
+          { sceneName: "Fin", sceneIndex: 2 },
+          { sceneName: "Pause", sceneIndex: 1 },
+          { sceneName: "Jeu", sceneIndex: 0 },
+        ],
+      }),
+    ).toEqual(["Jeu", "Pause", "Fin"]);
+  });
+
+  it("garde l'ordre reçu quand OBS ne donne aucune place", () => {
+    expect(toSceneNames({ scenes: [{ sceneName: "Jeu" }, { sceneName: "Pause" }] })).toEqual([
+      "Jeu",
+      "Pause",
+    ]);
+  });
+
+  it("ne dit aucun nom pour une réponse sans scène, et refuse une réponse illisible", () => {
+    expect(toSceneNames({ scenes: [] })).toEqual([]);
+    expect(() => toSceneNames({ scenes: [{ sceneName: 3 }] })).toThrow();
+    expect(() => toSceneNames({})).toThrow();
+  });
+});
+
+describe("createObsClient : les scènes d'OBS", () => {
+  it("Quand OBS est joint, le système doit lister les noms des scènes, dans l'ordre d'OBS", async () => {
+    const { fake, client } = setup([connected]);
+    fake.state.sceneNames = ["Jeu", "Pause", "Fin"];
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await client.listScenes()).toEqual({ ok: true, scenes: ["Jeu", "Pause", "Fin"] });
+  });
+
+  it("Quand OBS n'est pas joint, le système doit refuser en français sans interroger OBS", async () => {
+    const { fake, client } = setup([unreachable]);
+    fake.state.sceneNames = ["Jeu"];
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await client.listScenes()).toEqual({ ok: false, reason: "OBS n'est pas connecté" });
+  });
+
+  it("Quand la connexion tombe, le système doit refuser comme OBS non joint", async () => {
+    const { fake, client } = setup([connected, unreachable]);
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendClosed();
+    expect(await client.listScenes()).toEqual({ ok: false, reason: "OBS n'est pas connecté" });
+  });
+
+  it("Quand OBS refuse de répondre, le système doit refuser en disant pourquoi, sans lever", async () => {
+    const { fake, client } = setup([connected]);
+    fake.state.sceneError = new Error("RequestFailed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await client.listScenes()).toEqual({
+      ok: false,
+      reason: "les scènes d'OBS sont illisibles, RequestFailed",
+    });
+  });
+});
+
+describe("createObsClient : passer sur une scène", () => {
+  it("Quand la scène existe, le système doit faire passer le programme dessus", async () => {
+    const { fake, client } = setup([connected]);
+    fake.state.sceneNames = ["Jeu", "Pause"];
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await client.show.updateProgramScene("Pause")).toEqual({ ok: true });
+    expect(fake.state.switched).toEqual(["Pause"]);
+  });
+
+  it("Quand la scène n'existe pas dans OBS, le système doit refuser en la nommant, sans changer de scène", async () => {
+    const { fake, client } = setup([connected]);
+    fake.state.sceneNames = ["Jeu"];
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await client.show.updateProgramScene("Pause")).toEqual({
+      ok: false,
+      reason: "la scène « Pause » n'existe pas dans OBS",
+    });
+    expect(fake.state.switched).toEqual([]);
+  });
+
+  it("Quand OBS n'est pas joint, le système doit refuser sans changer de scène", async () => {
+    const { fake, client } = setup([unreachable]);
+    fake.state.sceneNames = ["Pause"];
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await client.show.updateProgramScene("Pause")).toEqual({
+      ok: false,
+      reason: "OBS n'est pas connecté",
+    });
+    expect(fake.state.switched).toEqual([]);
+  });
+
+  it("Quand OBS refuse la demande, le système doit rendre son message en refus, sans lever", async () => {
+    const { fake, client } = setup([connected]);
+    fake.state.sceneNames = ["Pause"];
+    fake.state.switchError = new Error("RequestFailed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await client.show.updateProgramScene("Pause")).toEqual({ ok: false, reason: "RequestFailed" });
+  });
+
+  it("Quand OBS refuse de lister les scènes, le système doit refuser sans changer de scène", async () => {
+    const { fake, client } = setup([connected]);
+    fake.state.sceneError = new Error("RequestFailed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await client.show.updateProgramScene("Pause")).toEqual({
+      ok: false,
+      reason: "les scènes d'OBS sont illisibles, RequestFailed",
+    });
+    expect(fake.state.switched).toEqual([]);
   });
 });

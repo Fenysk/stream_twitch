@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-18 — Après une émission finie, OBS passe sur la scène de `showEndScene`
+
+**Contexte.** Alexis veut qu'une émission finie l'envoie seule sur une autre scène, par exemple « Pause », au lieu de rester sur celle de `/show`.
+**Décision.** Réglage `showEndScene` (le nom d'une scène d'OBS ; vide : on reste), choisi dans l'onglet Émission parmi les scènes qu'OBS liste (`GET /api/obs/scenes`). Le director demande la scène du programme (`SetCurrentProgramScene`) quand la page rapporte `ended`, seulement là. Une scène absente ou OBS déconnecté : rien ne bouge, le journal le dit.
+**Renoncement.** Basculer aussi quand l'émission est coupée (Alexis vient de changer de scène lui-même), après 20 s sans page `/show` ou à l'arrêt du serveur (des pannes, pas une fin). Attendre la fin du fondu de `/show` : la transition d'OBS s'en charge.
+
 ## 2026-10-18 — Le retour de Fenysk quitte `/show` pour sa page `/countdown`, le serveur l'estime (`ShowState.returnAt`), l'onglet Émission prévoit la durée
 
 **Contexte.** Alexis veut placer le retour de Fenysk dans OBS comme un widget à part, et voir la durée d'une émission en réglant le nombre de clips.

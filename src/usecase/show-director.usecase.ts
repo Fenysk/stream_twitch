@@ -28,8 +28,13 @@ import type { ShowSpeakResult, ShowVoice } from "./show.usecase";
 
 // La page /show à l'antenne ? OBS la dit quand une source navigateur vers /show devient visible dans la scène du programme (la
 // scène passe à l'antenne, ou la source est rendue visible), et quand elle ne l'est plus. Chaque abonné reçoit les changements ;
-// infra l'implémente avec les évènements d'OBS.
-export type ShowScenePort = { subscribe(listener: (isVisible: boolean) => void): () => void };
+// infra l'implémente avec les évènements d'OBS. Il fait aussi passer le programme sur une scène (en mode studio aussi) : un refus
+// (scène inconnue d'OBS, OBS déconnecté, demande en échec) est un résultat, jamais une exception.
+export type ShowSceneResult = { ok: true } | { ok: false; reason: string };
+export type ShowScenePort = {
+  subscribe(listener: (isVisible: boolean) => void): () => void;
+  updateProgramScene(name: string): Promise<ShowSceneResult>;
+};
 
 export type ShowDirectorDeps = {
   scene: ShowScenePort;
@@ -110,6 +115,8 @@ export function createShowDirector({
 }: ShowDirectorDeps): ShowDirector {
   let count = initial.showClipCount ?? DEFAULT_SHOW_CLIP_COUNT;
   let grumbles = initial.showGrumblePhrases ?? [];
+  // La scène d'OBS où passer à la fin normale ; vide : on reste.
+  let endScene = initial.showEndScene ?? "";
   // Les phrases de coupure déjà dites depuis le dernier tour de la liste, d'une émission à l'autre.
   let said: string[] = [];
   let delay = initial.delay;
@@ -175,6 +182,18 @@ export function createShowDirector({
       log(`Émission : ${reason}.`);
     }
     publish(toIdle(status));
+  };
+
+  // La fin normale seulement : OBS passe sur la scène réglée. La réponse n'est pas attendue (la page n'attend pas OBS), elle va au journal.
+  const switchToEndScene = async () => {
+    const name = endScene;
+    if (name === "") return;
+    const result = await scene.updateProgramScene(name);
+    log(
+      result.ok
+        ? `Émission : finie, OBS passe sur « ${name} ».`
+        : `Émission : finie, mais OBS ne passe pas sur « ${name} » : ${result.reason}.`,
+    );
   };
 
   // Sans page connectée, un délai de grâce, puis la fin.
@@ -283,6 +302,7 @@ export function createShowDirector({
       delay = next.delay;
       count = next.showClipCount ?? DEFAULT_SHOW_CLIP_COUNT;
       grumbles = next.showGrumblePhrases ?? [];
+      endScene = next.showEndScene ?? "";
     },
     getState: () => state,
     subscribe(listener) {
@@ -306,6 +326,7 @@ export function createShowDirector({
       if (state.status !== "running" || runId !== state.runId) return STALE;
       if (phase === "ended") {
         end("over", "finie", "wake");
+        void switchToEndScene();
         return { ok: true };
       }
       if ((phase === "card" || phase === "clip") && index >= state.lineup.length) {

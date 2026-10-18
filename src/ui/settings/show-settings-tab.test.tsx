@@ -9,6 +9,9 @@ const state = vi.hoisted(() => ({
   list: null as ClipList | null,
   error: null as string | null,
   effective: null as Partial<EditableSettings> | null,
+  // Les scènes d'OBS que le hook rend (`scenes` à `null` : pas encore lues).
+  scenes: null as string[] | null,
+  scenesError: null as string | null,
 }));
 
 vi.mock("./use-settings", () => ({
@@ -25,6 +28,10 @@ vi.mock("./use-settings", () => ({
     change: async () => true,
     reset: async () => undefined,
   }),
+}));
+
+vi.mock("./use-scenes", () => ({
+  useScenes: () => ({ scenes: state.scenes, error: state.scenesError }),
 }));
 
 vi.mock("./use-clips", () => ({
@@ -44,6 +51,8 @@ beforeEach(() => {
   state.list = { clips: [], confirmedCount: 0, confirmed: [] };
   state.error = null;
   state.effective = null;
+  state.scenes = null;
+  state.scenesError = null;
 });
 
 describe("l'onglet Émission", () => {
@@ -130,6 +139,23 @@ describe("l'onglet Émission", () => {
     };
     // 12 400 d'ouverture et de clôture, 6000 de carton, 120 000 de partie gardée : 138 400 ms.
     expect(renderToStaticMarkup(<ShowSettingsTab />)).toContain("Durée estimée : 2 min");
+  });
+
+  it("Quand les scènes d'OBS sont lues, le système doit les proposer pour la scène après l'émission, celle enregistrée cochée", () => {
+    state.effective = { showEndScene: "Pause" };
+    state.scenes = ["Jeu", "Pause"];
+    const html = renderToStaticMarkup(<ShowSettingsTab />);
+    expect(html).toContain("Scène après l&#x27;émission");
+    expect(html).toContain("Rester sur la scène de l&#x27;émission");
+    expect(html).toMatch(/value="Pause"[^>]*checked=""|checked=""[^>]*value="Pause"/);
+  });
+
+  it("Quand OBS ne donne pas ses scènes, le système doit le dire dans l'onglet", () => {
+    state.effective = {};
+    state.scenesError = "OBS n'est pas connecté";
+    expect(renderToStaticMarkup(<ShowSettingsTab />)).toContain(
+      "Les scènes d&#x27;OBS sont illisibles : OBS n&#x27;est pas connecté.",
+    );
   });
 
   it("ne prévoit aucune durée tant que la liste des clips n'est pas lue", () => {

@@ -6,7 +6,7 @@ import type { ShowState } from "../domain/show.schema";
 import type { ClipFailure, ConfirmedClip, ConfirmedListResult } from "./clip.usecase";
 import type { QueueItem } from "./fox-queue.usecase";
 import type { ShowSpeakResult } from "./show.usecase";
-import { createShowDirector, PAGE_GRACE_MS } from "./show-director.usecase";
+import { createShowDirector, PAGE_GRACE_MS, type ShowSceneResult } from "./show-director.usecase";
 
 const settings: Settings = {
   obsAddress: "ws://127.0.0.1:4455",
@@ -45,6 +45,8 @@ const setup = (
     awayIn?: number;
     // Depuis combien de ms Fenysk ne dit plus rien au départ (infini par défaut : il n'a rien dit).
     silentFor?: number;
+    // Ce qu'OBS répond à la demande de scène (accepter par défaut).
+    sceneResult?: ShowSceneResult;
   } = {},
 ) => {
   const calls: string[] = [];
@@ -66,6 +68,10 @@ const setup = (
       subscribe(listener) {
         sceneListeners.add(listener);
         return () => sceneListeners.delete(listener);
+      },
+      updateProgramScene: async (name) => {
+        calls.push(`OBS: scène « ${name} »`);
+        return options.sceneResult ?? { ok: true };
       },
     },
     clips: {
@@ -583,6 +589,120 @@ describe("createShowDirector : l'émission coupée en cours", () => {
     send(false);
     expect(calls).toEqual([]);
     expect(released).toEqual([]);
+  });
+});
+
+describe("createShowDirector : la scène après l'émission", () => {
+  const PAUSE = { showEndScene: "Pause" };
+  const END = { runId: "run1", phase: "ended", index: 0 } as const;
+  const SWITCH = "OBS: scène « Pause »";
+  // La réponse d'OBS arrive après la fin du rapport de la page : le journal se lit un tour plus tard.
+  const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  it("Quand la page rapporte la fin de l'émission, le système doit faire passer OBS sur la scène réglée, une fois Jean-Renard revenu, et le journal", async () => {
+    const { director, calls, logs, send } = setup({ custom: PAUSE });
+    send(true);
+    calls.length = 0;
+    expect(director.report(END)).toEqual({ ok: true });
+    expect(calls).toEqual(["fox: retour", "file: relâchée", "présence: retour", SWITCH]);
+    await settle();
+    expect(logs.at(-1)).toBe("Émission : finie, OBS passe sur « Pause ».");
+  });
+
+  it("Quand le réglage est vide ou absent, le système doit laisser OBS sur la scène de l'émission", () => {
+    const empty = setup({ custom: { showEndScene: "" } });
+    empty.send(true);
+    empty.director.report(END);
+    expect(empty.calls).not.toContain(SWITCH);
+    const absent = setup();
+    absent.send(true);
+    absent.director.report(END);
+    expect(absent.calls.some((call) => call.startsWith("OBS:"))).toBe(false);
+  });
+
+  it("Quand l'émission est coupée (la source /show cachée en pleine émission), le système ne doit pas changer la scène d'OBS", () => {
+    const { calls, send } = setup({ custom: PAUSE });
+    send(true);
+    send(false);
+    expect(calls).not.toContain(SWITCH);
+  });
+
+  it("Quand aucune page /show ne se connecte dans les 20 s, le système ne doit pas changer la scène d'OBS", () => {
+    const { director, calls, send, advance } = setup({ custom: PAUSE });
+    send(true);
+    advance(PAGE_GRACE_MS);
+    expect(director.getState().status).toBe("over");
+    expect(calls).not.toContain(SWITCH);
+  });
+
+  it("Quand le serveur s'arrête en pleine émission, le système ne doit pas changer la scène d'OBS", () => {
+    const { director, calls, send } = setup({ custom: PAUSE });
+    send(true);
+    director.stop();
+    expect(calls).not.toContain(SWITCH);
+  });
+
+  it("Quand le rapport vient d'une autre émission, ou que l'émission est déjà finie, le système ne doit demander la scène qu'une seule fois", () => {
+    const { director, calls, send } = setup({ custom: PAUSE });
+    send(true);
+    director.report({ ...END, runId: "ancienne" });
+    expect(calls).not.toContain(SWITCH);
+    director.report(END);
+    director.report(END);
+    expect(calls.filter((call) => call === SWITCH)).toHaveLength(1);
+  });
+
+  it("Quand l'émission n'a aucun clip à passer, le système ne doit pas changer la scène d'OBS", () => {
+    const { calls, send } = setup({ clips: [], custom: PAUSE });
+    send(true);
+    expect(calls).not.toContain(SWITCH);
+  });
+
+  it("Quand OBS refuse la scène (inconnue, OBS déconnecté, demande en échec), le système doit le dire au journal sans rien lever, la page recevant quand même sa réponse", async () => {
+    const { director, calls, logs, send } = setup({
+      custom: PAUSE,
+      sceneResult: { ok: false, reason: "la scène « Pause » n'existe pas dans OBS" },
+    });
+    send(true);
+    expect(director.report(END)).toEqual({ ok: true });
+    expect(calls).toContain(SWITCH);
+    await settle();
+    expect(logs.at(-1)).toBe(
+      "Émission : finie, mais OBS ne passe pas sur « Pause » : la scène « Pause » n'existe pas dans OBS.",
+    );
+    expect(director.getState().status).toBe("over");
+  });
+
+  it("Quand le réglage change entre deux émissions, le système doit prendre la nouvelle scène à la fin suivante, ou ne plus rien changer", () => {
+    const { director, calls, send } = setup({ custom: PAUSE });
+    director.update({ ...settings, showEndScene: "Discussion" });
+    send(true);
+    director.report(END);
+    expect(calls).toContain("OBS: scène « Discussion »");
+    expect(calls).not.toContain(SWITCH);
+    send(false);
+    director.update({ ...settings, showEndScene: "" });
+    calls.length = 0;
+    send(true);
+    director.report({ ...END, runId: "run2" });
+    expect(calls.some((call) => call.startsWith("OBS:"))).toBe(false);
+  });
+
+  it("Quand la source /show disparaît après la bascule, le système ne doit ni râler ni rien faire de plus que passer à l'arrêt", async () => {
+    const { director, calls, released, logs, send } = setup({
+      custom: { ...PAUSE, showGrumblePhrases: ["Phrase A", "Phrase B"] },
+    });
+    send(true);
+    director.report(END);
+    await settle();
+    calls.length = 0;
+    released.length = 0;
+    logs.length = 0;
+    send(false);
+    expect(director.getState().status).toBe("idle");
+    expect(calls).toEqual([]);
+    expect(released).toEqual([]);
+    expect(logs).toEqual([]);
   });
 });
 

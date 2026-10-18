@@ -42,6 +42,7 @@ export default defineConfig({
         "/api/clips/revise": "./src/app/server/clips-revise.ts",
         "/api/clips/withdraw": "./src/app/server/clips-withdraw.ts",
         "/api/clips/processed-video": "./src/app/server/clips-processed-video.ts",
+        "/api/obs/scenes": "./src/app/server/obs-scenes.ts",
         "/api/show/events": "./src/app/server/show-events.ts",
         "/api/show/progress": "./src/app/server/show-progress.ts",
         "/api/show/video": "./src/app/server/show-video.ts",

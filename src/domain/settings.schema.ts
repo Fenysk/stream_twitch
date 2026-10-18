@@ -503,6 +503,8 @@ export const SettingsFieldsSchema = z
     showOpeningPhrases: phraseList(true).optional(),
     showClosingPhrases: phraseList(true).optional(),
     showGrumblePhrases: phraseList(true).optional(),
+    // La scène d'OBS où le programme passe quand l'émission finit normalement (le nom d'une scène) ; vide : il reste sur celle de /show.
+    showEndScene: z.string("doit être un texte").optional(),
     showChatLead: nonNegative().optional(),
   })
   .strict();
@@ -692,6 +694,7 @@ export const EditableSettingsSchema = SettingsFieldsSchema.pick({
   showOpeningPhrases: true,
   showClosingPhrases: true,
   showGrumblePhrases: true,
+  showEndScene: true,
   showChatLead: true,
 });
 export type EditableSettings = z.infer<typeof EditableSettingsSchema>;

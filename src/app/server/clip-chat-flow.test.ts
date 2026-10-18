@@ -52,6 +52,8 @@ const startStack = () => {
     listPages: async () => [],
     refreshPage: async () => undefined,
     getProgramScene: async () => "Scène",
+    listScenes: async () => [],
+    updateProgramScene: async () => undefined,
     listSceneItems: async () => [],
     onSceneChanged: noop,
     onLevels: noop,

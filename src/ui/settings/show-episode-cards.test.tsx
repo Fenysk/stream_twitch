@@ -1,11 +1,12 @@
-import { createElement } from "react";
+import { Children, createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ConfirmedSummary } from "../../domain/clip.schema";
 import type { EditableSettings } from "../../domain/settings.schema";
 import { IDLE_SHOW, type ShowState } from "../../domain/show.schema";
-import { EpisodeCards } from "./show-episode-cards";
+import { EndSceneChoice, EpisodeCards } from "./show-episode-cards";
 import { SHOW_CLIP_COUNT_SLIDER, SHOW_LISTS } from "./show-fields";
+import type { UseScenes } from "./use-scenes";
 import type { UseSettings } from "./use-settings";
 
 const settings = (
@@ -25,14 +26,18 @@ const settings = (
   reset: async () => undefined,
 });
 
+// Les scènes d'OBS lues, dans son ordre.
+const SCENES: UseScenes = { scenes: ["Jeu", "Pause", "Fin"], error: null };
+
 const render = (
   state: ShowState,
   effective: Partial<EditableSettings> | null,
   confirmed: readonly ConfirmedSummary[] | null = null,
   drafts: UseSettings["drafts"] = {},
+  scenes: UseScenes = SCENES,
 ): string =>
   renderToStaticMarkup(
-    createElement(EpisodeCards, { state, settings: settings(effective, drafts), confirmed }),
+    createElement(EpisodeCards, { state, settings: settings(effective, drafts), confirmed, scenes }),
   );
 
 // Un clip confirmé dont la partie gardée dure `end - start` secondes.
@@ -152,6 +157,123 @@ describe("la durée estimée sous le nombre de clips", () => {
 
   it("Quand les réglages ne sont pas là, le système doit ne rien estimer", () => {
     expect(render(IDLE_SHOW, null, clips)).not.toContain("Durée estimée");
+  });
+});
+
+describe("la scène après l'émission", () => {
+  const renderScenes = (effective: Partial<EditableSettings> | null, scenes: UseScenes = SCENES): string =>
+    render(IDLE_SHOW, effective, null, {}, scenes);
+  const radios = (html: string): string[] =>
+    [...html.matchAll(/<input[^>]*type="radio"[^>]*>/g)].map(([input]) => input);
+  const isChecked = (input: string): boolean => input.includes('checked=""');
+  const toValue = (input: string): string | undefined => /value="([^"]*)"/.exec(input)?.[1];
+  const chosen = (html: string): (string | undefined)[] => radios(html).filter(isChecked).map(toValue);
+
+  it("Quand les scènes d'OBS sont lues, le système doit proposer d'abord « Rester sur la scène de l'émission », puis chaque scène dans l'ordre d'OBS", () => {
+    const html = renderScenes({});
+    expect(html).toContain("Scène après l&#x27;émission");
+    expect(radios(html).map(toValue)).toEqual(["", "Jeu", "Pause", "Fin"]);
+    const positions = ["Rester sur la scène de l&#x27;émission", "Jeu", "Pause", "Fin"].map((label) =>
+      html.indexOf(`>${label}<`),
+    );
+    expect(positions.every((position) => position > -1)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  });
+
+  it("Quand le choix s'affiche, le système doit le placer sous la durée estimée, dans la carte Émission", () => {
+    const html = render(IDLE_SHOW, { showClipCount: 2 }, [confirmedClip("a.mp4")]);
+    expect(html.indexOf("Durée estimée")).toBeGreaterThan(-1);
+    expect(html.indexOf("Durée estimée")).toBeLessThan(html.indexOf("Scène après l&#x27;émission"));
+    expect(html.indexOf("Scène après l&#x27;émission")).toBeLessThan(html.indexOf("Phrases de Jean-Renard"));
+  });
+
+  it("Quand aucune scène n'est enregistrée, ou une scène vide, le système doit cocher « Rester » seul", () => {
+    expect(chosen(renderScenes({}))).toEqual([""]);
+    expect(chosen(renderScenes({ showEndScene: "" }))).toEqual([""]);
+  });
+
+  it("Quand la scène enregistrée est dans la liste, le système doit cocher cette scène seule, sans la dire absente", () => {
+    const html = renderScenes({ showEndScene: "Pause" });
+    expect(chosen(html)).toEqual(["Pause"]);
+    expect(radios(html)).toHaveLength(4);
+    expect(html).not.toContain("absente d");
+  });
+
+  it("Quand la scène enregistrée n'est plus dans OBS, le système doit la garder cochée en fin de liste avec la note « absente d'OBS »", () => {
+    const html = renderScenes({ showEndScene: "Ancienne" });
+    expect(radios(html).map(toValue)).toEqual(["", "Jeu", "Pause", "Fin", "Ancienne"]);
+    expect(chosen(html)).toEqual(["Ancienne"]);
+    expect(html).toContain("absente d&#x27;OBS");
+  });
+
+  it("Quand les scènes se lisent encore, le système doit afficher le texte de chargement à la place du choix", () => {
+    const html = renderScenes({}, { scenes: null, error: null });
+    expect(html).toContain("Chargement…");
+    expect(radios(html)).toHaveLength(0);
+    expect(html).not.toContain("Scène après l&#x27;émission");
+  });
+
+  it("Quand OBS ne répond pas, le système doit le dire sur une ligne et garder « Rester » et la scène enregistrée, sans la dire absente", () => {
+    const html = renderScenes({ showEndScene: "Pause" }, { scenes: null, error: "OBS n'est pas connecté" });
+    expect(html).toContain("Les scènes d&#x27;OBS sont illisibles : OBS n&#x27;est pas connecté.");
+    expect(radios(html).map(toValue)).toEqual(["", "Pause"]);
+    expect(chosen(html)).toEqual(["Pause"]);
+    expect(html).not.toContain("absente d");
+  });
+
+  it("Quand OBS ne répond pas et qu'aucune scène n'est enregistrée, le système doit proposer « Rester » seul, coché", () => {
+    const html = renderScenes({}, { scenes: null, error: "le serveur ne répond pas" });
+    expect(radios(html).map(toValue)).toEqual([""]);
+    expect(chosen(html)).toEqual([""]);
+  });
+
+  it("Quand le choix s'affiche, le système doit expliquer que la bascule suit une fin normale, pas une coupure", () => {
+    expect(renderScenes({})).toContain(
+      "OBS y passe tout seul quand l&#x27;émission finit normalement, pas quand tu la coupes.",
+    );
+  });
+
+  it("Quand les réglages ne sont pas lus, le système ne doit montrer aucun choix de scène", () => {
+    const html = renderScenes(null);
+    expect(html).toContain("Chargement…");
+    expect(html).not.toContain("Scène après");
+  });
+
+  describe("un clic sur une option", () => {
+    type Selectable = { children?: ReactNode; onSelect?: (value: string) => void };
+    const findOnSelect = (node: ReactNode): ((value: string) => void) | undefined => {
+      if (!isValidElement<Selectable>(node)) return undefined;
+      if (node.props.onSelect) return node.props.onSelect;
+      for (const child of Children.toArray(node.props.children)) {
+        const found = findOnSelect(child);
+        if (found) return found;
+      }
+      return undefined;
+    };
+    const click = (value: string): Partial<EditableSettings>[] => {
+      const changed: Partial<EditableSettings>[] = [];
+      const element = EndSceneChoice({
+        scenes: SCENES,
+        settings: {
+          ...settings({ showEndScene: "Jeu" }),
+          change: async (changes) => {
+            changed.push(changes);
+            return true;
+          },
+        },
+        effective: { threshold: -40, showEndScene: "Jeu" },
+      });
+      findOnSelect(element)?.(value);
+      return changed;
+    };
+
+    it("Quand on choisit une scène, le système doit enregistrer son nom dans showEndScene", () => {
+      expect(click("Pause")).toEqual([{ showEndScene: "Pause" }]);
+    });
+
+    it("Quand on choisit « Rester », le système doit enregistrer une scène vide", () => {
+      expect(click("")).toEqual([{ showEndScene: "" }]);
+    });
   });
 });
 

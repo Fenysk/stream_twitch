@@ -5,7 +5,7 @@ import type { ReplayPort } from "../usecase/clip-chat.usecase";
 import type { DesktopPort } from "../usecase/fox-balance.usecase";
 import type { Broadcast, BroadcastPort } from "../usecase/fox-hours.usecase";
 import type { MicPort } from "../usecase/head.usecase";
-import type { ShowScenePort } from "../usecase/show-director.usecase";
+import type { ShowScenePort, ShowSceneResult } from "../usecase/show-director.usecase";
 
 const PASSWORD_REFUSED_CODE = 4009;
 const RETRY_MS = 2000;
@@ -19,6 +19,8 @@ export type ObsSceneItem = { name: string; kind: "input" | "scene" | "group"; is
 export type ObsConnection =
   | { ok: true; version: string }
   | { ok: false; isPasswordRefused: boolean; reason: string };
+// Les scènes d'OBS, ou pourquoi on ne les a pas (OBS non joint, demande en échec).
+export type ObsSceneList = { ok: true; scenes: string[] } | { ok: false; reason: string };
 
 // Ce que le client attend d'OBS ; `createObsSocket` l'implémente avec obs-websocket-js, les tests avec un faux.
 export type ObsSocket = {
@@ -27,6 +29,10 @@ export type ObsSocket = {
   refreshPage(name: string): Promise<void>;
   // La scène du programme (celle qui passe à l'antenne, pas l'aperçu du mode studio).
   getProgramScene(): Promise<string>;
+  // Les noms des scènes, dans l'ordre d'OBS.
+  listScenes(): Promise<string[]>;
+  // La scène du programme devient celle-ci (SetCurrentProgramScene, aussi en mode studio) ; une scène inconnue fait échouer la demande.
+  updateProgramScene(name: string): Promise<void>;
   // Les éléments d'une scène, ou d'un groupe (`isGroup`), tels qu'OBS les range.
   listSceneItems(sceneName: string, isGroup: boolean): Promise<ObsSceneItem[]>;
   // Quelque chose a changé qui peut changer ce que le programme montre : la scène du programme, la visibilité d'un élément, une
@@ -69,6 +75,10 @@ const ProgramSceneSchema = z.object({
   sceneName: z.string().optional(),
   currentProgramSceneName: z.string().optional(),
 });
+// GetSceneList : `sceneIndex` est la place de la scène dans OBS.
+const SceneListSchema = z.object({
+  scenes: z.array(z.object({ sceneName: z.string(), sceneIndex: z.number().optional() })),
+});
 // GetSceneItemList et GetGroupSceneItemList : `sourceType` dit si l'élément est une source ou une scène, `isGroup` un groupe.
 const SceneItemsSchema = z.object({
   sceneItems: z.array(
@@ -81,6 +91,12 @@ const SceneItemsSchema = z.object({
   ),
 });
 const SCENE_SOURCE_TYPE = "OBS_SOURCE_TYPE_SCENE";
+
+// Les noms des scènes d'une réponse GetSceneList, rangés par `sceneIndex` (l'ordre reçu quand OBS ne le donne pas).
+export const toSceneNames = (answer: unknown): string[] =>
+  [...SceneListSchema.parse(answer).scenes]
+    .sort((a, b) => (a.sceneIndex ?? 0) - (b.sceneIndex ?? 0))
+    .map(({ sceneName }) => sceneName);
 
 const toSceneItemKind = (sourceType: string, isGroup: boolean | null | undefined): ObsSceneItem["kind"] => {
   if (sourceType !== SCENE_SOURCE_TYPE) return "input";
@@ -129,6 +145,12 @@ export function createObsSocket(options: {
       const name = parsed.sceneName ?? parsed.currentProgramSceneName;
       if (name === undefined) throw new Error("OBS n'a pas dit quelle scène passe à l'antenne");
       return name;
+    },
+    async listScenes() {
+      return toSceneNames(await obs.call("GetSceneList"));
+    },
+    async updateProgramScene(name) {
+      await obs.call("SetCurrentProgramScene", { sceneName: name });
     },
     async listSceneItems(sceneName, isGroup) {
       const answer = isGroup
@@ -259,8 +281,10 @@ export type ObsClient = {
   broadcast: BroadcastPort;
   // Les clips que le tampon de relecture sauvegarde.
   replay: ReplayPort;
-  // La page /show à l'antenne ou non.
+  // La page /show à l'antenne ou non, et la scène où OBS passe à la fin de l'émission.
   show: ShowScenePort;
+  // Les noms des scènes d'OBS dans son ordre ; OBS non joint : le refus à montrer.
+  listScenes(): Promise<ObsSceneList>;
   start(): void;
   stop(): void;
   updateMicName(name: string): void;
@@ -413,6 +437,28 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
       );
     }
   };
+  const toReason = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+  const listScenes = async (): Promise<ObsSceneList> => {
+    if (!isLinked) return { ok: false, reason: "OBS n'est pas connecté" };
+    try {
+      return { ok: true, scenes: await socket.listScenes() };
+    } catch (error) {
+      return { ok: false, reason: `les scènes d'OBS sont illisibles, ${toReason(error)}` };
+    }
+  };
+  // Une scène inconnue est refusée d'avance : le refus d'OBS, en anglais, ne dirait pas laquelle.
+  const updateProgramScene = async (name: string): Promise<ShowSceneResult> => {
+    const listed = await listScenes();
+    if (!listed.ok) return listed;
+    if (!listed.scenes.includes(name))
+      return { ok: false, reason: `la scène « ${name} » n'existe pas dans OBS` };
+    try {
+      await socket.updateProgramScene(name);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, reason: toReason(error) };
+    }
+  };
   const scheduleShowRefresh = () => {
     clearTimeout(showTimer);
     showTimer = setTimeout(() => void refreshShow(), SCENE_SETTLE_MS);
@@ -538,7 +584,9 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
           showListeners.delete(listener);
         };
       },
+      updateProgramScene,
     },
+    listScenes,
     updateMicName: mic.rename,
     updateDesktopName: desktop.rename,
     getStatus: () => ({ isLinked, inputNames: [...namesSeen].sort() }),
