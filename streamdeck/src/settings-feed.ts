@@ -10,6 +10,14 @@ import { type FetchFn, type JsonRead, readJson, requestServer } from "./server-r
 
 export const REFRESH_PERIOD_MS = 10_000;
 
+// Un serveur plus récent que le plugin : le réglage inconnu est écarté, pas refusé (le schéma strict reste celui du serveur).
+const { defaults, local, effective } = SettingsViewSchema.shape;
+const PluginSettingsViewSchema = SettingsViewSchema.extend({
+  defaults: defaults.strip(),
+  local: local.strip(),
+  effective: effective.strip(),
+});
+
 // Ce que le plugin sait du serveur : rien encore, injoignable, réponse illisible, ou les réglages (et les expressions, si une touche en a besoin).
 export type FeedSnapshot =
   | { status: "pending" }
@@ -107,7 +115,7 @@ export class SettingsFeed {
       return { ok: false, reason: "unavailable" };
     }
     if (reply.isOk) {
-      const view = SettingsViewSchema.safeParse(reply.body);
+      const view = PluginSettingsViewSchema.safeParse(reply.body);
       if (view.success) {
         this.#publish({ status: "ready", view: view.data, expressions: this.#expressions() });
         return { ok: true };
@@ -147,7 +155,7 @@ export class SettingsFeed {
 
   #toSnapshot(settings: JsonRead, expressions: readonly ExpressionSummary[]): FeedSnapshot {
     if (settings.kind !== "json") return { status: settings.kind };
-    const view = SettingsViewSchema.safeParse(settings.body);
+    const view = PluginSettingsViewSchema.safeParse(settings.body);
     return view.success ? { status: "ready", view: view.data, expressions } : { status: "to-restart" };
   }
 

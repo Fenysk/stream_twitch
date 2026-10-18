@@ -119,6 +119,58 @@ describe("SettingsFeed", () => {
     expect(seen).toEqual(["down", "to-restart", "to-restart", "ready"]);
   });
 
+  describe("réglage que le plugin ne connaît pas (serveur plus récent que lui)", () => {
+    // Un réglage ajouté au serveur après la construction du plugin, présent dans les trois parties de la vue.
+    const newerView = (effective: Record<string, unknown> = {}) => ({
+      defaults: { threshold: -40, brandNewSetting: 1 },
+      local: { brandNewSetting: 2 },
+      effective: { threshold: -40, foxShouldThank: false, brandNewSetting: 2, ...effective },
+    });
+
+    it("lit les réglages connus et laisse celui-là de côté, au lieu de dire que le serveur est à relancer", async () => {
+      const server = serverOf({ "GET /api/settings": () => json(newerView()) });
+      const feed = new SettingsFeed(BASE, server.fetchFn);
+      feed.show("a", false);
+      await vi.advanceTimersByTimeAsync(0);
+      const snapshot = feed.snapshot;
+      expect(snapshot.status).toBe("ready");
+      expect(snapshot.status === "ready" && snapshot.view).toEqual({
+        defaults: { threshold: -40 },
+        local: {},
+        effective: { threshold: -40, foxShouldThank: false },
+      });
+    });
+
+    it("lit de même la réponse d'une écriture", async () => {
+      const server = serverOf({
+        "GET /api/settings": () => json(viewOf({})),
+        "PUT /api/settings": () => json(newerView({ foxShouldThank: true })),
+      });
+      const feed = new SettingsFeed(BASE, server.fetchFn);
+      feed.show("a", false);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await feed.change({ foxShouldThank: true })).toEqual({ ok: true });
+      expect(readyView(feed.snapshot)?.foxShouldThank).toBe(true);
+    });
+
+    it("refuse toujours un réglage connu d'un autre type, même à côté d'un réglage inconnu", async () => {
+      const server = serverOf({ "GET /api/settings": () => json(newerView({ foxShouldThank: "oui" })) });
+      const feed = new SettingsFeed(BASE, server.fetchFn);
+      feed.show("a", false);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(feed.snapshot.status).toBe("to-restart");
+    });
+
+    it("refuse toujours une vue où manque un réglage connu et obligatoire", async () => {
+      const withoutThreshold = { ...newerView(), effective: { foxShouldThank: false, brandNewSetting: 2 } };
+      const server = serverOf({ "GET /api/settings": () => json(withoutThreshold) });
+      const feed = new SettingsFeed(BASE, server.fetchFn);
+      feed.show("a", false);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(feed.snapshot.status).toBe("to-restart");
+    });
+  });
+
   it("ne lit les expressions que si une touche visible en veut", async () => {
     const server = serverOf({
       "GET /api/settings": () => json(viewOf({})),
