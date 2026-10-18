@@ -44,7 +44,17 @@ afterEach(() => {
 const state: ShowState = {
   status: "running",
   runId: "run1",
-  lineup: [{ name: "a.mp4", title: "A", version: "1-1", day: "2026-10-16", durationMs: 10_000, laughs: [] }],
+  lineup: [
+    {
+      name: "a.mp4",
+      title: "A",
+      version: "1-1",
+      day: "2026-10-16",
+      durationMs: 10_000,
+      laughs: [],
+      hasEndPhrase: false,
+    },
+  ],
   phase: "opening",
   index: 0,
   startsAt: 0,
@@ -198,18 +208,19 @@ describe("startRun : un clip qui joue", () => {
         day: "2026-10-16",
         durationMs: 10_000,
         laughs: [FIRST, SECOND],
+        hasEndPhrase: true,
       },
     ],
   };
 
   // Une page avec une vidéo qui se lit : ce que le clip joue se règle par `play`, qui reçoit le pas du clip.
-  const setupWithVideo = (play: (onTime: (ms: number) => void) => Promise<void>) => {
+  const setupWithVideo = (play: (onTime: (ms: number) => void) => Promise<void>, shown = laughing) => {
     vi.mocked(prepareVideo).mockResolvedValue(true);
     vi.mocked(playVideo).mockImplementation(async (_video, _aborted, onTime) => play(onTime));
     vi.mocked(getShowCues).mockResolvedValue({ ok: true, value: CUES });
     const video = { pause: () => undefined } as HTMLVideoElement;
     const events: string[] = [];
-    const run = startRun(laughing, {
+    const run = startRun(shown, {
       videoOf: () => video,
       setView: (view) => events.push(`vue ${view.kind}`),
       addChat: (messages) => {
@@ -292,24 +303,34 @@ describe("startRun : un clip qui joue", () => {
     expect(events).toContain("vue closing");
   });
 
-  it("fait dire la phrase des rires une seule fois, après le clip, même quand plusieurs rires ont joué", async () => {
+  it("fait dire la phrase de fin du clip une seule fois, après le clip et ses rires, même quand plusieurs rires ont joué", async () => {
     setupWithVideo(async () => undefined);
     await vi.advanceTimersByTimeAsync(20_000);
-    expect(spokenKinds()).toEqual(["opening", "clip", "laugh", "closing"]);
+    expect(spokenKinds()).toEqual(["opening", "clip", "clipEnd", "closing"]);
+    expect(vi.mocked(speakInShow).mock.calls[2]).toEqual([{ runId: "run1", kind: "clipEnd", index: 0 }]);
   });
 
-  it("fait dire la phrase dès qu'un seul rire a joué jusqu'au bout", async () => {
+  it("la fait dire même quand un seul rire a joué jusqu'au bout : les rires ne décident plus de la phrase", async () => {
     laughFiles.play.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     setupWithVideo(async () => undefined);
     await vi.advanceTimersByTimeAsync(20_000);
-    expect(spokenKinds()).toContain("laugh");
+    expect(spokenKinds()).toContain("clipEnd");
   });
 
-  it("n'enchaîne pas la phrase des rires quand aucun rire n'a joué", async () => {
+  it("la fait dire même quand aucun rire n'a joué : fichiers supprimés ou illisibles", async () => {
     laughFiles.play.mockResolvedValue(false);
     setupWithVideo(async () => undefined);
     await vi.advanceTimersByTimeAsync(20_000);
-    expect(spokenKinds()).not.toContain("laugh");
+    expect(spokenKinds()).toContain("clipEnd");
+  });
+
+  it("n'enchaîne aucune phrase après un clip qui a des rires mais pas de phrase de fin", async () => {
+    setupWithVideo(async () => undefined, {
+      ...laughing,
+      lineup: laughing.lineup.map((clip) => ({ ...clip, hasEndPhrase: false })),
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(spokenKinds()).toEqual(["opening", "clip", "closing"]);
   });
 
   it("coupe les rires aussitôt quand l'émission s'arrête, sans phrase ni suite", async () => {
@@ -324,7 +345,7 @@ describe("startRun : un clip qui joue", () => {
     run.stop();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(laughFiles.clear).toHaveBeenCalled();
-    expect(spokenKinds()).not.toContain("laugh");
+    expect(spokenKinds()).not.toContain("clipEnd");
     expect(events).not.toContain("vue closing");
   });
 
@@ -558,6 +579,7 @@ describe("startRun : le fader de l'émission sur de vrais rires", () => {
             day: "2026-10-16",
             durationMs: 10_000,
             laughs: [FIRST, SECOND],
+            hasEndPhrase: false,
           },
         ],
       },

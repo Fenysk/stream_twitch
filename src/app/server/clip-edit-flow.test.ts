@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ClipConfirmationSchema } from "../../domain/clip.schema";
+import { LAUGH_PHRASE } from "../../domain/show.rules";
 import { CONFIRMED_FOLDER, createClipStore, PROCESSED_FOLDER } from "../../infra/clip.repository";
 import { createClipLibrary, type TrimRequest } from "../../usecase/clip.usecase";
 import { createClipAnalysis } from "../../usecase/clip-analysis.usecase";
@@ -58,7 +59,7 @@ const startStack = () => {
   };
 };
 
-const choice = { title: "Un clip", phrase: "Une phrase", start: 10, end: 30 };
+const choice = { title: "Un clip", phrase: "Une phrase", endPhrase: "Une fin", start: 10, end: 30 };
 
 describe("modifier un clip validé, de la validation jusqu'au retrait de l'émission", () => {
   it("recode depuis le bon clip brut de Traités, même quand la validation l'y a renommé « (2) »", async () => {
@@ -84,6 +85,7 @@ describe("modifier un clip validé, de la validation jusqu'au retrait de l'émis
       name: "Replay (2).mp4",
       title: "Second, refait",
       phrase: "",
+      endPhrase: "",
       start: 20,
       end: 60,
     });
@@ -100,6 +102,7 @@ describe("modifier un clip validé, de la validation jusqu'au retrait de l'émis
     expect(stack.readConfirmation("Replay (2).json")).toMatchObject({
       title: "Second, refait",
       phrase: "",
+      endPhrase: "",
       start: 20,
       end: 60,
       processedName: "Replay (2).mp4",
@@ -118,7 +121,7 @@ describe("modifier un clip validé, de la validation jusqu'au retrait de l'émis
     ]);
   });
 
-  it("change la version de la vidéo quand elle est recodée, pas quand seuls le titre ou la phrase changent", async () => {
+  it("change la version de la vidéo quand elle est recodée, pas quand seuls le titre ou les phrases changent", async () => {
     const stack = startStack();
     stack.dropRaw("clip brut");
     await stack.library.confirm({ name: "Replay.mp4", ...choice });
@@ -132,17 +135,55 @@ describe("modifier un clip validé, de la validation jusqu'au retrait de l'émis
       ...choice,
       title: "Autre titre",
       phrase: "Autre phrase",
+      endPhrase: "Autre fin",
     });
     expect(await versionOf()).toBe(first);
     expect(stack.readConfirmation("Replay.json")).toMatchObject({
       title: "Autre titre",
       phrase: "Autre phrase",
+      endPhrase: "Autre fin",
     });
     expect(stack.trims).toHaveLength(1);
 
     await stack.library.revise({ name: "Replay.mp4", ...choice, end: 25 });
     expect(await versionOf()).not.toBe(first);
     expect(stack.trims).toHaveLength(2);
+  });
+
+  it("ne change que la phrase de fin sans recoder : ni nouvelle vidéo, ni nouvelle version, le reste du JSON tel quel", async () => {
+    const stack = startStack();
+    stack.dropRaw("clip brut");
+    await stack.library.confirm({ name: "Replay.mp4", ...choice });
+    const before = stack.readConfirmation("Replay.json");
+    expect(before.endPhrase).toBe("Une fin");
+    expect(stack.trims).toHaveLength(1);
+    const revised = await stack.library.revise({ name: "Replay.mp4", ...choice, endPhrase: "" });
+    expect(revised).toEqual({ ok: true, value: { name: "Replay.mp4" } });
+    expect(stack.trims).toHaveLength(1);
+    expect(stack.readConfirmation("Replay.json")).toEqual({ ...before, endPhrase: "" });
+    expect(readFileSync(join(stack.confirmed, "Replay.mp4"), "utf8")).toBe("recodé depuis « clip brut »");
+  });
+
+  it("donne la phrase des rires comme phrase de fin à un clip d'avant, avec des rires, et l'écrit à son prochain Enregistrer", async () => {
+    const stack = startStack();
+    stack.dropRaw("clip brut");
+    await stack.library.confirm({ name: "Replay.mp4", ...choice, laughs: [{ at: 12, sound: "abcd1234" }] });
+    // Le JSON d'avant la phrase de fin : sans la clé `endPhrase`.
+    const { endPhrase, ...legacy } = stack.readConfirmation("Replay.json");
+    writeFileSync(join(stack.confirmed, "Replay.json"), JSON.stringify(legacy));
+    const listed = await stack.library.list();
+    expect(listed.ok && listed.value.confirmed[0]?.endPhrase).toBe(LAUGH_PHRASE);
+    expect(stack.readConfirmation("Replay.json").endPhrase).toBeUndefined();
+
+    const revised = await stack.library.revise({
+      name: "Replay.mp4",
+      ...choice,
+      endPhrase: LAUGH_PHRASE,
+      laughs: [{ at: 12, sound: "abcd1234" }],
+    });
+    expect(revised.ok).toBe(true);
+    expect(stack.readConfirmation("Replay.json").endPhrase).toBe(LAUGH_PHRASE);
+    expect(stack.trims).toHaveLength(1);
   });
 
   it("ne sert plus l'ancienne version d'une vidéo recodée, et laisse finir le flux déjà ouvert (le clip passe à l'antenne)", async () => {
@@ -172,7 +213,7 @@ describe("modifier un clip validé, de la validation jusqu'au retrait de l'émis
     await reader.cancel();
   });
 
-  it("garde le titre et la phrase modifiables quand le clip brut a disparu, et refuse un autre début ou une autre fin", async () => {
+  it("garde le titre et les phrases modifiables quand le clip brut a disparu, et refuse un autre début ou une autre fin", async () => {
     const stack = startStack();
     stack.dropRaw("clip brut");
     await stack.library.confirm({ name: "Replay.mp4", ...choice });

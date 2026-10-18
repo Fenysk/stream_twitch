@@ -80,10 +80,11 @@ describe("le choix du sound du rire choisi", () => {
     expect(render("aaaa0001")).not.toMatch(/<fieldset[^>]*disabled=""/);
   });
 
-  it("dit à quoi sert le sound : joué à l'instant du rire, puis la phrase de Jean-Renard", () => {
+  it("dit à quoi sert le sound : joué à l'instant du rire, sans plus lier à lui une phrase de Jean-Renard", () => {
     const html = render("aaaa0001");
     expect(html).toContain("joué à l&#x27;instant du rire");
-    expect(html).toContain("Jean-Renard dit ensuite que les rires sont enregistrés");
+    expect(html).not.toContain("Jean-Renard");
+    expect(html).not.toContain("enregistrés");
   });
 
   it("rend l'identifiant du sound choisi", () => {

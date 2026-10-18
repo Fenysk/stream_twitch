@@ -28,6 +28,7 @@ const request: ConfirmRequest = {
   name: "Replay 2026-10-15 15-09-05.mp4",
   title: "  Le saut  ",
   phrase: "Quel saut !",
+  endPhrase: " Bien joué. ",
   start: 12.5,
   end: 40,
 };
@@ -119,6 +120,7 @@ describe("valider un clip", () => {
       {
         title: "Le saut",
         phrase: "Quel saut !",
+        endPhrase: "Bien joué.",
         start: 12.5,
         end: 40,
         rawName: request.name,
@@ -126,6 +128,22 @@ describe("valider un clip", () => {
         rawDuration: 118.55,
       },
     ]);
+  });
+
+  it("écrit toujours la phrase de fin dans le JSON, même vide : un JSON qui l'a ne reçoit plus la phrase des rires d'avant", async () => {
+    const { library, state } = setup();
+    await library.confirm({ ...request, endPhrase: "   " });
+    expect(state.committed[0]).toHaveProperty("endPhrase", "");
+  });
+
+  it("refuse une phrase de fin trop longue, sans rien recoder", async () => {
+    const { library, trims } = setup();
+    expect(await library.confirm({ ...request, endPhrase: "a".repeat(501) })).toEqual({
+      ok: false,
+      status: 400,
+      message: "la phrase de fin ne peut pas dépasser 500 caractères",
+    });
+    expect(trims).toEqual([]);
   });
 
   it("garde les rires posés dans le JSON, triés par instant, rien quand il n'y en a pas", async () => {

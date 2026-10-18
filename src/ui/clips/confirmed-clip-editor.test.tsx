@@ -56,11 +56,22 @@ describe("l'éditeur d'un clip de l'émission", () => {
     expect(html).not.toContain("/api/show/video");
   });
 
-  it("remplit le titre et la phrase, comme du texte jamais comme du HTML", () => {
-    const html = render();
+  it("remplit le titre et les deux phrases, comme du texte jamais comme du HTML", () => {
+    const html = render({ endPhrase: "Bien joué <i>vraiment</i> !" });
     expect(html).toContain('value="Le saut &lt;b&gt;fou&lt;/b&gt;"');
     expect(html).not.toContain("<b>fou</b>");
     expect(html).toContain("Quel saut !");
+    expect(html).toContain("Bien joué &lt;i&gt;vraiment&lt;/i&gt; !");
+    expect(html).not.toContain("<i>vraiment</i>");
+    expect(html).toContain("Phrase de début");
+    expect(html).toContain("Phrase de fin");
+  });
+
+  it("donne au plan de travail la phrase de fin du JSON, et une phrase vide quand il n'en a pas", () => {
+    expect(shallow({ endPhrase: "Bien joué !" }).props.initialEndPhrase).toBe("Bien joué !");
+    expect(shallow({ endPhrase: "" }).props.initialEndPhrase).toBe("");
+    expect(shallow().props.initialEndPhrase).toBe("");
+    expect(shallow().props.initialPhrase).toBe("Quel saut !");
   });
 
   it("propose d'enregistrer et de retirer le clip de l'émission, sans Valider ni Jeter", () => {
@@ -81,7 +92,7 @@ describe("l'éditeur d'un clip de l'émission", () => {
       'src="/api/show/video?name=Replay%202026-10-15%2015-09-05.mp4&amp;v=1792151962252-15"',
     );
     expect(html).toContain("Le clip brut d&#x27;origine n&#x27;est plus dans Traités");
-    expect(html).toContain("seuls le titre et la phrase se modifient");
+    expect(html).toContain("seuls le titre et les phrases se modifient");
     expect(html).toContain('value="Le saut &lt;b&gt;fou&lt;/b&gt;"');
   });
 
@@ -137,6 +148,7 @@ describe("l'éditeur d'un clip de l'émission", () => {
     await props.primary.run({
       title: "Le saut",
       phrase: "Quel saut !",
+      endPhrase: "Bien joué.",
       trim: { start: 0, end: 60 },
       laughs,
       laughFader: 60,
@@ -146,6 +158,7 @@ describe("l'éditeur d'un clip de l'émission", () => {
         name: clip.name,
         title: "Le saut",
         phrase: "Quel saut !",
+        endPhrase: "Bien joué.",
         start: 12.5,
         end: 72.5,
         laughs,
@@ -160,16 +173,26 @@ describe("l'éditeur d'un clip de l'émission", () => {
     await props.primary.run({
       title: "Le saut",
       phrase: "",
+      endPhrase: "",
       trim: { start: 15, end: 70 },
       laughs,
       laughFader: 100,
     });
     expect(revised).toEqual([
-      { name: clip.name, title: "Le saut", phrase: "", start: 15, end: 70, laughs, laughFader: 100 },
+      {
+        name: clip.name,
+        title: "Le saut",
+        phrase: "",
+        endPhrase: "",
+        start: 15,
+        end: 70,
+        laughs,
+        laughFader: 100,
+      },
     ]);
   });
 
   it("grise tout pendant qu'un clip est traité", () => {
-    expect(render({}, true).match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(render({}, true).match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(5);
   });
 });

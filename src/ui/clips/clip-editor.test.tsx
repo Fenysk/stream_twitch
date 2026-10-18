@@ -19,13 +19,16 @@ const render = (isWorking = false, sounds: SoundSummary[] | null = null) =>
   );
 
 describe("l'éditeur d'un clip brut", () => {
-  it("montre le lecteur du clip, le titre obligatoire, la phrase facultative et les deux boutons", () => {
+  it("montre le lecteur du clip, le titre obligatoire, les phrases de début et de fin facultatives et les deux boutons", () => {
     const html = render();
     expect(html).toContain('src="/api/clips/video?name=Replay%202026-10-15%2015-09-05.mp4"');
     expect(html).toContain("Titre");
     expect(html).toContain("Obligatoire pour valider");
-    expect(html).toContain("Phrase de Jean-Renard");
-    expect(html).toContain("Facultatif : vide, il se tait.");
+    expect(html).toContain("Phrase de début");
+    expect(html).toContain("Facultatif : dite sur le carton ; vide, il se tait.");
+    expect(html).toContain("Phrase de fin");
+    expect(html).toContain("Facultatif : dite après le clip et ses rires ; vide, il se tait.");
+    expect(html).not.toContain("Phrase de Jean-Renard");
     expect(html).toContain("Valider");
     expect(html).toContain("Jeter");
   });
@@ -61,7 +64,7 @@ describe("l'éditeur d'un clip brut", () => {
 
   it("grise tout pendant qu'un clip est traité : champs, Valider et Jeter", () => {
     const html = render(true);
-    expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(5);
   });
 });
 
@@ -99,16 +102,30 @@ describe("les actions de l'éditeur d'un clip brut", () => {
     expect(props.initialLaughFader).toBeUndefined();
   });
 
-  it("valide avec le titre, la phrase, la partie gardée, les rires posés et leur volume", async () => {
+  it("part sans phrase de début ni de fin", () => {
+    const { props } = setup();
+    expect(props.initialPhrase).toBe("");
+    expect(props.initialEndPhrase).toBe("");
+  });
+
+  it("valide avec le titre, les phrases de début et de fin, la partie gardée, les rires posés et leur volume", async () => {
     const { props, confirmed } = setup();
     expect(
-      await props.primary.run({ title: "Le saut", phrase: "Quel saut !", trim, laughs, laughFader: 35 }),
+      await props.primary.run({
+        title: "Le saut",
+        phrase: "Quel saut !",
+        endPhrase: "Bien joué.",
+        trim,
+        laughs,
+        laughFader: 35,
+      }),
     ).toBeNull();
     expect(confirmed).toEqual([
       {
         name: clip.name,
         title: "Le saut",
         phrase: "Quel saut !",
+        endPhrase: "Bien joué.",
         start: 3,
         end: 40.5,
         laughs,
@@ -119,7 +136,7 @@ describe("les actions de l'éditeur d'un clip brut", () => {
 
   it("jette le clip brut, sans rien envoyer d'autre que son nom", async () => {
     const { props, discarded } = setup();
-    await props.secondary.run({ title: "", phrase: "", trim, laughs });
+    await props.secondary.run({ title: "", phrase: "", endPhrase: "", trim, laughs });
     expect(discarded).toEqual([clip.name]);
   });
 });

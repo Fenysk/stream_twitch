@@ -35,7 +35,7 @@ export const confirmClip = (request: ConfirmRequest): Promise<Answer<ClipDone>> 
 export const toProcessedVideoUrl = (name: string): string =>
   `/api/clips/processed-video?name=${encodeURIComponent(name)}`;
 
-// « Enregistrer » sur un clip confirmé : titre et phrase réécrivent son JSON ; un autre début ou une autre fin le recodent depuis son
+// « Enregistrer » sur un clip confirmé : titre et phrases réécrivent son JSON ; un autre début ou une autre fin le recodent depuis son
 // clip brut (la réponse n'arrive qu'à la fin).
 export const reviseClip = (request: ConfirmRequest): Promise<Answer<ClipDone>> =>
   ask("/api/clips/revise", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(request) }, toDone);

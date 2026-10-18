@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ADDRESS_MODE } from "../domain/fox-mode.rules";
 import type { Settings } from "../domain/settings.schema";
 import { TALK_HOLD_MS, TALK_SHOW_FADER } from "../domain/show.rules";
-import type { ShowState } from "../domain/show.schema";
+import { ShowSpeakRequestSchema, type ShowState } from "../domain/show.schema";
 import type { ClipFailure, ConfirmedClip, ConfirmedListResult } from "./clip.usecase";
 import type { QueueItem } from "./fox-queue.usecase";
 import type { ShowSpeakResult } from "./show.usecase";
@@ -193,6 +193,7 @@ describe("createShowDirector : le démarrage", () => {
           day: "2026-10-16",
           durationMs: 10_000,
           laughs: [],
+          hasEndPhrase: false,
         },
         {
           name: "b.mp4",
@@ -201,6 +202,7 @@ describe("createShowDirector : le démarrage", () => {
           day: "2026-10-16",
           durationMs: 10_000,
           laughs: [],
+          hasEndPhrase: false,
         },
       ],
       phase: "opening",
@@ -239,6 +241,26 @@ describe("createShowDirector : le démarrage", () => {
     });
     send(true);
     expect(director.getState().lineup.map(({ durationMs }) => durationMs)).toEqual([600, 10_000]);
+  });
+
+  it("dit à chaque clip s'il a une phrase de fin, sans jamais lui donner le texte : absente, vide ou blanche, il n'en a pas", () => {
+    const { director, send } = setup({
+      clips: [
+        { ...confirmed("a.mp4"), endPhrase: "Bien joué." },
+        { ...confirmed("b.mp4"), endPhrase: "" },
+        { ...confirmed("c.mp4"), endPhrase: "   " },
+        confirmed("d.mp4"),
+      ],
+      custom: { showClipCount: 4 },
+    });
+    send(true);
+    expect(director.getState().lineup.map(({ hasEndPhrase }) => hasEndPhrase)).toEqual([
+      true,
+      false,
+      false,
+      false,
+    ]);
+    expect(JSON.stringify(director.getState())).not.toContain("Bien joué.");
   });
 
   it("donne à chaque clip ses rires : le sound de la soundboard avec sa version et son fader, à son instant en ms, rien sans rires", () => {
@@ -782,8 +804,8 @@ describe("createShowDirector : le déroulé dit par la page", () => {
 });
 
 describe("createShowDirector : le retour de Fenysk estimé", () => {
-  // La phrase estimée donne : carton 6000 ms, phrase des rires 6000 ms, ouverture et clôture 6200 ms. Les clips d'essai durent 10 s
-  // sans rire : un clip pèse 16 000 ms, deux 32 000.
+  // La phrase estimée donne : carton 6000 ms, phrase de fin 6000 ms, ouverture et clôture 6200 ms. Les clips d'essai durent 10 s
+  // sans phrase de fin : un clip pèse 16 000 ms, deux 32 000.
 
   it("l'estime au début depuis `startsAt` : l'ouverture, tous les clips et la clôture", () => {
     const { director, advance, send } = setup({ awayIn: 600 });
@@ -793,13 +815,21 @@ describe("createShowDirector : le retour de Fenysk estimé", () => {
     expect(director.getState().returnAt).toBe(START + 5000 + 600 + 6200 + 32_000 + 6200);
   });
 
-  it("compte la phrase des rires des clips qui en ont, pas des autres", () => {
+  it("compte la phrase de fin des clips qui en ont, pas des autres", () => {
+    const { director, send } = setup({
+      clips: [{ ...confirmed("a.mp4"), endPhrase: "Bien joué." }, confirmed("b.mp4")],
+    });
+    send(true);
+    expect(director.getState().returnAt).toBe(START + 1500 + 6200 + 6000 + 10_000 + 6000 + 16_000 + 6200);
+  });
+
+  it("ne compte rien pour des rires sans phrase de fin : la phrase des rires n'est plus dite d'office", () => {
     const { director, send } = setup({
       clips: [{ ...confirmed("a.mp4"), laughs: [{ at: 2, sound: "abcd1234" }] }, confirmed("b.mp4")],
       sounds: { abcd1234: { version: "1", fader: 100 } },
     });
     send(true);
-    expect(director.getState().returnAt).toBe(START + 1500 + 6200 + 6000 + 10_000 + 6000 + 16_000 + 6200);
+    expect(director.getState().returnAt).toBe(START + 1500 + 6200 + 32_000 + 6200);
   });
 
   it("le recalcule à chaque rapport de la page depuis l'heure du serveur : carton, clip, clip suivant, clôture", () => {
@@ -939,11 +969,41 @@ describe("createShowDirector : ce que Jean-Renard dit dans l'émission", () => {
     expect(said).toEqual(["ligne opening", "ligne closing"]);
   });
 
-  it("fait dire la phrase fixe des rires, venue du serveur", async () => {
-    const { director, said, send } = setup();
+  it("fait dire la phrase de fin du JSON du clip demandé, lue sur le serveur, avec son titre pour le journal", async () => {
+    const { director, said, send } = setup({
+      clips: [
+        { ...confirmed("a.mp4"), endPhrase: "Fin de a.mp4" },
+        { ...confirmed("b.mp4"), endPhrase: "Fin de b.mp4" },
+      ],
+    });
     send(true);
-    expect(await director.speak({ runId: "run1", kind: "laugh" })).toEqual({ ok: true, durationMs: 1234 });
-    expect(said).toEqual(["la phrase des rires : Les rires sont enregistrés. Personne n'a ri."]);
+    expect(await director.speak({ runId: "run1", kind: "clipEnd", index: 1 })).toEqual({
+      ok: true,
+      durationMs: 1234,
+    });
+    expect(said).toEqual(["la phrase de fin de « Titre de b.mp4 » : Fin de b.mp4"]);
+  });
+
+  it("ne dit rien d'un clip sans phrase de fin, même avec des rires : durée 0", async () => {
+    const { director, send } = setup({
+      clips: [{ ...confirmed("a.mp4"), laughs: [{ at: 2, sound: "abcd1234" }] }, confirmed("b.mp4")],
+      sounds: { abcd1234: { version: "1", fader: 100 } },
+    });
+    send(true);
+    expect(await director.speak({ runId: "run1", kind: "clipEnd", index: 0 })).toEqual({
+      ok: true,
+      durationMs: 0,
+    });
+    expect(await director.speak({ runId: "run1", kind: "clipEnd", index: 1 })).toEqual({
+      ok: true,
+      durationMs: 0,
+    });
+  });
+
+  it("ne connaît plus la phrase des rires dite d'office : la page ne peut demander que l'ouverture, la clôture et les phrases d'un clip", () => {
+    expect(ShowSpeakRequestSchema.safeParse({ runId: "run1", kind: "laugh" }).success).toBe(false);
+    expect(ShowSpeakRequestSchema.safeParse({ runId: "run1", kind: "clipEnd" }).success).toBe(false);
+    expect(ShowSpeakRequestSchema.safeParse({ runId: "run1", kind: "clipEnd", index: 0 }).success).toBe(true);
   });
 
   it("fait dire la phrase du JSON du clip demandé, lue sur le serveur, avec son titre pour le journal", async () => {
@@ -965,10 +1025,14 @@ describe("createShowDirector : ce que Jean-Renard dit dans l'émission", () => {
     });
   });
 
-  it("refuse un clip qui n'est pas dans l'émission", async () => {
+  it("refuse un clip qui n'est pas dans l'émission, pour sa phrase de début comme pour sa phrase de fin", async () => {
     const { director, said, send } = setup();
     send(true);
     expect(await director.speak({ runId: "run1", kind: "clip", index: 5 })).toMatchObject({
+      ok: false,
+      status: 400,
+    });
+    expect(await director.speak({ runId: "run1", kind: "clipEnd", index: 5 })).toMatchObject({
       ok: false,
       status: 400,
     });
@@ -983,6 +1047,10 @@ describe("createShowDirector : ce que Jean-Renard dit dans l'émission", () => {
     });
     send(true);
     expect(await director.speak({ runId: "ancienne", kind: "opening" })).toMatchObject({
+      ok: false,
+      status: 409,
+    });
+    expect(await director.speak({ runId: "ancienne", kind: "clipEnd", index: 0 })).toMatchObject({
       ok: false,
       status: 409,
     });

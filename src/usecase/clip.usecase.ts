@@ -142,7 +142,7 @@ export type ClipLibrary = {
   confirm(request: ConfirmRequest): Promise<ClipDoneResult>;
   // Jeter : le clip brut passe dans Traités, sans clip confirmé.
   discard(name: string): Promise<ClipDoneResult>;
-  // Modifier un clip confirmé : titre et phrase seuls réécrivent son JSON ; un autre début ou une autre fin le recodent depuis son
+  // Modifier un clip confirmé : titre et phrases seuls réécrivent son JSON ; un autre début ou une autre fin le recodent depuis son
   // clip brut de Traités. `request.name` est le nom de sa vidéo dans Confirmés.
   revise(request: ConfirmRequest): Promise<ClipDoneResult>;
   // Retirer un clip confirmé de l'émission : sa vidéo, son JSON et son chat passent dans Traités.
@@ -174,7 +174,7 @@ const STALE: ClipFailure = { ok: false, status: 404, message: "cette version du 
 const RAW_MISSING: ClipFailure = {
   ok: false,
   status: 409,
-  message: "le clip brut d'origine n'est plus dans Traités : seuls le titre et la phrase se modifient",
+  message: "le clip brut d'origine n'est plus dans Traités : seuls le titre et les phrases se modifient",
 };
 
 const toMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -355,7 +355,7 @@ export function createClipLibrary({
     return { ok: true, value: { name: clip.name } };
   };
 
-  // Titre et phrase seuls : le JSON se réécrit, la vidéo ne bouge pas (début et fin restent ceux du JSON).
+  // Titre et phrases seuls : le JSON se réécrit, la vidéo ne bouge pas (début et fin restent ceux du JSON).
   const reviseTextIn = (
     clipsFolder: string,
     clip: ConfirmedClip,
@@ -364,7 +364,7 @@ export function createClipLibrary({
     const choice = toConfirmChoice({ ...request, start: clip.start, end: clip.end }, clip.end);
     if (!choice.ok) return { ok: false, status: 400, message: choice.message };
     store.updateConfirmation(clipsFolder, clip.name, toConfirmation(clip, choice.value));
-    log(`Clips : « ${clip.name} » : titre et phrase mis à jour.`);
+    log(`Clips : « ${clip.name} » : titre et phrases mis à jour.`);
     return { ok: true, value: { name: clip.name } };
   };
 

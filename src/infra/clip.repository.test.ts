@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ClipConfirmation } from "../domain/clip.schema";
+import { LAUGH_PHRASE } from "../domain/show.rules";
 import { CONFIRMED_FOLDER, createClipChatStore, createClipStore, PROCESSED_FOLDER } from "./clip.repository";
 
 const folders: string[] = [];
@@ -22,11 +23,15 @@ afterEach(() => {
 const confirmation: ClipConfirmation = {
   title: "Le saut",
   phrase: "Quel saut !",
+  endPhrase: "Bien joué.",
   start: 1,
   end: 5,
   rawName: "raw.mp4",
   confirmedAt: "2026-10-16T10:00:00.000Z",
 };
+
+// Le JSON d'un clip d'avant la phrase de fin : sans la clé `endPhrase`.
+const { endPhrase: _written, ...beforeEndPhrase } = confirmation;
 
 // Un dossier de clips jetable : jamais le vrai dossier d'Alexis.
 const setup = () => {
@@ -153,6 +158,78 @@ describe("les clips confirmés", () => {
     const written = JSON.parse(readFileSync(join(confirmed, "a.json"), "utf8"));
     expect(written.laughs).toEqual([{ at: 5, sound: "abcd1234" }]);
     expect(written).not.toHaveProperty("laugh");
+  });
+
+  it("rend la phrase de fin que le JSON garde, vide comprise", () => {
+    const { folder, store } = setup();
+    const confirmed = join(folder, CONFIRMED_FOLDER);
+    mkdirSync(confirmed);
+    writeFileSync(join(confirmed, "a.mp4"), "video");
+    writeFileSync(join(confirmed, "a.json"), JSON.stringify(confirmation));
+    writeFileSync(join(confirmed, "b.mp4"), "video");
+    writeFileSync(
+      join(confirmed, "b.json"),
+      JSON.stringify({ ...confirmation, endPhrase: "", laughs: [{ at: 2, sound: "abcd1234" }] }),
+    );
+    const [first, second] = store.listConfirmed(folder);
+    expect(first?.endPhrase).toBe("Bien joué.");
+    expect(second?.endPhrase).toBe("");
+  });
+
+  it("lit un JSON d'avant la phrase de fin, avec des rires, avec la phrase des rires comme phrase de fin", () => {
+    const { folder, store, logs } = setup();
+    const confirmed = join(folder, CONFIRMED_FOLDER);
+    mkdirSync(confirmed);
+    writeFileSync(join(confirmed, "a.mp4"), "video");
+    writeFileSync(
+      join(confirmed, "a.json"),
+      JSON.stringify({ ...beforeEndPhrase, laughs: [{ at: 2.5, sound: "abcd1234" }] }),
+    );
+    const [clip] = store.listConfirmed(folder);
+    expect(clip?.endPhrase).toBe(LAUGH_PHRASE);
+    expect(clip?.laughs).toEqual([{ at: 2.5, sound: "abcd1234" }]);
+    expect(logs).toEqual([]);
+  });
+
+  it("lit un très vieux `laugh` comme un rire posé à la fin, puis lui donne la phrase des rires comme phrase de fin", () => {
+    const { folder, store } = setup();
+    const confirmed = join(folder, CONFIRMED_FOLDER);
+    mkdirSync(confirmed);
+    writeFileSync(join(confirmed, "a.mp4"), "video");
+    writeFileSync(join(confirmed, "a.json"), JSON.stringify({ ...beforeEndPhrase, laugh: "abcd1234" }));
+    const [clip] = store.listConfirmed(folder);
+    expect(clip?.laughs).toEqual([{ at: 5, sound: "abcd1234" }]);
+    expect(clip?.endPhrase).toBe(LAUGH_PHRASE);
+  });
+
+  it("ne donne aucune phrase de fin à un JSON d'avant sans rires", () => {
+    const { folder, store } = setup();
+    const confirmed = join(folder, CONFIRMED_FOLDER);
+    mkdirSync(confirmed);
+    writeFileSync(join(confirmed, "a.mp4"), "video");
+    writeFileSync(join(confirmed, "a.json"), JSON.stringify(beforeEndPhrase));
+    writeFileSync(join(confirmed, "b.mp4"), "video");
+    writeFileSync(join(confirmed, "b.json"), JSON.stringify({ ...beforeEndPhrase, laughs: [] }));
+    for (const clip of store.listConfirmed(folder)) expect(clip).not.toHaveProperty("endPhrase");
+  });
+
+  it("écrit la phrase de fin lue d'un JSON d'avant à la prochaine écriture du JSON, puis ne la lui redonne plus si Alexis la vide", () => {
+    const { folder, store } = setup();
+    const confirmed = join(folder, CONFIRMED_FOLDER);
+    mkdirSync(confirmed);
+    writeFileSync(join(confirmed, "a.mp4"), "video");
+    writeFileSync(
+      join(confirmed, "a.json"),
+      JSON.stringify({ ...beforeEndPhrase, laughs: [{ at: 2.5, sound: "abcd1234" }] }),
+    );
+    const [clip] = store.listConfirmed(folder);
+    if (!clip) throw new Error("le clip confirmé manque");
+    const { name, version, processedName, ...stored } = clip;
+    store.updateConfirmation(folder, name, stored);
+    expect(JSON.parse(readFileSync(join(confirmed, "a.json"), "utf8")).endPhrase).toBe(LAUGH_PHRASE);
+    store.updateConfirmation(folder, name, { ...stored, endPhrase: "" });
+    expect(JSON.parse(readFileSync(join(confirmed, "a.json"), "utf8")).endPhrase).toBe("");
+    expect(store.listConfirmed(folder)[0]?.endPhrase).toBe("");
   });
 });
 

@@ -5,7 +5,6 @@ import type { Settings } from "../domain/settings.schema";
 import {
   type CountdownStep,
   DEFAULT_SHOW_CLIP_COUNT,
-  LAUGH_PHRASE,
   toLaughSchedule,
   toLineup,
   toRecordedDay,
@@ -126,8 +125,9 @@ export function createShowDirector({
   let cancelWatch: (() => void) | undefined;
   // Les clips de l'émission déjà comptés comme passés (un clip se compte une fois, au début de son passage).
   let counted = new Set<number>();
-  // La phrase de chaque clip de l'émission, dans l'ordre de passage : elle reste sur le serveur.
+  // La phrase de début et la phrase de fin de chaque clip de l'émission, dans l'ordre de passage : elles restent sur le serveur.
   let phrases: readonly string[] = [];
+  let endPhrases: readonly string[] = [];
   let unsubscribeScene: (() => void) | undefined;
   let unsubscribeMic: (() => void) | undefined;
 
@@ -247,6 +247,7 @@ export function createShowDirector({
     fox.updateShow(true);
     counted = new Set();
     phrases = chosen.map((clip) => clip.phrase);
+    endPhrases = chosen.map((clip) => clip.endPhrase ?? "");
     const lineup = chosen.map((clip) => ({
       name: clip.name,
       title: clip.title,
@@ -254,6 +255,7 @@ export function createShowDirector({
       day: toRecordedDay(clip),
       durationMs: Math.round((clip.end - clip.start) * 1000),
       laughs: toLaughs(clip),
+      hasEndPhrase: (clip.endPhrase ?? "").trim() !== "",
     }));
     const startsAt = clock() + awayIn;
     publish({
@@ -343,11 +345,12 @@ export function createShowDirector({
     },
     async speak(request) {
       if (state.status !== "running" || request.runId !== state.runId) return STALE_SPEECH;
-      if (request.kind === "laugh") return voice.sayText(LAUGH_PHRASE, "la phrase des rires");
-      if (request.kind !== "clip") return voice.sayLine(request.kind);
+      if (request.kind === "opening" || request.kind === "closing") return voice.sayLine(request.kind);
       const clip = state.lineup[request.index];
       if (!clip) return { ok: false, status: 400, message: "ce clip n'est pas dans l'émission" };
-      return voice.sayText(phrases[request.index] ?? "", `la phrase de « ${clip.title} »`);
+      return request.kind === "clip"
+        ? voice.sayText(phrases[request.index] ?? "", `la phrase de « ${clip.title} »`)
+        : voice.sayText(endPhrases[request.index] ?? "", `la phrase de fin de « ${clip.title} »`);
     },
   };
 }

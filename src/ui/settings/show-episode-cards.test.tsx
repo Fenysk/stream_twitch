@@ -58,8 +58,24 @@ const running: ShowState = {
   status: "running",
   runId: "run1",
   lineup: [
-    { name: "a.mp4", title: "A", version: "1-1", day: "2026-10-16", durationMs: 10_000, laughs: [] },
-    { name: "b.mp4", title: "B", version: "1-1", day: "2026-10-16", durationMs: 10_000, laughs: [] },
+    {
+      name: "a.mp4",
+      title: "A",
+      version: "1-1",
+      day: "2026-10-16",
+      durationMs: 10_000,
+      laughs: [],
+      hasEndPhrase: false,
+    },
+    {
+      name: "b.mp4",
+      title: "B",
+      version: "1-1",
+      day: "2026-10-16",
+      durationMs: 10_000,
+      laughs: [],
+      hasEndPhrase: false,
+    },
   ],
   phase: "clip",
   index: 1,
@@ -105,7 +121,7 @@ describe("les cartes de l'émission", () => {
 });
 
 describe("la durée estimée sous le nombre de clips", () => {
-  // Un clip pèse 6000 de carton plus sa partie gardée (plus 6000 de phrase des rires s'il en a) ; l'ouverture et la clôture 12 400.
+  // Un clip pèse 6000 de carton plus sa partie gardée (plus 6000 de phrase de fin s'il en a une) ; l'ouverture et la clôture 12 400.
   const clips = [
     confirmedClip("a.mp4", { end: 120 }),
     confirmedClip("b.mp4", { end: 60 }),
@@ -137,15 +153,21 @@ describe("la durée estimée sous le nombre de clips", () => {
     expect(html).toContain("Durée estimée : 1 min");
   });
 
-  it("Quand un clip a des rires dans sa partie gardée, le système doit compter la phrase des rires, pas ceux d'avant son début", () => {
-    // 126,6 s gardées : 12 400 + 6000 + 126 600 = 145 000 ms sans phrase des rires (2 min), 151 000 avec (3 min).
+  it("Quand un clip a une phrase de fin, le système doit la compter, et rien pour des rires sans phrase de fin ni pour une phrase vide ou blanche", () => {
+    // 126,6 s gardées : 12 400 + 6000 + 126 600 = 145 000 ms sans phrase de fin (2 min), 151 000 avec (3 min).
     const laugh = (at: number) => ({ laughs: [{ at, sound: "rires001" }] });
     const render126 = (clip: ConfirmedSummary) => render(IDLE_SHOW, { showClipCount: 1 }, [clip]);
     expect(render126(confirmedClip("a.mp4", { end: 126.6 }))).toContain("Durée estimée : 2 min");
-    expect(render126(confirmedClip("a.mp4", { end: 126.6, ...laugh(20) }))).toContain(
+    expect(render126(confirmedClip("a.mp4", { end: 126.6, endPhrase: "Bien joué." }))).toContain(
       "Durée estimée : 3 min",
     );
-    expect(render126(confirmedClip("a.mp4", { start: 10, end: 136.6, ...laugh(5) }))).toContain(
+    expect(render126(confirmedClip("a.mp4", { end: 126.6, ...laugh(20) }))).toContain(
+      "Durée estimée : 2 min",
+    );
+    expect(
+      render126(confirmedClip("a.mp4", { start: 10, end: 136.6, ...laugh(5), endPhrase: "   " })),
+    ).toContain("Durée estimée : 2 min");
+    expect(render126(confirmedClip("a.mp4", { end: 126.6, ...laugh(20), endPhrase: "" }))).toContain(
       "Durée estimée : 2 min",
     );
   });

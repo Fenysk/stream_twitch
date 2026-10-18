@@ -1,6 +1,6 @@
 // Le plan de travail d'un clip, commun à un clip brut (valider ou jeter) et à un clip confirmé (enregistrer ou retirer de l'émission) :
-// le lecteur, la timeline à pistes (la coupe : début et fin gardés, et les rires), le titre et la phrase de Jean-Renard, puis deux
-// actions au choix de l'appelant. Une action rend le refus du serveur à montrer, ou `null` quand c'est fait.
+// le lecteur, la timeline à pistes (la coupe : début et fin gardés, et les rires), le titre et les phrases de début et de fin de
+// Jean-Renard, puis deux actions au choix de l'appelant. Une action rend le refus du serveur à montrer, ou `null` quand c'est fait.
 
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -24,6 +24,7 @@ import { useLaughPreview } from "./use-laugh-preview";
 export type EditorValues = {
   title: string;
   phrase: string;
+  endPhrase: string;
   trim: Trim;
   laughs: ClipLaugh[];
   laughFader: number;
@@ -47,6 +48,7 @@ type ClipWorkbenchProps = {
   src: string;
   initialTitle: string;
   initialPhrase: string;
+  initialEndPhrase: string;
   // Les rires déjà posés sur le clip ; sans eux, aucun.
   initialLaughs?: readonly ClipLaugh[] | undefined;
   // Le volume des rires déjà enregistré (0 à 100) ; sans lui (un clip brut), le dernier volume choisi, et 100 au tout début.
@@ -80,6 +82,7 @@ export const ClipWorkbench = ({
   src,
   initialTitle,
   initialPhrase,
+  initialEndPhrase,
   initialLaughs,
   initialLaughFader,
   videoStart = 0,
@@ -98,6 +101,7 @@ export const ClipWorkbench = ({
   const [chosen, setChosen] = useState<Trim | null>(null);
   const [title, setTitle] = useState(initialTitle);
   const [phrase, setPhrase] = useState(initialPhrase);
+  const [endPhrase, setEndPhrase] = useState(initialEndPhrase);
   const [which, setWhich] = useState<Which | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const { duration } = video;
@@ -138,7 +142,7 @@ export const ClipWorkbench = ({
 
   const run = async (kind: Which, action: EditorAction) => {
     if (!trim) return;
-    const values = { title, phrase, trim, laughs: laughs.requests, laughFader: laughFader.fader };
+    const values = { title, phrase, endPhrase, trim, laughs: laughs.requests, laughFader: laughFader.fader };
     setWhich(kind);
     setRefusal(null);
     const message = await action.run(values);
@@ -184,11 +188,19 @@ export const ClipWorkbench = ({
         isDisabled={isWorking}
       />
       <TextArea
-        label="Phrase de Jean-Renard"
+        label="Phrase de début"
         value={phrase}
         onInput={setPhrase}
         rows={2}
-        placeholder="Facultatif : vide, il se tait."
+        placeholder="Facultatif : dite sur le carton ; vide, il se tait."
+        isDisabled={isWorking}
+      />
+      <TextArea
+        label="Phrase de fin"
+        value={endPhrase}
+        onInput={setEndPhrase}
+        rows={2}
+        placeholder="Facultatif : dite après le clip et ses rires ; vide, il se tait."
         isDisabled={isWorking}
       />
       <div className="clip-actions">

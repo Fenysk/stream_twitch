@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-18 — Chaque clip a sa phrase de fin (`endPhrase`) : la phrase des rires n'est plus liée aux sounds
+
+**Contexte.** Jean-Renard disait « Les rires sont enregistrés. Personne n'a ri. » après tout clip dont un rire avait joué, quel que soit le sound posé : Alexis veut, par clip, une phrase de début (`phrase`, sur le carton) et une phrase de fin.
+**Décision.** `endPhrase` dans le JSON du clip confirmé (absent à la lecture = vide) et dans `ConfirmRequest`, validé comme `phrase` (vide : il se tait). `ShowSpeakRequest` : `{ kind: "laugh" }` devient `{ kind: "clipEnd", index }`, demandé par `/show` après le clip et ses rires quand `ShowClip.hasEndPhrase` ; le texte reste sur le serveur. `CountdownClip.hasEndPhrase` remplace les rires dans `toRemainingMs`. Un JSON d'avant, sans `endPhrase` et avec des rires, se lit avec `LAUGH_PHRASE` (`toEndPhraseJson`, comme `toLaughsJson`), écrit au prochain « Enregistrer ».
+**Renoncement.** Renommer `phrase` en `startPhrase` : tous les JSON changeraient pour un mot. Réécrire les JSON au démarrage : la lecture convertit déjà `laugh`, et le dossier des clips peut changer en route.
+
 ## 2026-10-18 — Après une émission finie, OBS passe sur la scène de `showEndScene`
 
 **Contexte.** Alexis veut qu'une émission finie l'envoie seule sur une autre scène, par exemple « Pause », au lieu de rester sur celle de `/show`.

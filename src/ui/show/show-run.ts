@@ -1,10 +1,10 @@
 // Le déroulé d'une émission côté page `/show`, sans rien savoir du navigateur : l'écran, la voix, le serveur et l'horloge lui sont donnés.
 // Ouverture (un bandeau, Jean-Renard grand à droite dit une phrase) ; pour chaque clip : le carton (le début du clip, flou en fond, un
-// bandeau avec son jour et son titre, Jean-Renard dit la phrase du clip), le flou se lève et le clip joue (Jean-Renard petit dans un
-// coin) ; clôture (comme l'ouverture) ; la page redevient transparente. Le clip suivant se charge dans l'autre <video> pendant que
-// celui-ci joue, et c'est sa première image qui sert de fond au carton.
+// bandeau avec son jour et son titre, Jean-Renard dit la phrase de début du clip), le flou se lève et le clip joue (Jean-Renard petit
+// dans un coin), puis il dit sa phrase de fin s'il en a une ; clôture (comme l'ouverture) ; la page redevient transparente. Le clip
+// suivant se charge dans l'autre <video> pendant que celui-ci joue, et c'est sa première image qui sert de fond au carton.
 
-import { toCardMs, toLaughMs, toLineMs } from "../../domain/show.rules";
+import { toCardMs, toEndMs, toLineMs } from "../../domain/show.rules";
 import type { ShowClip, ShowCues, ShowLaugh, ShowProgress } from "../../domain/show.schema";
 import { type ShowView, type Slot, toSlot } from "./show-view";
 
@@ -14,17 +14,18 @@ export type ShowScreen = {
   load(slot: Slot, clip: ShowClip): Promise<boolean>;
   // Joue le clip de l'emplacement depuis le début, son tchat et ses sursauts au rythme de la vidéo (`cues`, rien quand le serveur ne
   // l'a pas donné), et ses rires chacun à son instant, par-dessus son son. Rend la main quand la vidéo est finie (ou qu'elle a échoué
-  // en route) ET que chaque rire parti est fini : un rire qui dépasse la fin garde la dernière image à l'écran. Rend `true` si au
-  // moins un rire a joué jusqu'au bout ; l'arrêt de l'émission coupe tout et rend `false`.
-  play(slot: Slot, cues: ShowCues | null, laughs: readonly ShowLaugh[]): Promise<boolean>;
+  // en route) ET que chaque rire parti est fini : un rire qui dépasse la fin garde la dernière image à l'écran. L'arrêt de l'émission
+  // coupe tout.
+  play(slot: Slot, cues: ShowCues | null, laughs: readonly ShowLaugh[]): Promise<void>;
 };
 
-// Ce que Jean-Renard dit : l'ouverture, la clôture, les rires, ou la phrase du clip n° `index` de l'émission (le serveur choisit le texte).
+// Ce que Jean-Renard dit : l'ouverture, la clôture, la phrase de début (`clip`) ou de fin (`clipEnd`) du clip n° `index` de l'émission (le
+// serveur choisit le texte).
 export type Speech =
   | { kind: "opening" }
   | { kind: "closing" }
-  | { kind: "laugh" }
-  | { kind: "clip"; index: number };
+  | { kind: "clip"; index: number }
+  | { kind: "clipEnd"; index: number };
 
 // Ce qui se charge pour un clip : sa vidéo (`false` : elle ne se lit pas) et ses données (`null` : le serveur ne les a pas données).
 type Loading = { video: Promise<boolean>; cues: Promise<ShowCues | null> };
@@ -88,7 +89,7 @@ export async function runEpisode(deps: EpisodeDeps, lineup: readonly ShowClip[])
     return loading;
   };
 
-  // Le carton du clip, puis le clip et ses rires jusqu'à leur fin, puis la phrase des rires (une seule) si au moins un a joué.
+  // Le carton du clip, puis le clip et ses rires jusqu'à leur fin, puis sa phrase de fin s'il en a une.
   const showClip = async (index: number, clip: ShowClip, loading: Loading): Promise<void> => {
     deps.report({ phase: "card", index });
     screen.setView({ kind: "card", slot: toSlot(index), title: clip.title, day: clip.day });
@@ -98,8 +99,8 @@ export async function runEpisode(deps: EpisodeDeps, lineup: readonly ShowClip[])
     screen.setView({ kind: "clip", slot: toSlot(index), title: clip.title });
     const playing = screen.play(toSlot(index), await loading.cues, clip.laughs);
     void preload(index + 1);
-    const hasLaughed = await playing;
-    if (hasLaughed && !deps.isStopped()) await holdSpeech(deps, { kind: "laugh" }, toLaughMs);
+    await playing;
+    if (clip.hasEndPhrase && !deps.isStopped()) await holdSpeech(deps, { kind: "clipEnd", index }, toEndMs);
   };
 
   deps.report({ phase: "opening", index: 0 });

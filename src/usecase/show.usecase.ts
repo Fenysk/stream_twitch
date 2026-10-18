@@ -21,7 +21,7 @@ export type ShowVoice = {
   update(settings: Pick<Settings, "showOpeningPhrases" | "showClosingPhrases">): void;
   // L'ouverture ou la clôture : une phrase de la liste, tirée sans répétition avant d'avoir tout dit, d'une émission à l'autre.
   sayLine(kind: "opening" | "closing"): Promise<ShowSpeakResult>;
-  // Un texte donné (la phrase d'un clip, les rires) ; `label` le nomme dans le journal. Vide : il se tait, durée 0.
+  // Un texte donné (la phrase de début ou de fin d'un clip) ; `label` le nomme dans le journal. Vide : il se tait, durée 0.
   sayText(text: string, label: string): Promise<ShowSpeakResult>;
 };
 

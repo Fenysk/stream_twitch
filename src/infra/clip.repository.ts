@@ -7,6 +7,7 @@ import {
   toClipStem,
   toConfirmationName,
   toConfirmedName,
+  toEndPhraseJson,
   toFreeName,
 } from "../domain/clip.rules";
 import { ClipChatSchema, type ClipConfirmation, ClipConfirmationSchema } from "../domain/clip.schema";
@@ -71,11 +72,13 @@ export function createClipStore(log: (message: string) => void): ClipStore {
     log(`Clips : ${path} ignoré : ${reason}`);
   };
 
-  // Le JSON d'un clip confirmé (l'ancien `laugh` lu comme un rire à la fin) ; un JSON abîmé ou invalide se signale une fois et le clip
-  // n'existe pas.
+  // Le JSON d'un clip confirmé (l'ancien `laugh` lu comme un rire à la fin, puis la phrase des rires d'avant lue comme phrase de fin des
+  // clips avec des rires) ; un JSON abîmé ou invalide se signale une fois et le clip n'existe pas.
   const getConfirmation = (directory: string, jsonName: string): ClipConfirmation | undefined => {
     try {
-      const parsed = ClipConfirmationSchema.safeParse(toLaughsJson(getJsonFile(join(directory, jsonName))));
+      const parsed = ClipConfirmationSchema.safeParse(
+        toEndPhraseJson(toLaughsJson(getJsonFile(join(directory, jsonName)))),
+      );
       if (parsed.success) return parsed.data;
       if (!warned.has(jsonName)) log(`Clips : ${jsonName} ignoré : ${toIssuesMessage(parsed.error)}`);
     } catch (error) {

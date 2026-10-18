@@ -49,7 +49,7 @@ export const toKnownLaughs = <Laugh extends { sound: string }>(
   return laughs.filter(({ sound }) => ids.has(sound));
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 // Le JSON d'un clip confirmé d'avant les rires placés : son `laugh` (un sound joué à la fin du clip) se lit comme un rire posé à

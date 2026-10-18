@@ -1,5 +1,5 @@
 // Le sound du rire choisi sous la timeline : l'un des sounds de la soundboard, par son titre, sans « Aucun » (un rire retiré se retire avec
-// « Retirer »). La page `/show` joue ce sound à l'instant du rire, puis Jean-Renard dit que les rires sont enregistrés.
+// « Retirer »). La page `/show` joue ce sound à l'instant du rire.
 
 import type { SoundSummary } from "../../domain/sound.schema";
 import { ChoiceList, type ChoiceOption } from "../design/choice-list";
@@ -28,9 +28,6 @@ export const LaughChoice = ({ sounds, value, isDisabled, onSelect }: LaughChoice
       onSelect={onSelect}
       isDisabled={isDisabled}
     />
-    <p className="lp-type-caption lp-muted">
-      Un sound de la soundboard, joué à l'instant du rire ; Jean-Renard dit ensuite que les rires sont
-      enregistrés.
-    </p>
+    <p className="lp-type-caption lp-muted">Un sound de la soundboard, joué à l'instant du rire.</p>
   </div>
 );

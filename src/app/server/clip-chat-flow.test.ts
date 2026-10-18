@@ -170,6 +170,7 @@ describe("le tchat d'un clip, de l'évènement d'OBS jusqu'au rangement du clip"
       name: "Replay.mp4",
       title: "Le clip",
       phrase: "",
+      endPhrase: "",
       start: 0,
       end: 60,
     });

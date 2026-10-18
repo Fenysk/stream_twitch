@@ -41,6 +41,7 @@ const request: ConfirmRequest = {
   name: "Replay.mp4",
   title: "  Un autre titre ",
   phrase: " Une autre phrase ",
+  endPhrase: " Une autre fin ",
   start: 12.5,
   end: 40,
 };
@@ -127,7 +128,7 @@ const setup = (
   return { library, state, trims, logs, release };
 };
 
-describe("modifier le titre et la phrase d'un clip confirmé", () => {
+describe("modifier le titre et les phrases d'un clip confirmé", () => {
   it("réécrit le JSON sans recoder, en gardant le reste tel quel : date de validation, clip brut, début et fin", async () => {
     const { library, state, trims } = setup();
     expect(await library.revise(request)).toEqual({ ok: true, value: { name: "Replay.mp4" } });
@@ -139,6 +140,7 @@ describe("modifier le titre et la phrase d'un clip confirmé", () => {
         confirmation: {
           title: "Un autre titre",
           phrase: "Une autre phrase",
+          endPhrase: "Une autre fin",
           start: 12.5,
           end: 40,
           rawName: "Replay.mp4",
@@ -149,13 +151,57 @@ describe("modifier le titre et la phrase d'un clip confirmé", () => {
     ]);
   });
 
-  it("accepte une phrase vide : Jean-Renard se taira", async () => {
+  it("accepte une phrase de début vide : Jean-Renard se taira", async () => {
     const { library, state } = setup();
     expect((await library.revise({ ...request, phrase: "" })).ok).toBe(true);
     expect(state.updated[0]?.confirmation.phrase).toBe("");
   });
 
-  it("marche aussi quand le clip brut n'est plus dans Traités : seuls le titre et la phrase changent", async () => {
+  it("accepte une phrase de fin vide : Jean-Renard se taira, et elle est écrite quand même", async () => {
+    const { library, state } = setup({ confirmed: [{ ...clip, endPhrase: "Ancienne fin." }] });
+    expect((await library.revise({ ...request, endPhrase: "" })).ok).toBe(true);
+    expect(state.updated[0]?.confirmation).toHaveProperty("endPhrase", "");
+  });
+
+  it("change seulement la phrase de fin sans recoder, et garde le reste du JSON : spikes, nombre de passages, début et fin", async () => {
+    const { library, state, trims } = setup({
+      confirmed: [{ ...clip, endPhrase: "Ancienne fin.", spikes: [1000], playCount: 2 }],
+    });
+    expect(
+      await library.revise({
+        ...request,
+        title: clip.title,
+        phrase: clip.phrase,
+        endPhrase: "Nouvelle fin.",
+      }),
+    ).toEqual({ ok: true, value: { name: "Replay.mp4" } });
+    expect(trims).toEqual([]);
+    expect(state.calls).toEqual(["json Replay.mp4"]);
+    expect(state.updated[0]?.confirmation).toEqual({
+      title: "Le saut",
+      phrase: "Quel saut !",
+      endPhrase: "Nouvelle fin.",
+      start: 12.5,
+      end: 40,
+      rawName: "Replay.mp4",
+      processedName: "Replay (2).mp4",
+      confirmedAt: "2026-10-16T10:00:00.000Z",
+      spikes: [1000],
+      playCount: 2,
+    });
+  });
+
+  it("refuse une phrase de fin trop longue, sans rien écrire", async () => {
+    const { library, state } = setup();
+    expect(await library.revise({ ...request, endPhrase: "a".repeat(501) })).toEqual({
+      ok: false,
+      status: 400,
+      message: "la phrase de fin ne peut pas dépasser 500 caractères",
+    });
+    expect(state.updated).toEqual([]);
+  });
+
+  it("marche aussi quand le clip brut n'est plus dans Traités : seuls le titre et les phrases changent", async () => {
     const { library, state } = setup({ confirmed: [{ ...clip, processedName: null }] });
     expect((await library.revise(request)).ok).toBe(true);
     expect(state.updated[0]?.confirmation).not.toHaveProperty("processedName");
@@ -277,6 +323,7 @@ describe("changer le début ou la fin d'un clip confirmé", () => {
     expect(state.replaced[0]?.confirmation).toEqual({
       title: "Un autre titre",
       phrase: "Une autre phrase",
+      endPhrase: "Une autre fin",
       start: 20,
       end: 50,
       rawName: "Replay.mp4",
@@ -310,7 +357,7 @@ describe("changer le début ou la fin d'un clip confirmé", () => {
     expect(await library.revise(moved)).toEqual({
       ok: false,
       status: 409,
-      message: "le clip brut d'origine n'est plus dans Traités : seuls le titre et la phrase se modifient",
+      message: "le clip brut d'origine n'est plus dans Traités : seuls le titre et les phrases se modifient",
     });
     expect(trims).toEqual([]);
     expect(state.replaced).toEqual([]);
@@ -479,7 +526,7 @@ describe("compter les passages d'un clip confirmé", () => {
     expect(state.updated).toEqual([]);
   });
 
-  it("garde le nombre de passages quand on modifie le titre et la phrase", async () => {
+  it("garde le nombre de passages quand on modifie le titre et les phrases", async () => {
     const { library, state } = setup({ confirmed: [{ ...clip, playCount: 4 }] });
     await library.revise(request);
     expect(state.updated[0]?.confirmation.playCount).toBe(4);

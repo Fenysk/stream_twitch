@@ -4,7 +4,7 @@
 
 import type { ConfirmedSummary } from "../../domain/clip.schema";
 import type { EditableSettings } from "../../domain/settings.schema";
-import { toLaughSchedule, toShowLengthMs, toShowLengthText } from "../../domain/show.rules";
+import { toShowLengthMs, toShowLengthText } from "../../domain/show.rules";
 import type { ShowState } from "../../domain/show.schema";
 import { toShowStatusText } from "../clips/clip-text";
 import { ChoiceList, type ChoiceOption } from "../design/choice-list";
@@ -16,12 +16,12 @@ import { SHOW_CLIP_COUNT_SLIDER, SHOW_LISTS } from "./show-fields";
 import type { UseScenes } from "./use-scenes";
 import type { UseSettings } from "./use-settings";
 
-// Un clip confirmé tel que le tirage le voit : ses passages, la durée de sa partie gardée et les rires qui y jouent.
+// Un clip confirmé tel que le tirage le voit : ses passages, la durée de sa partie gardée et s'il a une phrase de fin.
 const toCandidate = (clip: ConfirmedSummary) => ({
   name: clip.name,
   playCount: clip.playCount ?? 0,
   durationMs: Math.round((clip.end - clip.start) * 1000),
-  laughs: toLaughSchedule(clip.laughs ?? [], clip),
+  hasEndPhrase: (clip.endPhrase ?? "").trim() !== "",
 });
 
 const toLengthText = (confirmed: readonly ConfirmedSummary[], count: number): string =>

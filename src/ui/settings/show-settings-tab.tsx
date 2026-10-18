@@ -1,7 +1,7 @@
 // L'onglet « Émission » : l'adresse de la source OBS qui passe les clips confirmés, où en est l'émission (arrêtée, ou « clip 2 sur 5 »),
 // combien de clips elle passe, la scène d'OBS où elle laisse le programme et les phrases de Jean-Renard au début et à la fin, puis deux listes. Les clips bruts du dossier d'OBS
 // (le tampon de relecture), du plus récent au plus ancien : un clic les ouvre dans l'éditeur, où l'on choisit le début et la fin, un
-// titre et la phrase de Jean-Renard, puis on valide (le clip est recodé dans Confirmés) ou on jette. Les clips de l'émission (les
+// titre et les phrases de Jean-Renard, puis on valide (le clip est recodé dans Confirmés) ou on jette. Les clips de l'émission (les
 // confirmés) : un clic les ouvre dans le même éditeur, rempli, pour les modifier ou les retirer de l'émission.
 
 import { RefreshCw } from "lucide-react";

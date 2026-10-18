@@ -8,10 +8,13 @@ import {
   toConfirmationName,
   toConfirmChoice,
   toConfirmedName,
+  toEndPhraseJson,
   toFreeName,
   toPreviousName,
   toRawClips,
 } from "./clip.rules";
+import { toLaughsJson } from "./laugh.rules";
+import { LAUGH_PHRASE } from "./show.rules";
 
 describe("isClipName", () => {
   it("accepte un nom de fichier vidéo seul : .mp4, .mkv et .mov, majuscules comprises", () => {
@@ -121,18 +124,31 @@ describe("isSameTrim", () => {
 });
 
 describe("toConfirmChoice", () => {
-  const request = { name: "a.mp4", title: "  Le saut  ", phrase: " Quel saut ! ", start: 1.5, end: 20 };
+  const request = {
+    name: "a.mp4",
+    title: "  Le saut  ",
+    phrase: " Quel saut ! ",
+    endPhrase: " Bien joué. ",
+    start: 1.5,
+    end: 20,
+  };
 
-  it("accepte un titre, une phrase et une partie du clip, titre et phrase sans blancs de bord", () => {
+  it("accepte un titre, une phrase de début, une phrase de fin et une partie du clip, titre et phrases sans blancs de bord", () => {
     expect(toConfirmChoice(request, 118.55)).toEqual({
       ok: true,
-      value: { title: "Le saut", phrase: "Quel saut !", start: 1.5, end: 20 },
+      value: { title: "Le saut", phrase: "Quel saut !", endPhrase: "Bien joué.", start: 1.5, end: 20 },
     });
   });
 
-  it("accepte une phrase vide : Jean-Renard se tait", () => {
+  it("accepte une phrase de début vide : Jean-Renard se tait", () => {
     const result = toConfirmChoice({ ...request, phrase: "   " }, 118.55);
     expect(result.ok && result.value.phrase).toBe("");
+  });
+
+  it("accepte une phrase de fin vide : Jean-Renard se tait après le clip, et la phrase de fin est quand même écrite", () => {
+    const result = toConfirmChoice({ ...request, endPhrase: "   " }, 118.55);
+    expect(result.ok && "endPhrase" in result.value).toBe(true);
+    expect(result.ok && result.value.endPhrase).toBe("");
   });
 
   it("garde les rires posés, triés par instant, le sound de chacun sans blancs de bord", () => {
@@ -232,11 +248,20 @@ describe("toConfirmChoice", () => {
     });
   });
 
-  it("refuse une phrase trop longue", () => {
+  it("refuse une phrase de début trop longue", () => {
     expect(toConfirmChoice({ ...request, phrase: "a".repeat(501) }, 100)).toEqual({
       ok: false,
-      message: "la phrase ne peut pas dépasser 500 caractères",
+      message: "la phrase de début ne peut pas dépasser 500 caractères",
     });
+    expect(toConfirmChoice({ ...request, phrase: "a".repeat(500) }, 100).ok).toBe(true);
+  });
+
+  it("refuse une phrase de fin trop longue", () => {
+    expect(toConfirmChoice({ ...request, endPhrase: "a".repeat(501) }, 100)).toEqual({
+      ok: false,
+      message: "la phrase de fin ne peut pas dépasser 500 caractères",
+    });
+    expect(toConfirmChoice({ ...request, endPhrase: "a".repeat(500) }, 100).ok).toBe(true);
   });
 
   it("refuse un début négatif, un début qui ne précède pas la fin d'au moins une image, ou une fin au-delà de la durée", () => {
@@ -261,5 +286,48 @@ describe("toConfirmChoice", () => {
   it("ramène à la durée du clip une fin qui la dépasse de moins de 0,1 s (le lecteur et ffprobe arrondissent différemment)", () => {
     const result = toConfirmChoice({ ...request, start: 0, end: 118.6 }, 118.55);
     expect(result.ok && result.value.end).toBe(118.55);
+  });
+});
+
+describe("toEndPhraseJson : le JSON d'avant la phrase de fin", () => {
+  const legacy = {
+    title: "Le saut",
+    phrase: "Quel saut !",
+    start: 2,
+    end: 12.5,
+    laughs: [{ at: 3, sound: "abcd1234" }],
+  };
+
+  it("lit avec la phrase des rires, comme phrase de fin, un JSON qui a des rires et pas de clé endPhrase", () => {
+    expect(toEndPhraseJson(legacy)).toEqual({ ...legacy, endPhrase: LAUGH_PHRASE });
+    expect(LAUGH_PHRASE).toBe("Les rires sont enregistrés. Personne n'a ri.");
+  });
+
+  it("ne bouge pas un JSON qui a déjà une phrase de fin, même vide : Alexis a choisi", () => {
+    const written = { ...legacy, endPhrase: "Bien joué." };
+    expect(toEndPhraseJson(written)).toEqual(written);
+    const silent = { ...legacy, endPhrase: "" };
+    expect(toEndPhraseJson(silent)).toEqual(silent);
+    expect(toEndPhraseJson(silent)).toHaveProperty("endPhrase", "");
+  });
+
+  it("n'ajoute rien à un JSON sans rires : absents, vides ou pas une liste", () => {
+    const { laughs, ...without } = legacy;
+    expect(toEndPhraseJson(without)).toEqual(without);
+    expect(toEndPhraseJson(without)).not.toHaveProperty("endPhrase");
+    expect(toEndPhraseJson({ ...legacy, laughs: [] })).not.toHaveProperty("endPhrase");
+    expect(toEndPhraseJson({ ...legacy, laughs: "abcd1234" })).not.toHaveProperty("endPhrase");
+  });
+
+  it("reçoit la phrase aussi quand un très vieux `laugh` vient de devenir `laughs` : la conversion des rires passe avant", () => {
+    const { laughs, ...base } = legacy;
+    const json = toEndPhraseJson(toLaughsJson({ ...base, laugh: "abcd1234" }));
+    expect(json).toEqual({ ...base, laughs: [{ at: 12.5, sound: "abcd1234" }], endPhrase: LAUGH_PHRASE });
+  });
+
+  it("rend tel quel ce qui n'est pas un objet JSON", () => {
+    expect(toEndPhraseJson(null)).toBeNull();
+    expect(toEndPhraseJson("texte")).toBe("texte");
+    expect(toEndPhraseJson([legacy])).toEqual([legacy]);
   });
 });

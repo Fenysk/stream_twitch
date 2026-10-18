@@ -84,7 +84,7 @@ export const startRun = ({ runId, lineup, startsAt, showFader }: ShowState, page
           // La vidéo finie, les rires pas encore partis partent, et la dernière image reste jusqu'à la fin du dernier rire.
           play: async (slot, cues, laughs) => {
             const video = page.videoOf(slot);
-            if (isStopped || !video) return false;
+            if (isStopped || !video) return;
             page.clearChat();
             const laughing: Promise<boolean>[] = [];
             const ticker = createShowTicker(
@@ -97,7 +97,7 @@ export const startRun = ({ runId, lineup, startsAt, showFader }: ShowState, page
             );
             await playVideo(video, aborted, ticker.tick);
             if (!isStopped) ticker.end();
-            return (await Promise.all(laughing)).some(Boolean);
+            await Promise.all(laughing);
           },
         },
         loadCues: async ({ name, version }) => {

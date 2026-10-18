@@ -5,7 +5,8 @@ import {
   type ConfirmedSummary,
   type ConfirmRequest,
 } from "./clip.schema";
-import { isLaughFader } from "./laugh.rules";
+import { isLaughFader, isRecord } from "./laugh.rules";
+import { LAUGH_PHRASE } from "./show.rules";
 import { STEP_SECONDS } from "./trim.rules";
 
 const EXTENSION = /\.[^./\\]+$/;
@@ -90,13 +91,24 @@ export const toStoredConfirmation = (clip: ConfirmedSummary): ClipConfirmation =
   return { ...kept, ...(processedName === null ? {} : { processedName }) };
 };
 
+// Le JSON d'un clip confirmé d'avant la phrase de fin : sans la clé `endPhrase` et avec des rires, il se lit avec la phrase que Jean-Renard
+// disait alors après les rires (`LAUGH_PHRASE`). Un JSON qui a la clé, même vide, garde le choix d'Alexis ; sans rire, rien n'est ajouté.
+export const toEndPhraseJson = (json: unknown): unknown => {
+  if (!isRecord(json) || "endPhrase" in json) return json;
+  const { laughs } = json;
+  return Array.isArray(laughs) && laughs.length > 0 ? { ...json, endPhrase: LAUGH_PHRASE } : json;
+};
+
 export const LAUGH_MAX_LENGTH = 64;
 export const LAUGHS_MAX_COUNT = 50;
 
+// `endPhrase` est toujours écrite, même vide : un JSON qui l'a ne reçoit plus la phrase des rires d'avant (`toEndPhraseJson`).
 export type ConfirmChoice = Pick<
   ClipConfirmation,
   "title" | "phrase" | "start" | "end" | "laughs" | "laughFader"
->;
+> & {
+  endPhrase: string;
+};
 export type ConfirmCheck = { ok: true; value: ConfirmChoice } | { ok: false; message: string };
 
 const toSeconds = (seconds: number): string => `${Number(seconds.toFixed(2))} s`;
@@ -110,11 +122,20 @@ const toLaughsRefusal = (laughs: readonly ClipLaugh[]): string | false =>
   (laughs.some(({ at }) => !Number.isFinite(at) || at < 0) &&
     "l'instant d'un rire doit être un nombre positif ou nul");
 
-// Ce qu'Alexis valide : un titre (obligatoire), une phrase (facultative : vide, Jean-Renard se tait), la partie gardée du clip, de
-// `start` à `end`, d'une image au moins, dans la durée du clip, les rires posés (facultatifs), triés par instant, et leur volume (facultatif).
+// Les phrases de début et de fin : 500 caractères au plus chacune.
+const toPhrasesRefusal = (phrase: string, endPhrase: string): string | false =>
+  (phrase.length > PHRASE_MAX_LENGTH &&
+    `la phrase de début ne peut pas dépasser ${PHRASE_MAX_LENGTH} caractères`) ||
+  (endPhrase.length > PHRASE_MAX_LENGTH &&
+    `la phrase de fin ne peut pas dépasser ${PHRASE_MAX_LENGTH} caractères`);
+
+// Ce qu'Alexis valide : un titre (obligatoire), une phrase de début et une phrase de fin (facultatives : vides, Jean-Renard se tait), la
+// partie gardée du clip, de `start` à `end`, d'une image au moins, dans la durée du clip, les rires posés (facultatifs), triés par
+// instant, et leur volume (facultatif).
 export const toConfirmChoice = (request: ConfirmRequest, duration: number): ConfirmCheck => {
   const title = request.title.trim();
   const phrase = request.phrase.trim();
+  const endPhrase = request.endPhrase.trim();
   const laughs = (request.laughs ?? [])
     .map(({ at, sound }) => ({ at, sound: sound.trim() }))
     .sort((first, second) => first.at - second.at);
@@ -122,7 +143,7 @@ export const toConfirmChoice = (request: ConfirmRequest, duration: number): Conf
   const refusal =
     (title === "" && "le titre est obligatoire") ||
     (title.length > TITLE_MAX_LENGTH && `le titre ne peut pas dépasser ${TITLE_MAX_LENGTH} caractères`) ||
-    (phrase.length > PHRASE_MAX_LENGTH && `la phrase ne peut pas dépasser ${PHRASE_MAX_LENGTH} caractères`) ||
+    toPhrasesRefusal(phrase, endPhrase) ||
     toLaughsRefusal(laughs) ||
     (request.laughFader !== undefined &&
       !isLaughFader(request.laughFader) &&
@@ -137,6 +158,7 @@ export const toConfirmChoice = (request: ConfirmRequest, duration: number): Conf
     value: {
       title,
       phrase,
+      endPhrase,
       start,
       end: Math.min(end, duration),
       ...(laughs.length === 0 ? {} : { laughs }),

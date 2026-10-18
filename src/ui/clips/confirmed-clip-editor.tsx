@@ -1,7 +1,7 @@
 // L'éditeur d'un clip de l'émission (confirmé) : le lecteur lit le clip brut d'origine (dans Traités), les poignées sont sur le début
-// et la fin enregistrés, le titre et la phrase sont remplis. « Enregistrer » réécrit le JSON, et recode depuis le clip brut quand le
+// et la fin enregistrés, le titre et les phrases sont remplis. « Enregistrer » réécrit le JSON, et recode depuis le clip brut quand le
 // début ou la fin ont changé. « Retirer de l'émission » range le clip dans Traités. Sans clip brut, la vidéo confirmée se lit, les
-// poignées sont désactivées et seuls le titre, la phrase et les rires se modifient (les rires ne demandent aucun recodage).
+// poignées sont désactivées et seuls le titre, les phrases et les rires se modifient (les rires ne demandent aucun recodage).
 
 import { CircleMinus, Save } from "lucide-react";
 import { isSameTrim } from "../../domain/clip.rules";
@@ -26,7 +26,7 @@ type ConfirmedClipEditorProps = {
 };
 
 const RAW_MISSING =
-  "Le clip brut d'origine n'est plus dans Traités : le début et la fin ne se changent plus, seuls le titre et la phrase se modifient.";
+  "Le clip brut d'origine n'est plus dans Traités : le début et la fin ne se changent plus, seuls le titre et les phrases se modifient.";
 
 export const ConfirmedClipEditor = ({
   clip,
@@ -50,6 +50,7 @@ export const ConfirmedClipEditor = ({
       }
       initialTitle={clip.title}
       initialPhrase={clip.phrase}
+      initialEndPhrase={clip.endPhrase ?? ""}
       initialLaughs={clip.laughs}
       initialLaughFader={clip.laughFader ?? DEFAULT_LAUGH_FADER}
       videoStart={hasRaw ? 0 : clip.start}
@@ -65,12 +66,13 @@ export const ConfirmedClipEditor = ({
         working:
           "Enregistrement en cours (un nouveau début ou une nouvelle fin recode le clip : jusqu'à une minute)…",
         // Sans clip brut, le début et la fin restent ceux d'avant : le serveur ne recode pas.
-        run: ({ title, phrase, trim, laughs, laughFader }) => {
+        run: ({ title, phrase, endPhrase, trim, laughs, laughFader }) => {
           const next = hasRaw ? trim : saved;
           return onRevise({
             name: clip.name,
             title,
             phrase,
+            endPhrase,
             start: next.start,
             end: next.end,
             laughs,

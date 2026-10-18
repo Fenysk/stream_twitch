@@ -21,6 +21,7 @@ const A: ShowClip = {
   day: "2026-10-16",
   durationMs: 20_000,
   laughs: [],
+  hasEndPhrase: false,
 };
 const B: ShowClip = {
   name: "b.mp4",
@@ -29,6 +30,7 @@ const B: ShowClip = {
   day: "2026-10-16",
   durationMs: 30_000,
   laughs: [],
+  hasEndPhrase: false,
 };
 
 // Une page de test : chaque appel de l'écran, de la voix et du rapport se note avec l'heure (ms depuis le début), et la fin d'un clip
@@ -50,10 +52,11 @@ const setup = (
   const cuesAsked: string[] = [];
   const playedWith: (ShowCues | null)[] = [];
   const playedLaughs: (readonly ShowLaugh[])[] = [];
-  const plays = new Map<Slot, (hasLaughed: boolean) => void>();
+  const plays = new Map<Slot, () => void>();
   let isStopped = false;
   const at = () => `${Date.now()}ms`;
-  const nameOf = (speech: Speech): string => (speech.kind === "clip" ? `clip ${speech.index}` : speech.kind);
+  const nameOf = (speech: Speech): string =>
+    "index" in speech ? `${speech.kind} ${speech.index}` : speech.kind;
   const describeView = (view: ShowView): string => {
     if (view.kind === "card") return `carton « ${view.title} »`;
     if (view.kind === "clip") return `clip ${view.slot} « ${view.title} »`;
@@ -71,7 +74,7 @@ const setup = (
         events.push(`${at()} joue ${slot}`);
         playedWith.push(cues);
         playedLaughs.push(laughs);
-        return new Promise<boolean>((resolve) => {
+        return new Promise<void>((resolve) => {
           plays.set(slot, resolve);
         });
       },
@@ -103,8 +106,8 @@ const setup = (
     playedWith,
     playedLaughs,
     run: () => runEpisode(deps, lineup),
-    // Le clip est fini (et ses rires) ; `hasLaughed` : au moins un rire a joué jusqu'au bout.
-    finish: (slot: Slot, hasLaughed = false) => plays.get(slot)?.(hasLaughed),
+    // Le clip est fini (et ses rires).
+    finish: (slot: Slot) => plays.get(slot)?.(),
     stop: () => {
       isStopped = true;
     },
@@ -239,8 +242,17 @@ describe("les clips", () => {
           day: "2026-10-16",
           durationMs: 5000,
           laughs: [],
+          hasEndPhrase: false,
         },
-        { name: "bon.mp4", title: "Bon", version: "1-1", day: "2026-10-16", durationMs: 30_000, laughs: [] },
+        {
+          name: "bon.mp4",
+          title: "Bon",
+          version: "1-1",
+          day: "2026-10-16",
+          durationMs: 30_000,
+          laughs: [],
+          hasEndPhrase: false,
+        },
       ],
       { isLoaded: (name) => name !== "cassé.mp4" },
     );
@@ -287,75 +299,119 @@ describe("les rires d'un clip", () => {
     expect(playedLaughs).toEqual([[FIRST, SECOND]]);
   });
 
-  it("dit la phrase des rires une seule fois quand au moins un rire a joué, même avec plusieurs rires", async () => {
-    const { events, run, finish } = setup([laughing, B]);
-    void run();
-    await advance(5500);
-    finish(0, true);
-    await advance(0);
-    expect(events.filter((event) => event.includes("phrase demandée laugh"))).toEqual([
-      "5500ms phrase demandée laugh",
-    ]);
-    expect(events.slice(events.indexOf("5500ms phrase demandée laugh") - 1)).toEqual([
-      "5500ms charge b.mp4 dans 1",
-      "5500ms phrase demandée laugh",
-    ]);
-  });
-
-  it("garde le clip jusqu'à la fin de la phrase des rires plus 0,5 s avant de passer au carton suivant", async () => {
-    const { events, run, finish } = setup([laughing, B], {
-      speak: async (speech) => {
-        await sleep(0);
-        return speech.kind === "laugh" ? 2000 : 0;
-      },
-    });
-    void run();
-    await advance(5500);
-    // L'ouverture dure 2,5 s, le carton 3 s : le clip commence à 5500 ms. La phrase des rires dure 2 s, plus 0,5 s.
-    finish(0, true);
-    await advance(2499);
-    expect(events.some((event) => event.includes("carton « Titre B »"))).toBe(false);
-    await advance(1);
-    expect(events.some((event) => event.includes("carton « Titre B »"))).toBe(true);
-  });
-
   it("garde le clip à l'écran tant que ses rires jouent : le carton suivant attend la fin du dernier rire", async () => {
     const { events, run, finish } = setup([laughing, B]);
     void run();
     await advance(5500);
     await advance(20_000);
     expect(events.some((event) => event.includes("carton « Titre B »"))).toBe(false);
-    expect(events.some((event) => event.includes("phrase demandée laugh"))).toBe(false);
-    finish(0, true);
+    finish(0);
     await advance(0);
-    expect(events).toContain("25500ms phrase demandée laugh");
+    expect(events).toContain("25500ms rapport card 1");
   });
 
-  it("ne dit pas la phrase des rires quand aucun n'a joué jusqu'au bout : fichiers supprimés ou illisibles, sans erreur", async () => {
+  it("ne dit rien après un clip qui a des rires mais pas de phrase de fin : la phrase des rires n'est plus dite d'office", async () => {
     const { events, run, finish } = setup([laughing, B]);
     void run();
     await advance(5500);
-    finish(0, false);
+    finish(0);
     await advance(0);
-    expect(events.some((event) => event.includes("phrase demandée laugh"))).toBe(false);
+    expect(events.some((event) => event.includes("phrase demandée clipEnd"))).toBe(false);
     expect(events).toContain("5500ms rapport card 1");
   });
+});
 
-  it("ne dit rien pour un clip sans rires, ni pour une émission arrêtée pendant les rires", async () => {
+describe("la phrase de fin d'un clip", () => {
+  const FIRST: ShowLaugh = { id: "rires001", version: "1", fader: 80, at: 2000 };
+  const SECOND: ShowLaugh = { id: "rires002", version: "1", fader: 60, at: 4000 };
+  const ended: ShowClip = { ...A, hasEndPhrase: true };
+  const laughingEnded: ShowClip = { ...ended, laughs: [FIRST, SECOND] };
+
+  it("dit la phrase de fin une seule fois, une fois le clip et ses rires finis, même avec plusieurs rires", async () => {
+    const { events, run, finish } = setup([laughingEnded, B]);
+    void run();
+    await advance(5500);
+    finish(0);
+    await advance(0);
+    expect(events.filter((event) => event.includes("phrase demandée clipEnd"))).toEqual([
+      "5500ms phrase demandée clipEnd 0",
+    ]);
+    expect(events.slice(events.indexOf("5500ms phrase demandée clipEnd 0") - 1)).toEqual([
+      "5500ms charge b.mp4 dans 1",
+      "5500ms phrase demandée clipEnd 0",
+    ]);
+  });
+
+  it("la dit aussi pour un clip sans rire", async () => {
+    const { events, run, finish } = setup([ended, B]);
+    void run();
+    await advance(5500);
+    finish(0);
+    await advance(0);
+    expect(events).toContain("5500ms phrase demandée clipEnd 0");
+  });
+
+  it("garde le clip jusqu'à la fin de la phrase de fin plus 0,5 s avant de passer au carton suivant", async () => {
+    const { events, run, finish } = setup([laughingEnded, B], {
+      speak: async (speech) => {
+        await sleep(0);
+        return speech.kind === "clipEnd" ? 2000 : 0;
+      },
+    });
+    void run();
+    await advance(5500);
+    // L'ouverture dure 2,5 s, le carton 3 s : le clip commence à 5500 ms. La phrase de fin dure 2 s, plus 0,5 s.
+    finish(0);
+    await advance(2499);
+    expect(events.some((event) => event.includes("carton « Titre B »"))).toBe(false);
+    await advance(1);
+    expect(events.some((event) => event.includes("carton « Titre B »"))).toBe(true);
+  });
+
+  it("l'attend : pas de phrase de fin tant que le clip et ses rires jouent", async () => {
+    const { events, run, finish } = setup([laughingEnded, B]);
+    void run();
+    await advance(5500);
+    await advance(20_000);
+    expect(events.some((event) => event.includes("phrase demandée clipEnd"))).toBe(false);
+    finish(0);
+    await advance(0);
+    expect(events).toContain("25500ms phrase demandée clipEnd 0");
+  });
+
+  it("demande la phrase de fin du bon clip : son index dans l'émission", async () => {
+    const { events, run, finish } = setup([A, { ...B, hasEndPhrase: true }]);
+    void run();
+    await advance(5500);
+    finish(0);
+    await advance(3000);
+    finish(1);
+    await advance(0);
+    expect(events.filter((event) => event.includes("clipEnd"))).toEqual(["8500ms phrase demandée clipEnd 1"]);
+  });
+
+  it("ne dit rien pour un clip sans phrase de fin, avec ou sans rires, ni pour une émission arrêtée pendant les rires", async () => {
     const quiet = setup([A, B]);
     void quiet.run();
     await advance(5500);
     quiet.finish(0);
     await advance(0);
-    expect(quiet.events.some((event) => event.includes("phrase demandée laugh"))).toBe(false);
+    expect(quiet.events.some((event) => event.includes("phrase demandée clipEnd"))).toBe(false);
 
-    const stopped = setup([laughing, B]);
+    const laughs = setup([{ ...A, laughs: [FIRST, SECOND] }, B]);
+    void laughs.run();
+    await advance(5500);
+    laughs.finish(0);
+    await advance(0);
+    expect(laughs.events.some((event) => event.includes("phrase demandée clipEnd"))).toBe(false);
+
+    const stopped = setup([laughingEnded, B]);
     void stopped.run();
     await advance(5500);
     stopped.stop();
-    stopped.finish(0, true);
+    stopped.finish(0);
     await advance(0);
-    expect(stopped.events.some((event) => event.includes("phrase demandée laugh"))).toBe(false);
+    expect(stopped.events.some((event) => event.includes("phrase demandée clipEnd"))).toBe(false);
   });
 });
 
@@ -423,12 +479,12 @@ describe("la clôture et la fin", () => {
 
 describe("les rapports au serveur, d'où il estime le retour de Fenysk", () => {
   const LAUGH: ShowLaugh = { id: "rires001", version: "1", fader: 80, at: 2000 };
-  const laughing: ShowClip = { ...A, laughs: [LAUGH] };
+  const laughing: ShowClip = { ...A, laughs: [LAUGH], hasEndPhrase: true };
 
-  it("dit à chaque temps où l'émission en est, avec son clip, de l'ouverture à la fin : la phrase des rires n'est pas un temps", async () => {
-    // Seule la phrase des rires dure (2 s) : l'ouverture dure 2,5 s, un carton 3 s, la phrase des rires 2,5 s.
+  it("dit à chaque temps où l'émission en est, avec son clip, de l'ouverture à la fin : la phrase de fin n'est pas un temps", async () => {
+    // Seule la phrase de fin dure (2 s) : l'ouverture dure 2,5 s, un carton 3 s, la phrase de fin 2,5 s.
     const { reports, run, finish } = setup([laughing, B], {
-      speak: async (speech) => (speech.kind === "laugh" ? 2000 : 0),
+      speak: async (speech) => (speech.kind === "clipEnd" ? 2000 : 0),
     });
     void run();
     await advance(0);
@@ -438,7 +494,7 @@ describe("les rapports au serveur, d'où il estime le retour de Fenysk", () => {
     await advance(3000);
     expect(reports.at(-1)).toBe("5500ms clip 0");
     await advance(19_500);
-    finish(0, true);
+    finish(0);
     await advance(0);
     expect(reports).toHaveLength(3);
     await advance(2500);
@@ -461,11 +517,11 @@ describe("les rapports au serveur, d'où il estime le retour de Fenysk", () => {
     ]);
   });
 
-  it("passe au carton suivant sans autre rapport quand aucun rire n'a joué : pas de phrase des rires à compter", async () => {
-    const { reports, run, finish } = setup([laughing, B]);
+  it("passe au carton suivant sans autre rapport pour un clip sans phrase de fin : rien à compter, rires ou non", async () => {
+    const { reports, run, finish } = setup([{ ...laughing, hasEndPhrase: false }, B]);
     void run();
     await advance(5500);
-    finish(0, false);
+    finish(0);
     await advance(0);
     expect(reports).toEqual(["0ms opening 0", "2500ms card 0", "5500ms clip 0", "5500ms card 1"]);
   });
@@ -480,6 +536,7 @@ describe("les rapports au serveur, d'où il estime le retour de Fenysk", () => {
           day: "2026-10-16",
           durationMs: 5000,
           laughs: [],
+          hasEndPhrase: false,
         },
         B,
       ],

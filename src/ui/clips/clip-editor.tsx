@@ -26,6 +26,7 @@ export const ClipEditor = ({ clip, sounds, isWorking, onConfirm, onDiscard, onDo
     src={toClipVideoUrl(clip.name)}
     initialTitle=""
     initialPhrase=""
+    initialEndPhrase=""
     sounds={sounds}
     titleHint="Obligatoire pour valider"
     isWorking={isWorking}
@@ -34,8 +35,17 @@ export const ClipEditor = ({ clip, sounds, isWorking, onConfirm, onDiscard, onDo
       label: "Valider",
       icon: Check,
       working: "Recodage en cours, jusqu'à une minute…",
-      run: ({ title, phrase, trim, laughs, laughFader }) =>
-        onConfirm({ name: clip.name, title, phrase, start: trim.start, end: trim.end, laughs, laughFader }),
+      run: ({ title, phrase, endPhrase, trim, laughs, laughFader }) =>
+        onConfirm({
+          name: clip.name,
+          title,
+          phrase,
+          endPhrase,
+          start: trim.start,
+          end: trim.end,
+          laughs,
+          laughFader,
+        }),
       notice: ({ title }) => `« ${title.trim()} » est confirmé.`,
     }}
     secondary={{

@@ -23,6 +23,7 @@ afterEach(() => {
 const confirmation: ClipConfirmation = {
   title: "Le saut",
   phrase: "Quel saut !",
+  endPhrase: "Bien joué.",
   start: 1,
   end: 5,
   rawName: "Replay.mp4",
@@ -112,14 +113,20 @@ describe("le lien d'un clip confirmé avec son clip brut de Traités", () => {
   });
 });
 
-describe("modifier le titre et la phrase d'un clip confirmé", () => {
+describe("modifier le titre et les phrases d'un clip confirmé", () => {
   it("réécrit le JSON sans toucher à la vidéo", () => {
     const { folder, confirmed, store } = setup();
-    store.updateConfirmation(folder, "Replay.mp4", { ...confirmation, title: "Nouveau titre", phrase: "" });
+    store.updateConfirmation(folder, "Replay.mp4", {
+      ...confirmation,
+      title: "Nouveau titre",
+      phrase: "",
+      endPhrase: "Nouvelle fin.",
+    });
     expect(getJson(join(confirmed, "Replay.json"))).toEqual({
       ...confirmation,
       title: "Nouveau titre",
       phrase: "",
+      endPhrase: "Nouvelle fin.",
     });
     expect(readFileSync(join(confirmed, "Replay.mp4"), "utf8")).toBe("ancienne vidéo");
     expect(names(confirmed)).toEqual(["Replay.json", "Replay.mp4"]);

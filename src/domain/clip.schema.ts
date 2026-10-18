@@ -9,8 +9,10 @@ export const CLIP_EXTENSIONS = [".mp4", ".mkv", ".mov"] as const;
 export const ClipLaughSchema = z.object({ at: z.number().min(0), sound: z.string().min(1) });
 export type ClipLaugh = z.infer<typeof ClipLaughSchema>;
 
-// Le JSON écrit à côté d'un clip confirmé (même nom, `.json`) : tout ce qu'Alexis a choisi, et d'où le clip vient. `processedName` :
-// le nom réel du clip brut dans Traités (renommé « (2) » quand le nom y était pris) ; absent des JSON d'avant, `rawName` le remplace.
+// Le JSON écrit à côté d'un clip confirmé (même nom, `.json`) : tout ce qu'Alexis a choisi, et d'où le clip vient. `phrase` : la phrase
+// de début, dite sur le carton ; `endPhrase` : la phrase de fin, dite après le clip et ses rires (absente ou vide : Jean-Renard se tait).
+// `processedName` : le nom réel du clip brut dans Traités (renommé « (2) » quand le nom y était pris) ; absent des JSON d'avant, `rawName`
+// le remplace.
 // `playCount` : combien de fois l'émission l'a passé (absent : jamais), de quoi passer les moins vus d'abord. `laughs` : les rires posés
 // sur le clip, triés par `at` (absent ou vide : aucun rire). `laughFader` : le volume de tous les rires du clip, de 0 à 100 % (absent : 100).
 // `rawDuration` : la durée du clip brut (s), de quoi placer le tchat sur le
@@ -19,6 +21,7 @@ export type ClipLaugh = z.infer<typeof ClipLaughSchema>;
 export const ClipConfirmationSchema = z.object({
   title: z.string(),
   phrase: z.string(),
+  endPhrase: z.string().optional(),
   start: z.number().min(0),
   end: z.number().positive(),
   rawName: z.string().min(1),
@@ -59,13 +62,15 @@ export const ClipListSchema = z.object({
 });
 export type ClipList = z.infer<typeof ClipListSchema>;
 
-// Ce que l'interface envoie pour valider : le clip brut, son titre, la phrase de Jean-Renard (vide : il se tait) et la partie gardée.
-// Pour modifier un clip confirmé, la même forme : `name` est alors celui de sa vidéo dans Confirmés. `laughs` : les rires posés sur le
-// clip (absent : aucun), `laughFader` : leur volume (absent : 100) ; leur forme se vérifie dans `toConfirmChoice`, qui refuse en français.
+// Ce que l'interface envoie pour valider : le clip brut, son titre, les phrases de début et de fin de Jean-Renard (vides : il se tait) et
+// la partie gardée. Pour modifier un clip confirmé, la même forme : `name` est alors celui de sa vidéo dans Confirmés. `laughs` : les
+// rires posés sur le clip (absent : aucun), `laughFader` : leur volume (absent : 100) ; leur forme se vérifie dans `toConfirmChoice`, qui
+// refuse en français.
 export const ConfirmRequestSchema = z.object({
   name: z.string(),
   title: z.string(),
   phrase: z.string(),
+  endPhrase: z.string(),
   start: z.number(),
   end: z.number(),
   laughs: z.array(z.object({ at: z.number(), sound: z.string() })).optional(),

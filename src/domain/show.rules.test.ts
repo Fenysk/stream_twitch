@@ -5,8 +5,8 @@ import {
   CARD_AFTER_SPEECH_MS,
   CARD_MIN_MS,
   CLOSING_BANNER,
+  END_AFTER_SPEECH_MS,
   ESTIMATED_SPEECH,
-  LAUGH_AFTER_SPEECH_MS,
   LAUGH_PHRASE,
   LINE_AFTER_SPEECH_MS,
   LINE_MIN_MS,
@@ -17,8 +17,8 @@ import {
   toChatSchedule,
   toCountdownText,
   toDue,
+  toEndMs,
   toFadingFader,
-  toLaughMs,
   toLaughSchedule,
   toLineMs,
   toLineup,
@@ -123,35 +123,34 @@ describe("toCardMs", () => {
   });
 });
 
-describe("les rires enregistrés", () => {
-  it("disent une phrase fixe, sans technique", () => {
+describe("la phrase de fin d'un clip", () => {
+  it("garde la phrase des rires d'avant, que les JSON d'avant reçoivent comme phrase de fin : sa valeur ne change pas", () => {
     expect(LAUGH_PHRASE).toBe("Les rires sont enregistrés. Personne n'a ri.");
   });
 
-  it("laissent le clip jusqu'à la fin de la phrase plus 0,5 s, sans minimum", () => {
-    expect(LAUGH_AFTER_SPEECH_MS).toBe(500);
-    expect(toLaughMs({ repliedAt: 1200, durationMs: 3000 })).toBe(4700);
-    expect(toLaughMs(null)).toBe(0);
+  it("laisse le clip jusqu'à la fin de la phrase plus 0,5 s, sans minimum", () => {
+    expect(END_AFTER_SPEECH_MS).toBe(500);
+    expect(toEndMs({ repliedAt: 1200, durationMs: 3000 })).toBe(4700);
+    expect(toEndMs(null)).toBe(0);
   });
 });
 
 describe("le retour de Fenysk", () => {
-  // La phrase estimée donne : carton 6000 ms, phrase des rires 6000 ms, ouverture et clôture 6200 ms chacune.
+  // La phrase estimée donne : carton 6000 ms, phrase de fin 6000 ms, ouverture et clôture 6200 ms chacune.
   const CARD = 6000;
-  const LAUGHS = 6000;
+  const END = 6000;
   const LINE = 6200;
-  const LAUGH = { id: "rires001", version: "1", fader: 80, at: 2000 };
-  // Un clip de 20 s avec un rire (6000 + 20 000 + 6000 = 32 000), puis un de 30 s sans rire (6000 + 30 000 = 36 000).
+  // Un clip de 20 s avec une phrase de fin (6000 + 20 000 + 6000 = 32 000), puis un de 30 s sans phrase de fin (6000 + 30 000 = 36 000).
   const lineup = [
-    { durationMs: 20_000, laughs: [LAUGH] },
-    { durationMs: 30_000, laughs: [] },
+    { durationMs: 20_000, hasEndPhrase: true },
+    { durationMs: 30_000, hasEndPhrase: false },
   ];
 
   describe("ESTIMATED_SPEECH", () => {
     it("Quand le système estime une phrase de Jean-Renard, il doit compter 1,5 s de synthèse puis 4 s de phrase", () => {
       expect(ESTIMATED_SPEECH).toEqual({ repliedAt: 1500, durationMs: 4000 });
       expect(toCardMs(ESTIMATED_SPEECH)).toBe(CARD);
-      expect(toLaughMs(ESTIMATED_SPEECH)).toBe(LAUGHS);
+      expect(toEndMs(ESTIMATED_SPEECH)).toBe(END);
       expect(toLineMs(ESTIMATED_SPEECH)).toBe(LINE);
     });
   });
@@ -166,22 +165,22 @@ describe("le retour de Fenysk", () => {
       expect(toRemainingMs(lineup, { phase: "card", index: 1 })).toBe(36_000 + LINE);
     });
 
-    it("Quand la page joue un clip qui a des rires, le système doit compter sa durée, la phrase des rires, les clips suivants et la clôture", () => {
-      expect(toRemainingMs(lineup, { phase: "clip", index: 0 })).toBe(20_000 + LAUGHS + 36_000 + LINE);
+    it("Quand la page joue un clip qui a une phrase de fin, le système doit compter sa durée, la phrase de fin, les clips suivants et la clôture", () => {
+      expect(toRemainingMs(lineup, { phase: "clip", index: 0 })).toBe(20_000 + END + 36_000 + LINE);
     });
 
-    it("Quand la page joue un clip sans rire, le système doit compter sa durée sans phrase des rires", () => {
+    it("Quand la page joue un clip sans phrase de fin, le système doit compter sa durée sans phrase de fin", () => {
       expect(toRemainingMs(lineup, { phase: "clip", index: 1 })).toBe(30_000 + LINE);
       const quiet = [
-        { durationMs: 10_000, laughs: [] },
-        { durationMs: 30_000, laughs: [] },
+        { durationMs: 10_000, hasEndPhrase: false },
+        { durationMs: 30_000, hasEndPhrase: false },
       ];
       expect(toRemainingMs(quiet, { phase: "clip", index: 0 })).toBe(10_000 + CARD + 30_000 + LINE);
       expect(toRemainingMs(quiet, { phase: "opening" })).toBe(LINE + CARD + 10_000 + CARD + 30_000 + LINE);
     });
 
-    it("Quand la page dit la phrase des rires, le système doit compter cette phrase, les clips suivants et la clôture", () => {
-      expect(toRemainingMs(lineup, { phase: "laugh", index: 0 })).toBe(LAUGHS + 36_000 + LINE);
+    it("Quand la page dit la phrase de fin, le système doit compter cette phrase, les clips suivants et la clôture", () => {
+      expect(toRemainingMs(lineup, { phase: "end", index: 0 })).toBe(END + 36_000 + LINE);
     });
 
     it("Quand la page ferme l'émission, le système doit compter la clôture seule", () => {
@@ -191,7 +190,7 @@ describe("le retour de Fenysk", () => {
     it("Quand l'index n'est pas dans l'émission, le système doit ne compter que les clips qui existent", () => {
       expect(toRemainingMs(lineup, { phase: "card", index: 2 })).toBe(LINE);
       expect(toRemainingMs(lineup, { phase: "clip", index: 5 })).toBe(LINE);
-      expect(toRemainingMs(lineup, { phase: "laugh", index: 1 })).toBe(LAUGHS + LINE);
+      expect(toRemainingMs(lineup, { phase: "end", index: 1 })).toBe(END + LINE);
     });
 
     it("Quand l'émission n'a aucun clip, le système doit compter l'ouverture et la clôture", () => {
@@ -216,14 +215,13 @@ describe("le retour de Fenysk", () => {
 });
 
 describe("la durée de l'émission", () => {
-  // La phrase estimée donne : carton 6000 ms, phrase des rires 6000 ms, ouverture et clôture 6200 ms chacune (12 400 ms les deux).
+  // La phrase estimée donne : carton 6000 ms, phrase de fin 6000 ms, ouverture et clôture 6200 ms chacune (12 400 ms les deux).
   const LINES = 12_400;
-  const LAUGH = { at: 2000, sound: "rires001" };
-  const clip = (name: string, playCount: number, durationMs: number, laughs: readonly unknown[] = []) => ({
+  const clip = (name: string, playCount: number, durationMs: number, hasEndPhrase = false) => ({
     name,
     playCount,
     durationMs,
-    laughs,
+    hasEndPhrase,
   });
 
   describe("toShowLengthMs", () => {
@@ -241,21 +239,21 @@ describe("la durée de l'émission", () => {
       });
     });
 
-    it("Quand un clip a des rires, le système doit compter la phrase des rires dans sa longueur, pas seulement sa durée", () => {
+    it("Quand un clip a une phrase de fin, le système doit la compter dans sa longueur, pas seulement sa durée", () => {
       // Le clip a est le plus court par sa durée (28 s contre 30 s) mais pèse 6000 + 28 000 + 6000 = 40 000 contre 36 000.
-      const candidates = [clip("a", 0, 28_000, [LAUGH]), clip("b", 0, 30_000)];
+      const candidates = [clip("a", 0, 28_000, true), clip("b", 0, 30_000)];
       expect(toShowLengthMs(candidates, 1)).toEqual({
         shortestMs: LINES + 36_000,
         longestMs: LINES + 40_000,
       });
     });
 
-    it("Quand un clip n'a pas de rire, le système doit compter son carton et sa durée, sans phrase des rires", () => {
+    it("Quand un clip n'a pas de phrase de fin, le système doit compter son carton et sa durée, sans phrase de fin", () => {
       expect(toShowLengthMs([clip("a", 0, 10_000)], 1)).toEqual({
         shortestMs: LINES + 16_000,
         longestMs: LINES + 16_000,
       });
-      expect(toShowLengthMs([clip("a", 0, 10_000, [LAUGH])], 1)).toEqual({
+      expect(toShowLengthMs([clip("a", 0, 10_000, true)], 1)).toEqual({
         shortestMs: LINES + 22_000,
         longestMs: LINES + 22_000,
       });

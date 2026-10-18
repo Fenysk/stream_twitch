@@ -82,6 +82,7 @@ describe("toShowStatusText", () => {
     day: "2026-10-16",
     durationMs: 10_000,
     laughs: [],
+    hasEndPhrase: false,
   }));
   const running = (phase: ShowState["phase"], index: number): ShowState => ({
     status: "running",

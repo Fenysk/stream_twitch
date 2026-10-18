@@ -68,33 +68,33 @@ export const toRecordedDay = ({ rawName, confirmedAt }: { rawName: string; confi
 export const OPENING_BANNER = { kicker: "Ce soir", title: "Les bêtises de Fenysk" } as const;
 export const CLOSING_BANNER = { kicker: "Fin de l'émission", title: "À la prochaine bêtise" } as const;
 
-// Les phrases dites en plus de celles des listes ou des clips : après les rires enregistrés d'un clip.
+// La phrase des rires d'avant les phrases de fin : un JSON de clip avec des rires et sans `endPhrase` la reçoit à la lecture
+// (`toEndPhraseJson`). Elle ne sert plus qu'à ça.
 export const LAUGH_PHRASE = "Les rires sont enregistrés. Personne n'a ri.";
 
-// Après les rires, Jean-Renard dit sa phrase, puis le clip s'efface 0,5 s plus tard.
-export const LAUGH_AFTER_SPEECH_MS = 500;
+// Après le clip et ses rires, Jean-Renard dit la phrase de fin du clip, puis le clip s'efface 0,5 s plus tard.
+export const END_AFTER_SPEECH_MS = 500;
 
-export const toLaughMs = (speech: SpeechTiming | null): number =>
-  toSpeechMs(speech, 0, LAUGH_AFTER_SPEECH_MS);
+export const toEndMs = (speech: SpeechTiming | null): number => toSpeechMs(speech, 0, END_AFTER_SPEECH_MS);
 
 // Une phrase de Jean-Renard estimée pour compter ce qui reste : la synthèse ~1,5 s, puis ~4 s de phrase.
 export const ESTIMATED_SPEECH: SpeechTiming = { repliedAt: 1500, durationMs: 4000 };
 
 export type CountdownStep =
   | { phase: "opening" }
-  | { phase: "card" | "clip" | "laugh"; index: number }
+  | { phase: "card" | "clip" | "end"; index: number }
   | { phase: "closing" };
 
-// Un clip compté : sa partie gardée en ms et ses rires (un `ShowClip` comme un clip confirmé).
-type CountdownClip = { durationMs: number; laughs: readonly unknown[] };
+// Un clip compté : sa partie gardée en ms et s'il a une phrase de fin (un `ShowClip` comme un clip confirmé).
+type CountdownClip = { durationMs: number; hasEndPhrase: boolean };
 
-// Sans rire dans le clip, pas de phrase des rires.
-const toClipLaughMs = ({ laughs }: CountdownClip): number =>
-  laughs.length > 0 ? toLaughMs(ESTIMATED_SPEECH) : 0;
+// Sans phrase de fin dans le clip, rien n'est dit après lui, quels que soient ses rires.
+const toClipEndMs = ({ hasEndPhrase }: CountdownClip): number =>
+  hasEndPhrase ? toEndMs(ESTIMATED_SPEECH) : 0;
 
-// Un clip en entier : son carton, sa partie gardée, sa phrase des rires.
+// Un clip en entier : son carton, sa partie gardée, sa phrase de fin.
 const toClipMs = (clip: CountdownClip): number =>
-  toCardMs(ESTIMATED_SPEECH) + clip.durationMs + toClipLaughMs(clip);
+  toCardMs(ESTIMATED_SPEECH) + clip.durationMs + toClipEndMs(clip);
 
 // Les ms entre le début de ce temps de l'émission et la fin de la clôture, phrases estimées.
 export const toRemainingMs = (lineup: readonly CountdownClip[], step: CountdownStep): number => {
@@ -108,10 +108,10 @@ export const toRemainingMs = (lineup: readonly CountdownClip[], step: CountdownS
       return clipsFrom(step.index) + closingMs;
     case "clip": {
       const clip = lineup[step.index];
-      return (clip ? clip.durationMs + toClipLaughMs(clip) : 0) + clipsFrom(step.index + 1) + closingMs;
+      return (clip ? clip.durationMs + toClipEndMs(clip) : 0) + clipsFrom(step.index + 1) + closingMs;
     }
-    case "laugh":
-      return toLaughMs(ESTIMATED_SPEECH) + clipsFrom(step.index + 1) + closingMs;
+    case "end":
+      return toEndMs(ESTIMATED_SPEECH) + clipsFrom(step.index + 1) + closingMs;
     case "closing":
       return closingMs;
   }

@@ -16,7 +16,7 @@ export type UseClips = {
   // Rendent le refus du serveur à montrer, ou `null` quand le clip est rangé (la liste est relue).
   confirm: (request: ConfirmRequest) => Promise<string | null>;
   discard: (name: string) => Promise<string | null>;
-  // Pour un clip confirmé : enregistrer ses changements (titre, phrase, début, fin), ou le retirer de l'émission.
+  // Pour un clip confirmé : enregistrer ses changements (titre, phrases, début, fin), ou le retirer de l'émission.
   revise: (request: ConfirmRequest) => Promise<string | null>;
   withdraw: (name: string) => Promise<string | null>;
 };
