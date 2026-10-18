@@ -575,6 +575,7 @@ export function startRuntime(): Runtime {
     fox,
     queue,
     presence: mode,
+    mic: mode,
     clock: Date.now,
     voice: showVoice,
     sounds,

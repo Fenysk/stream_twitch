@@ -42,6 +42,8 @@ const setup = (
     sounds?: Record<string, { version: string; fader: number }>;
     // Dans combien de ms Jean-Renard est hors de /fox quand il part (1500 par défaut).
     awayIn?: number;
+    // Depuis combien de ms Fenysk ne dit plus rien au départ (infini par défaut : il n'a rien dit).
+    silentFor?: number;
   } = {},
 ) => {
   const calls: string[] = [];
@@ -50,8 +52,14 @@ const setup = (
   const logs: string[] = [];
   const released: (QueueItem | undefined)[] = [];
   const sceneListeners = new Set<(isVisible: boolean) => void>();
+  const micListeners = new Set<() => void>();
   const timers: { at: number; callback: () => void; isCancelled: boolean }[] = [];
-  const state = { now: START, ids: 0, clips: options.clips ?? [confirmed("a.mp4"), confirmed("b.mp4")] };
+  const state = {
+    now: START,
+    ids: 0,
+    clips: options.clips ?? [confirmed("a.mp4"), confirmed("b.mp4")],
+    silentFor: options.silentFor ?? Number.POSITIVE_INFINITY,
+  };
   const director = createShowDirector({
     scene: {
       subscribe(listener) {
@@ -80,6 +88,17 @@ const setup = (
       wake: () => {
         calls.push("présence: retour");
         return 0;
+      },
+    },
+    mic: {
+      getVoice: () => ({
+        isTalking: state.silentFor < settings.delay,
+        talkingFor: 0,
+        silentFor: state.silentFor,
+      }),
+      subscribe(listener) {
+        micListeners.add(listener);
+        return () => micListeners.delete(listener);
       },
     },
     clock: () => state.now,
@@ -128,6 +147,12 @@ const setup = (
     send: (isVisible: boolean) => {
       for (const listener of sceneListeners) listener(isVisible);
     },
+    // Un pas de la détection de la tête, Fenysk se taisant depuis `silentFor` ms.
+    hear: (silentFor: number) => {
+      state.silentFor = silentFor;
+      for (const listener of micListeners) listener();
+    },
+    micListeners,
     advance: (ms: number) => {
       state.now += ms;
       for (const timer of timers.filter(({ at, isCancelled }) => at <= state.now && !isCancelled)) {
@@ -160,6 +185,7 @@ describe("createShowDirector : le démarrage", () => {
       phase: "opening",
       index: 0,
       startsAt: START + 1500,
+      clipFader: 100,
     });
     expect(calls).toEqual(["file: tenue", "présence: départ", "fox: émission"]);
     expect(states).toHaveLength(1);
@@ -730,5 +756,115 @@ describe("createShowDirector : ce que Jean-Renard dit dans l'émission", () => {
     const { director, send } = setup({ spoken: refusal });
     send(true);
     expect(await director.speak({ runId: "run1", kind: "opening" })).toEqual(refusal);
+  });
+});
+
+describe("createShowDirector : le son des clips baisse quand Fenysk parle", () => {
+  it("baisse le fader des clips à 30 dès que sa voix vient d'être entendue, et le publie", () => {
+    const { director, states, hear } = setup();
+    hear(0);
+    expect(director.getState().clipFader).toBe(30);
+    expect(states.map(({ clipFader }) => clipFader)).toEqual([30]);
+    expect(states[0]).toMatchObject({ status: "idle", runId: "" });
+  });
+
+  it("garde le fader baissé jusqu'à une seconde après la fin de sa voix (delay compris), puis le remonte à 100", () => {
+    const { director, states, hear } = setup();
+    hear(0);
+    hear(1249);
+    expect(director.getState().clipFader).toBe(30);
+    hear(1250);
+    expect(director.getState().clipFader).toBe(100);
+    expect(states.map(({ clipFader }) => clipFader)).toEqual([30, 100]);
+  });
+
+  it("suit le delay des réglages, aussi quand il change en cours de route", () => {
+    const { director, hear } = setup({ custom: { delay: 500 } });
+    hear(1499);
+    expect(director.getState().clipFader).toBe(30);
+    hear(1500);
+    expect(director.getState().clipFader).toBe(100);
+    director.update({ ...settings, delay: 100 });
+    hear(1099);
+    expect(director.getState().clipFader).toBe(30);
+    hear(1100);
+    expect(director.getState().clipFader).toBe(100);
+  });
+
+  it("ne publie rien de plus tant que le fader ne change pas", () => {
+    const { states, hear } = setup();
+    hear(Number.POSITIVE_INFINITY);
+    hear(5000);
+    expect(states).toEqual([]);
+    hear(0);
+    hear(100);
+    hear(1000);
+    expect(states).toHaveLength(1);
+    hear(1250);
+    hear(3000);
+    hear(Number.POSITIVE_INFINITY);
+    expect(states).toHaveLength(2);
+  });
+
+  it("garde le fader baissé quand l'émission démarre pendant qu'il parle", () => {
+    const { director, states, hear, send } = setup();
+    hear(0);
+    send(true);
+    expect(director.getState()).toMatchObject({ status: "running", runId: "run1", clipFader: 30 });
+    expect(states.map(({ clipFader }) => clipFader)).toEqual([30, 30]);
+  });
+
+  it("garde le fader baissé quand l'émission se termine pendant qu'il parle : finie par la page, source cachée, arrêt du serveur", () => {
+    const { director, hear, send } = setup();
+    send(true);
+    hear(0);
+    expect(director.getState()).toMatchObject({ status: "running", runId: "run1", clipFader: 30 });
+    director.report({ runId: "run1", phase: "ended", index: 0 });
+    expect(director.getState()).toMatchObject({ status: "over", clipFader: 30 });
+    send(false);
+    expect(director.getState()).toMatchObject({ status: "idle", clipFader: 30 });
+    send(true);
+    expect(director.getState()).toMatchObject({ status: "running", clipFader: 30 });
+    send(false);
+    expect(director.getState()).toMatchObject({ status: "idle", clipFader: 30 });
+    send(true);
+    director.stop();
+    expect(director.getState()).toMatchObject({ status: "idle", clipFader: 30 });
+  });
+
+  it("garde le fader baissé quand l'émission n'a aucun clip à passer", () => {
+    const { director, hear, send } = setup({ clips: [] });
+    hear(0);
+    send(true);
+    expect(director.getState()).toMatchObject({ status: "over", clipFader: 30 });
+  });
+
+  it("remonte le fader en pleine émission sans toucher à son déroulé", () => {
+    const { director, states, hear, send } = setup();
+    send(true);
+    director.report({ runId: "run1", phase: "clip", index: 1 });
+    hear(0);
+    hear(1250);
+    const running = director.getState();
+    expect(running).toMatchObject({
+      status: "running",
+      runId: "run1",
+      phase: "clip",
+      index: 1,
+      clipFader: 100,
+    });
+    expect(running.lineup).toHaveLength(2);
+    expect(states.map(({ clipFader }) => clipFader)).toEqual([100, 100, 30, 100]);
+  });
+
+  it("n'écoute le mic qu'entre le démarrage et l'arrêt du director", () => {
+    const { director, micListeners, hear } = setup();
+    expect(micListeners.size).toBe(1);
+    director.start();
+    expect(micListeners.size).toBe(1);
+    director.stop();
+    expect(micListeners.size).toBe(0);
+    hear(0);
+    expect(director.getState().clipFader).toBe(100);
   });
 });

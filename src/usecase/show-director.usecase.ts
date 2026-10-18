@@ -5,6 +5,7 @@ import type { Settings } from "../domain/settings.schema";
 import {
   DEFAULT_SHOW_CLIP_COUNT,
   LAUGH_PHRASE,
+  toClipFader,
   toLaughSchedule,
   toLineup,
   toRecordedDay,
@@ -35,6 +36,8 @@ export type ShowDirectorDeps = {
   queue: Pick<FoxQueue, "hold" | "release">;
   // Sa présence : il glisse hors de /fox au début de l'émission, et revient en sautant à la fin.
   presence: Pick<FoxModeController, "depart" | "wake">;
+  // Sa voix au mic : le son des clips baisse tant qu'il parle, à chaque pas de la détection de la tête (celle de /fox, pas une seconde).
+  mic: Pick<FoxModeController, "getVoice" | "subscribe">;
   // L'heure en ms : `startsAt` de l'émission est un instant de cette horloge, celle d'OBS (la même machine).
   clock: () => number;
   // Ce que Jean-Renard dit dans /show.
@@ -89,6 +92,7 @@ export function createShowDirector({
   fox,
   queue,
   presence,
+  mic,
   clock,
   voice,
   sounds,
@@ -102,6 +106,7 @@ export function createShowDirector({
   let grumbles = initial.showGrumblePhrases ?? [];
   // Les phrases de coupure déjà dites depuis le dernier tour de la liste, d'une émission à l'autre.
   let said: string[] = [];
+  let delay = initial.delay;
   let state: ShowState = IDLE_SHOW;
   const listeners = new Set<(state: ShowState) => void>();
   let pages = 0;
@@ -111,10 +116,24 @@ export function createShowDirector({
   // La phrase de chaque clip de l'émission, dans l'ordre de passage : elle reste sur le serveur.
   let phrases: readonly string[] = [];
   let unsubscribeScene: (() => void) | undefined;
+  let unsubscribeMic: (() => void) | undefined;
 
   const publish = (next: ShowState) => {
     state = next;
     for (const listener of listeners) listener(state);
+  };
+
+  // Sans émission, l'état garde le fader des clips courant : il suit la voix de Fenysk quel que soit le statut.
+  const toIdle = (status: "idle" | "over"): ShowState => ({
+    ...IDLE_SHOW,
+    status,
+    clipFader: state.clipFader,
+  });
+
+  // À chaque pas de la détection de la tête : le fader des clips suit sa voix, et ne part que s'il change.
+  const onVoice = () => {
+    const clipFader = toClipFader(mic.getVoice().silentFor, delay);
+    if (clipFader !== state.clipFader) publish({ ...state, clipFader });
   };
 
   // La phrase de coupure tirée sans répétition ; `undefined` quand la liste est vide.
@@ -149,7 +168,7 @@ export function createShowDirector({
       leaveShow(how);
       log(`Émission : ${reason}.`);
     }
-    publish({ ...IDLE_SHOW, status });
+    publish(toIdle(status));
   };
 
   // Sans page connectée, un délai de grâce, puis la fin.
@@ -193,7 +212,7 @@ export function createShowDirector({
     const chosen = toLineupClips();
     if (chosen === undefined || chosen.length === 0) {
       if (chosen) log("Émission : aucun clip confirmé, rien à passer.");
-      publish({ ...IDLE_SHOW, status: "over" });
+      publish(toIdle("over"));
       return;
     }
     // La file se tient avant que /fox se vide : aucune phrase n'est refusée par le renard absent. /show ne commence qu'une fois
@@ -217,6 +236,7 @@ export function createShowDirector({
       phase: "opening",
       index: 0,
       startsAt: clock() + awayIn,
+      clipFader: state.clipFader,
     });
     log(
       `Émission : démarrée, ${lineup.length} clip(s) : ${lineup.map(({ name }) => `« ${name} »`).join(", ")}.`,
@@ -241,13 +261,17 @@ export function createShowDirector({
   return {
     start() {
       unsubscribeScene ??= scene.subscribe(onVisible);
+      unsubscribeMic ??= mic.subscribe(onVoice);
     },
     stop() {
       unsubscribeScene?.();
       unsubscribeScene = undefined;
+      unsubscribeMic?.();
+      unsubscribeMic = undefined;
       if (state.status !== "idle") end("idle", "arrêtée, le serveur s'arrête", "none");
     },
     update(next) {
+      delay = next.delay;
       count = next.showClipCount ?? DEFAULT_SHOW_CLIP_COUNT;
       grumbles = next.showGrumblePhrases ?? [];
     },

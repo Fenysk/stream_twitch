@@ -34,6 +34,7 @@ const running: ShowState = {
   phase: "clip",
   index: 1,
   startsAt: 0,
+  clipFader: 100,
 };
 
 describe("les cartes de l'émission", () => {

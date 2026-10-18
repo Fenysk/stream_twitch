@@ -89,6 +89,7 @@ describe("toShowStatusText", () => {
     phase,
     index,
     startsAt: 0,
+    clipFader: 100,
   });
 
   it("dit que l'émission est arrêtée", () => {

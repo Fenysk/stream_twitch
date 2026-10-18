@@ -12,7 +12,9 @@ import {
   OPENING_BANNER,
   toCardMs,
   toChatSchedule,
+  toClipFader,
   toDue,
+  toFadingFader,
   toLaughMs,
   toLaughSchedule,
   toLineMs,
@@ -274,5 +276,49 @@ describe("toLaughSchedule", () => {
 
   it("ne rend rien sans rires", () => {
     expect(toLaughSchedule([], trim)).toEqual([]);
+  });
+});
+
+describe("toClipFader", () => {
+  it("baisse le son tant que Fenysk parle (silentFor à 0)", () => {
+    expect(toClipFader(0, 250)).toBe(30);
+  });
+
+  it("le garde baissé jusqu'à une seconde après la fin de sa voix (delay compris), pas plus", () => {
+    expect(toClipFader(1249, 250)).toBe(30);
+    expect(toClipFader(1250, 250)).toBe(100);
+  });
+
+  it("suit le delay de la détection de la tête", () => {
+    expect(toClipFader(1499, 500)).toBe(30);
+    expect(toClipFader(1500, 500)).toBe(100);
+  });
+
+  it("laisse le son entier quand Fenysk n'a rien dit depuis le démarrage", () => {
+    expect(toClipFader(Number.POSITIVE_INFINITY, 250)).toBe(100);
+  });
+});
+
+describe("toFadingFader", () => {
+  it("part de la valeur de départ au début du fondu", () => {
+    expect(toFadingFader(100, 30, 0)).toBe(100);
+  });
+
+  it("descend en ligne droite : la moitié du temps, la moitié du chemin", () => {
+    expect(toFadingFader(100, 30, 150)).toBe(65);
+  });
+
+  it("remonte en ligne droite aussi", () => {
+    expect(toFadingFader(30, 100, 150)).toBe(65);
+  });
+
+  it("arrive à la valeur voulue en 300 ms, et y reste", () => {
+    expect(toFadingFader(100, 30, 300)).toBe(30);
+    expect(toFadingFader(100, 30, 1000)).toBe(30);
+    expect(toFadingFader(30, 100, 1000)).toBe(100);
+  });
+
+  it("ne sort jamais de l'intervalle : un temps négatif donne le départ", () => {
+    expect(toFadingFader(100, 30, -50)).toBe(100);
   });
 });

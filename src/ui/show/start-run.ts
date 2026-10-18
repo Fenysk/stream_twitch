@@ -7,6 +7,7 @@ import type { FoxMode } from "../../domain/fox.schema";
 import { IDLE_MODE, STARTLE_MODE } from "../../domain/fox-mode.rules";
 import type { ShowState } from "../../domain/show.schema";
 import { getShowCues, reportShowProgress, speakInShow, toShowVideoUrl } from "../show-api";
+import { createClipFader } from "./show-fader";
 import { createLaughFiles } from "./show-laugh";
 import { runEpisode } from "./show-run";
 import { createShowTicker } from "./show-ticker";
@@ -23,13 +24,16 @@ export type ShowPage = {
   setFoxMode(mode: FoxMode): void;
 };
 
-export type Run = { runId: string; stop(): void };
+// `updateFader` : le serveur dit un nouveau fader pour le son des vidéos ; la page y fond en `TALK_FADE_MS`.
+export type Run = { runId: string; updateFader(fader: number): void; stop(): void };
 
 // Le fondu du tchat dure 0,8 s (show-stage.css) : une marge de plus, puis ses messages partent.
 const CHAT_CLEAR_MS = 1000;
 
-export const startRun = ({ runId, lineup, startsAt }: ShowState, page: ShowPage): Run => {
+export const startRun = ({ runId, lineup, startsAt, clipFader }: ShowState, page: ShowPage): Run => {
   let isStopped = false;
+  // Le son des vidéos baisse tant que Fenysk parle : le fader de départ est posé tout de suite, les suivants viennent en fondu.
+  const fader = createClipFader((slot) => page.videoOf(slot), clipFader);
   // Ce qui attend (un minuteur, une vidéo ou des rires qui jouent) et que l'arrêt réveille aussitôt.
   const wakes = new Set<() => void>();
   const aborted = new Promise<void>((resolve) => wakes.add(resolve));
@@ -116,8 +120,12 @@ export const startRun = ({ runId, lineup, startsAt }: ShowState, page: ShowPage)
 
   return {
     runId,
+    updateFader(next) {
+      if (!isStopped) fader.update(next);
+    },
     stop() {
       isStopped = true;
+      fader.stop();
       for (const wake of [...wakes]) wake();
       page.videoOf(0)?.pause();
       page.videoOf(1)?.pause();

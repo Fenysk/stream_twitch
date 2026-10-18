@@ -47,6 +47,7 @@ const state: ShowState = {
   phase: "opening",
   index: 0,
   startsAt: 0,
+  clipFader: 100,
 };
 
 // Une page sans vidéo : le clip ne se charge pas et est passé, le reste du déroulé a lieu.
@@ -302,5 +303,113 @@ describe("startRun : un clip qui joue", () => {
     setupWithVideo(async () => undefined);
     await vi.advanceTimersByTimeAsync(20_000);
     expect(laughFiles.clear).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("startRun : le fader du son des vidéos", () => {
+  // Deux vidéos qui ne notent que leur volume : `toEqual` voit tout ce que l'émission toucherait d'autre.
+  const setupWithFader = (clipFader: number) => {
+    const videos = [0, 1].map(() => ({ pause: () => undefined, volume: 1 }) as HTMLVideoElement);
+    const run = startRun(
+      { ...state, clipFader },
+      {
+        videoOf: (slot) => videos[slot] ?? null,
+        setView: () => undefined,
+        addChat: () => undefined,
+        clearChat: () => undefined,
+        setFoxMode: () => undefined,
+      },
+    );
+    return { run, videos };
+  };
+  // `.volume` d'une vidéo est le fader divisé par 100.
+  const reachedBy = (videos: HTMLVideoElement[]) => videos.map(({ volume }) => volume);
+  const fadedTo = (value: number) => ({ pause: expect.any(Function), volume: value });
+
+  it("pose le fader de départ tout de suite sur les deux vidéos, sans fondu", () => {
+    const { videos } = setupWithFader(30);
+    expect(videos).toEqual([fadedTo(0.3), fadedTo(0.3)]);
+  });
+
+  it("laisse le son entier quand le fader de départ est à 100", () => {
+    const { videos } = setupWithFader(100);
+    expect(videos).toEqual([fadedTo(1), fadedTo(1)]);
+  });
+
+  it("fond vers un nouveau fader en 300 ms sur les deux vidéos : rien d'un coup, 0,3 à l'arrivée, rien d'autre ne change", async () => {
+    const { run, videos } = setupWithFader(100);
+    run.updateFader(30);
+    expect(reachedBy(videos)).toEqual([1, 1]);
+    await vi.advanceTimersByTimeAsync(150);
+    for (const value of reachedBy(videos)) {
+      expect(value).toBeGreaterThan(0.5);
+      expect(value).toBeLessThan(0.8);
+    }
+    await vi.advanceTimersByTimeAsync(150);
+    expect(videos).toEqual([fadedTo(0.3), fadedTo(0.3)]);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(videos).toEqual([fadedTo(0.3), fadedTo(0.3)]);
+  });
+
+  it("remonte en fondu de la même façon", async () => {
+    const { run, videos } = setupWithFader(30);
+    run.updateFader(100);
+    await vi.advanceTimersByTimeAsync(299);
+    for (const value of reachedBy(videos)) expect(value).toBeLessThan(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(videos).toEqual([fadedTo(1), fadedTo(1)]);
+  });
+
+  it("remplace un fondu en cours : le nouveau repart de la valeur atteinte, sans saut", async () => {
+    const { run, videos } = setupWithFader(100);
+    run.updateFader(30);
+    await vi.advanceTimersByTimeAsync(140);
+    const reached = videos[0]?.volume ?? 0;
+    expect(reached).toBeLessThan(1);
+    expect(reached).toBeGreaterThan(0.3);
+    run.updateFader(100);
+    expect(reachedBy(videos)).toEqual([reached, reached]);
+    let previous = reached;
+    for (let step = 0; step < 15; step += 1) {
+      await vi.advanceTimersByTimeAsync(20);
+      const value = videos[0]?.volume ?? 0;
+      expect(value).toBeGreaterThanOrEqual(previous);
+      previous = value;
+    }
+    expect(videos).toEqual([fadedTo(1), fadedTo(1)]);
+  });
+
+  it("ne lance aucun fondu quand le fader est celui d'avant", () => {
+    const { run, videos } = setupWithFader(100);
+    const timers = vi.getTimerCount();
+    run.updateFader(100);
+    expect(vi.getTimerCount()).toBe(timers);
+    expect(videos).toEqual([fadedTo(1), fadedTo(1)]);
+  });
+
+  it("annule le fondu quand l'émission s'arrête : le son reste où il en est, plus aucun minuteur", async () => {
+    const { run, videos } = setupWithFader(100);
+    run.updateFader(30);
+    await vi.advanceTimersByTimeAsync(100);
+    run.stop();
+    const reached = reachedBy(videos);
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(reachedBy(videos)).toEqual(reached);
+  });
+
+  it("ne lance rien quand un fader arrive après l'arrêt", async () => {
+    const { run, videos } = setupWithFader(100);
+    run.stop();
+    run.updateFader(30);
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(reachedBy(videos)).toEqual([1, 1]);
+  });
+
+  it("n'échoue pas quand la page n'a pas ses vidéos", async () => {
+    const { run } = setup({ ...state, clipFader: 30 });
+    expect(() => run.updateFader(100)).not.toThrow();
+    await vi.advanceTimersByTimeAsync(1000);
   });
 });

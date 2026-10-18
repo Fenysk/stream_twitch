@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-18 — Le son des clips baisse quand Fenysk parle : le serveur dit le fader, la page ne fait que fondre
+
+**Contexte.** La voix de Fenysk couvrait le clip dans l'émission ; OBS n'accepte que 6 connexions vers `localhost:4747` pour toutes ses sources.
+**Décision.** `ShowState.clipFader` (entier de 0 à 100) part dans le flux SSE existant : le director le recalcule à chaque pas du mic (`FoxModeController.subscribe`, la détection de la tête) avec `toClipFader` — 30 tant que `silentFor < delay + 1000 ms`, sinon 100 — et la page fond vers lui en 300 ms (`toFadingFader`) sur ses deux `<video>`. Les rires et la voix de Jean-Renard ne bougent pas. `lexique.json` et `architecture.json` ne bougent pas.
+**Renoncement.** Une seconde détection du mic dans la page, un flux ou un polling de plus, ou Web Audio : la détection existe, et chaque connexion de plus ronge les 6 d'OBS.
+
 ## 2026-10-17 — Les sounds et les rewards se règlent à part : le lien sound ↔ reward passe côté reward, dans `data/rewards.json`
 
 **Contexte.** Un sound portait son reward (`rewardId`, `isManaged`, et le titre, le coût et la pace de Twitch) : Alexis a supprimé le sound des rires de l'émission, badgé « Pas sur Twitch », en croyant supprimer une récompense.
