@@ -88,6 +88,7 @@ describe("toShowStatusText", () => {
     lineup,
     phase,
     index,
+    startsAt: 0,
   });
 
   it("dit que l'émission est arrêtée", () => {

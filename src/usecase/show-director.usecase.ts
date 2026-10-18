@@ -1,4 +1,6 @@
+import { ADDRESS_MODE } from "../domain/fox-mode.rules";
 import { toLaughFader } from "../domain/laugh.rules";
+import { toNextPick } from "../domain/pick.rules";
 import type { Settings } from "../domain/settings.schema";
 import {
   DEFAULT_SHOW_CLIP_COUNT,
@@ -17,7 +19,8 @@ import {
 import type { SoundSummary } from "../domain/sound.schema";
 import type { ClipLibrary, ConfirmedClip } from "./clip.usecase";
 import type { Fox } from "./fox.usecase";
-import type { FoxQueue } from "./fox-queue.usecase";
+import type { FoxModeController } from "./fox-mode.usecase";
+import type { FoxQueue, QueueItem } from "./fox-queue.usecase";
 import type { ShowSpeakResult, ShowVoice } from "./show.usecase";
 
 // La page /show à l'antenne ? OBS la dit quand une source navigateur vers /show devient visible dans la scène du programme (la
@@ -30,6 +33,10 @@ export type ShowDirectorDeps = {
   clips: Pick<ClipLibrary, "listConfirmed" | "notePlayed">;
   fox: Pick<Fox, "updateShow">;
   queue: Pick<FoxQueue, "hold" | "release">;
+  // Sa présence : il glisse hors de /fox au début de l'émission, et revient en sautant à la fin.
+  presence: Pick<FoxModeController, "depart" | "wake">;
+  // L'heure en ms : `startsAt` de l'émission est un instant de cette horloge, celle d'OBS (la même machine).
+  clock: () => number;
   // Ce que Jean-Renard dit dans /show.
   voice: Pick<ShowVoice, "sayLine" | "sayText">;
   // Les sounds de la soundboard : les rires d'un clip en sont, que la page joue elle-même (un sound supprimé depuis : ce rire est sauté).
@@ -68,14 +75,21 @@ export const PAGE_GRACE_MS = 20_000;
 const STALE = { ok: false, status: 409, message: "cette émission n'est plus en cours" } as const;
 const STALE_SPEECH: ShowSpeakResult = STALE;
 
+// Comment Jean-Renard revient sur /fox : `grumble` (l'émission est coupée) en sautant puis en râlant, `wake` en sautant sans un mot
+// (elle est finie), `none` pas du tout (le serveur s'arrête).
+type FoxReturn = "grumble" | "wake" | "none";
+
 // Le démarrage et l'arrêt de l'émission : elle commence quand la page /show passe à l'antenne, s'arrête dès qu'elle n'y est plus.
-// Au début, Jean-Renard quitte /fox (la file de parole se tient) et ne revient qu'à la fin, quand la page le dit ou que la source
-// disparaît. Le déroulé (ouverture, clips, clôture) est celui de la page, le serveur garde l'état et compte les passages.
+// Au début, Jean-Renard glisse hors de /fox (la file de parole se tient) puis la page /show commence ; il ne revient qu'à la fin,
+// quand la page le dit ou que la source disparaît. Le déroulé (ouverture, clips, clôture) est celui de la page, le serveur garde
+// l'état et compte les passages.
 export function createShowDirector({
   scene,
   clips,
   fox,
   queue,
+  presence,
+  clock,
   voice,
   sounds,
   settings: initial,
@@ -85,6 +99,9 @@ export function createShowDirector({
   log,
 }: ShowDirectorDeps): ShowDirector {
   let count = initial.showClipCount ?? DEFAULT_SHOW_CLIP_COUNT;
+  let grumbles = initial.showGrumblePhrases ?? [];
+  // Les phrases de coupure déjà dites depuis le dernier tour de la liste, d'une émission à l'autre.
+  let said: string[] = [];
   let state: ShowState = IDLE_SHOW;
   const listeners = new Set<(state: ShowState) => void>();
   let pages = 0;
@@ -100,18 +117,36 @@ export function createShowDirector({
     for (const listener of listeners) listener(state);
   };
 
-  // Jean-Renard revient sur /fox, puis la file lit ce qu'elle a gardé.
-  const leaveShow = () => {
+  // La phrase de coupure tirée sans répétition ; `undefined` quand la liste est vide.
+  const toGrumble = (): QueueItem | undefined => {
+    const pick = toNextPick(grumbles, said, random);
+    if (!pick) return undefined;
+    said = pick.said;
+    return {
+      kind: "grumble",
+      label: "la phrase de l'émission coupée",
+      text: pick.phrase,
+      isCuttable: false,
+      isUrgent: true,
+      toShow: () => ADDRESS_MODE,
+    };
+  };
+
+  // Jean-Renard revient sur /fox, puis la file lit ce qu'elle a gardé (sa phrase de coupure d'abord).
+  const leaveShow = (how: FoxReturn) => {
     cancelWatch?.();
     cancelWatch = undefined;
     fox.updateShow(false);
-    queue.release();
+    const grumble = how === "grumble" ? toGrumble() : undefined;
+    if (grumble) log(`Émission : coupée en cours, Jean-Renard revient et râle : « ${grumble.text} ».`);
+    queue.release(grumble);
+    if (how !== "none") presence.wake();
   };
 
   // `over` : finie, la source reste visible (elle ne repart qu'après avoir été cachée) ; `idle` : la source a disparu.
-  const end = (status: "idle" | "over", reason: string) => {
+  const end = (status: "idle" | "over", reason: string, how: FoxReturn) => {
     if (state.status === "running") {
-      leaveShow();
+      leaveShow(how);
       log(`Émission : ${reason}.`);
     }
     publish({ ...IDLE_SHOW, status });
@@ -125,7 +160,7 @@ export function createShowDirector({
     cancelWatch = schedule(() => {
       cancelWatch = undefined;
       if (state.status === "running" && pages === 0) {
-        end("over", `arrêtée, aucune page /show connectée depuis ${PAGE_GRACE_MS / 1000} s`);
+        end("over", `arrêtée, aucune page /show connectée depuis ${PAGE_GRACE_MS / 1000} s`, "wake");
       }
     }, PAGE_GRACE_MS);
   };
@@ -161,8 +196,10 @@ export function createShowDirector({
       publish({ ...IDLE_SHOW, status: "over" });
       return;
     }
-    // La file se tient avant que /fox se vide : aucune phrase n'est refusée par le renard absent.
+    // La file se tient avant que /fox se vide : aucune phrase n'est refusée par le renard absent. /show ne commence qu'une fois
+    // sa sortie jouée (`startsAt`).
     queue.hold();
+    const awayIn = presence.depart();
     fox.updateShow(true);
     counted = new Set();
     phrases = chosen.map((clip) => clip.phrase);
@@ -173,7 +210,14 @@ export function createShowDirector({
       day: toRecordedDay(clip),
       laughs: toLaughs(clip),
     }));
-    publish({ status: "running", runId: createId(), lineup, phase: "opening", index: 0 });
+    publish({
+      status: "running",
+      runId: createId(),
+      lineup,
+      phase: "opening",
+      index: 0,
+      startsAt: clock() + awayIn,
+    });
     log(
       `Émission : démarrée, ${lineup.length} clip(s) : ${lineup.map(({ name }) => `« ${name} »`).join(", ")}.`,
     );
@@ -183,7 +227,7 @@ export function createShowDirector({
   const onVisible = (isVisible: boolean) => {
     if (isVisible && state.status === "idle") begin();
     else if (!isVisible && state.status !== "idle")
-      end("idle", "arrêtée, la source /show n'est plus visible");
+      end("idle", "arrêtée, la source /show n'est plus visible", "grumble");
   };
 
   const noteClip = (index: number) => {
@@ -201,10 +245,11 @@ export function createShowDirector({
     stop() {
       unsubscribeScene?.();
       unsubscribeScene = undefined;
-      if (state.status !== "idle") end("idle", "arrêtée, le serveur s'arrête");
+      if (state.status !== "idle") end("idle", "arrêtée, le serveur s'arrête", "none");
     },
     update(next) {
       count = next.showClipCount ?? DEFAULT_SHOW_CLIP_COUNT;
+      grumbles = next.showGrumblePhrases ?? [];
     },
     getState: () => state,
     subscribe(listener) {
@@ -227,7 +272,7 @@ export function createShowDirector({
     report({ runId, phase, index }) {
       if (state.status !== "running" || runId !== state.runId) return STALE;
       if (phase === "ended") {
-        end("over", "finie");
+        end("over", "finie", "wake");
         return { ok: true };
       }
       if ((phase === "card" || phase === "clip") && index >= state.lineup.length) {

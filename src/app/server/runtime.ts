@@ -536,12 +536,14 @@ export function startRuntime(): Runtime {
     random: Math.random,
     log,
   });
-  // L'émission : OBS dit quand la page /show passe à l'antenne ; Jean-Renard quitte alors /fox, la file de parole se tient.
+  // L'émission : OBS dit quand la page /show passe à l'antenne ; Jean-Renard glisse alors hors de /fox, la file de parole se tient.
   const director = createShowDirector({
     scene: obs.show,
     clips,
     fox,
     queue,
+    presence: mode,
+    clock: Date.now,
     voice: showVoice,
     sounds,
     settings: initial,

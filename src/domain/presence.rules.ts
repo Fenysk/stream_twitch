@@ -12,8 +12,8 @@ export type PresenceState = { kind: PresenceKind; since: number; spokeAt: number
 export type PresenceRules = { awayAfter: number; yawnMs: number; leaveMs: number; returnMs: number };
 
 // `wake` : un message est accepté, ou « Faire parler ». `spoke` : une phrase vient de finir. `leave` : il part maintenant (il
-// bâille puis s'en va), sans attendre le délai.
-export type PresenceEvent = "wake" | "spoke" | "leave";
+// bâille puis s'en va), sans attendre le délai. `depart` : il part tout de suite, sans bâiller (l'émission commence).
+export type PresenceEvent = "wake" | "spoke" | "leave" | "depart";
 
 // Le démarrage vaut un départ : caché, hors de l'écran, sans animation (la relance compte son silence depuis `since`).
 export const toStartPresence = (now: number): PresenceState => ({
@@ -55,6 +55,20 @@ const leave = (state: PresenceState, now: number): PresenceState => {
   }
 };
 
+// L'émission commence : il glisse tout de suite, de là où il est, sans bâiller ni attendre la fin de sa phase. Déjà en train de
+// partir ou parti, rien ne change.
+const depart = (state: PresenceState, now: number): PresenceState => {
+  switch (state.kind) {
+    case "visible":
+    case "yawning":
+    case "returning":
+      return { kind: "leaving", since: now, spokeAt: state.spokeAt };
+    case "leaving":
+    case "away":
+      return state;
+  }
+};
+
 // Une phase finit à une date précise : un pas en retard (page cachée, serveur occupé) enchaîne les phases sans les décaler.
 const toNextPhase = (state: PresenceState, now: number, rules: PresenceRules): PresenceState | null => {
   switch (state.kind) {
@@ -88,6 +102,7 @@ export function toNextPresence(
   if (event === "spoke") state = { ...state, spokeAt: now };
   if (event === "wake") state = wake(state, now);
   if (event === "leave") state = leave(state, now);
+  if (event === "depart") state = depart(state, now);
   for (let phases = 0; phases < 4; phases += 1) {
     const next = toNextPhase(state, now, rules);
     if (!next) break;
@@ -108,6 +123,21 @@ export function toVisibleIn(state: PresenceState, now: number, rules: PresenceRu
     case "leaving":
     case "away":
       return rules.returnMs;
+  }
+}
+
+// Dans combien de ms il est hors de l'écran : le reste de sa descente, tout de suite s'il est parti, la descente entière
+// s'il partait maintenant.
+export function toAwayIn(state: PresenceState, now: number, rules: PresenceRules): number {
+  switch (state.kind) {
+    case "leaving":
+      return Math.max(0, state.since + rules.leaveMs - now);
+    case "away":
+      return 0;
+    case "visible":
+    case "yawning":
+    case "returning":
+      return rules.leaveMs;
   }
 }
 
@@ -205,6 +235,24 @@ export function toPresenceBody({ kind, elapsed, from }: PresencePose, curves: Pr
     case "returning":
       return toReturn(elapsed, from, curves.returnMs);
   }
+}
+
+// Il joue sa sortie : il s'accroupit, saute ou plonge, et n'est pas encore hors de la source.
+export function isDeparting(
+  { kind, elapsed }: PresencePose,
+  { crouchMs, jumpMs, diveMs }: PresenceCurves,
+): boolean {
+  return kind === "leaving" && elapsed < crouchMs + jumpMs + diveMs;
+}
+
+// `/fox` et l'aperçu cèdent le renard à `/show` quand l'émission passe, une fois sa sortie jouée. Sans les temps (les règles ne
+// sont pas arrivées), il est caché tout de suite.
+export function isHiddenByShow(
+  isShowOn: boolean,
+  pose: PresencePose,
+  curves: PresenceCurves | undefined,
+): boolean {
+  return isShowOn && !(curves !== undefined && isDeparting(pose, curves));
 }
 
 // La pose que la page prend quand le serveur annonce une phase : elle part de là où le renard est (un retour en plein

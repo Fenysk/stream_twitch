@@ -28,7 +28,7 @@ export type Run = { runId: string; stop(): void };
 // Le fondu du tchat dure 0,8 s (show-stage.css) : une marge de plus, puis ses messages partent.
 const CHAT_CLEAR_MS = 1000;
 
-export const startRun = ({ runId, lineup }: ShowState, page: ShowPage): Run => {
+export const startRun = ({ runId, lineup, startsAt }: ShowState, page: ShowPage): Run => {
   let isStopped = false;
   // Ce qui attend (un minuteur, une vidéo ou des rires qui jouent) et que l'arrêt réveille aussitôt.
   const wakes = new Set<() => void>();
@@ -51,57 +51,68 @@ export const startRun = ({ runId, lineup }: ShowState, page: ShowPage): Run => {
     void sleep(ms).then(() => page.setFoxMode(IDLE_MODE));
   };
 
-  void runEpisode(
-    {
-      screen: {
-        setView: (view) => {
-          if (isStopped) return;
-          page.setView(view);
-          // Le tchat du clip qui finit s'efface une fois le fondu fini : le clip suivant n'en montre rien, même pas un message qui part.
-          if (view.kind === "card") void sleep(CHAT_CLEAR_MS).then(() => page.clearChat());
+  const play = (): Promise<void> =>
+    runEpisode(
+      {
+        screen: {
+          setView: (view) => {
+            if (isStopped) return;
+            page.setView(view);
+            // Le tchat du clip qui finit s'efface une fois le fondu fini : le clip suivant n'en montre rien, même pas un message qui part.
+            if (view.kind === "card") void sleep(CHAT_CLEAR_MS).then(() => page.clearChat());
+          },
+          // Les fichiers de rire du clip se téléchargent pendant que sa vidéo se charge, avant qu'il joue.
+          load: async (slot, clip) => {
+            const video = page.videoOf(slot);
+            if (isStopped || video === null) return false;
+            const [isReady] = await Promise.all([
+              prepareVideo(video, toShowVideoUrl(clip.name, clip.version)),
+              laughFiles.prepare(clip.laughs),
+            ]);
+            return isReady;
+          },
+          // La vidéo finie, les rires pas encore partis partent, et la dernière image reste jusqu'à la fin du dernier rire.
+          play: async (slot, cues, laughs) => {
+            const video = page.videoOf(slot);
+            if (isStopped || !video) return false;
+            page.clearChat();
+            const laughing: Promise<boolean>[] = [];
+            const ticker = createShowTicker(
+              { cues, laughs },
+              {
+                addChat: page.addChat,
+                startle,
+                startLaugh: (laugh) => laughing.push(laughFiles.play(laugh)),
+              },
+            );
+            await playVideo(video, aborted, ticker.tick);
+            if (!isStopped) ticker.end();
+            return (await Promise.all(laughing)).some(Boolean);
+          },
         },
-        // Les fichiers de rire du clip se téléchargent pendant que sa vidéo se charge, avant qu'il joue.
-        load: async (slot, clip) => {
-          const video = page.videoOf(slot);
-          if (isStopped || video === null) return false;
-          const [isReady] = await Promise.all([
-            prepareVideo(video, toShowVideoUrl(clip.name, clip.version)),
-            laughFiles.prepare(clip.laughs),
-          ]);
-          return isReady;
+        loadCues: async ({ name, version }) => {
+          const answer = await getShowCues(name, version);
+          return answer.ok ? answer.value : null;
         },
-        // La vidéo finie, les rires pas encore partis partent, et la dernière image reste jusqu'à la fin du dernier rire.
-        play: async (slot, cues, laughs) => {
-          const video = page.videoOf(slot);
-          if (isStopped || !video) return false;
-          page.clearChat();
-          const laughing: Promise<boolean>[] = [];
-          const ticker = createShowTicker(
-            { cues, laughs },
-            { addChat: page.addChat, startle, startLaugh: (laugh) => laughing.push(laughFiles.play(laugh)) },
-          );
-          await playVideo(video, aborted, ticker.tick);
-          if (!isStopped) ticker.end();
-          return (await Promise.all(laughing)).some(Boolean);
+        speak: async (speech) => {
+          const answer = await speakInShow({ runId, ...speech });
+          if (!answer.ok) throw new Error(answer.message);
+          return answer.value;
         },
+        report: (progress) => void reportShowProgress({ runId, ...progress }),
+        sleep,
+        now: Date.now,
+        isStopped: () => isStopped,
+        log: (message) => console.log(message),
       },
-      loadCues: async ({ name, version }) => {
-        const answer = await getShowCues(name, version);
-        return answer.ok ? answer.value : null;
-      },
-      speak: async (speech) => {
-        const answer = await speakInShow({ runId, ...speech });
-        if (!answer.ok) throw new Error(answer.message);
-        return answer.value;
-      },
-      report: (progress) => void reportShowProgress({ runId, ...progress }),
-      sleep,
-      now: Date.now,
-      isStopped: () => isStopped,
-      log: (message) => console.log(message),
-    },
-    lineup,
-  ).finally(() => laughFiles.clear());
+      lineup,
+    ).finally(() => laughFiles.clear());
+
+  // L'ouverture attend la fin de la sortie de Jean-Renard hors de /fox ; arrêtée avant, l'émission ne part jamais. Sans attente
+  // (page rechargée en pleine émission), elle part tout de suite.
+  const waitMs = Math.max(0, startsAt - Date.now());
+  if (waitMs === 0) void play();
+  else void sleep(waitMs).then(() => (isStopped ? undefined : play()));
 
   return {
     runId,

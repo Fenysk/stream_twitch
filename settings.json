@@ -434,5 +434,17 @@
     "Fin des preuves. Fenysk reste en liberté, et c'est bien le problème.",
     "C'est tout pour aujourd'hui. Le chat peut reprendre une activité normale."
   ],
+  "showGrumblePhrases": [
+    "Hé ! Tu coupes mon émission en plein milieu ? Même la télé régionale respecte plus ses renards.",
+    "J'avais encore un clip. Le meilleur. Tant pis, il ira dans mes mémoires.",
+    "Coupé en plein direct. J'appelle mon syndicat de renards.",
+    "Ah. La censure a un nom, et c'est Fenysk.",
+    "J'étais à l'antenne, moi ! J'avais répété devant un miroir et tout.",
+    "Bravo. Tu viens d'éteindre la seule partie réussie du stream.",
+    "Pas grave. Je finirai l'émission dans mon terrier, pour les vers de terre.",
+    "Tu avais peur que le tchat voie la suite, c'est ça ?",
+    "Pour la télécommande, fallait demander. Pas débrancher le renard.",
+    "Le clip suivant, c'était encore toi qui te ratais. Bon, t'as bien fait de couper."
+  ],
   "showChatLead": 4000
 }

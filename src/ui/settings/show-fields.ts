@@ -1,4 +1,4 @@
-// Les réglages de l'émission dans l'onglet « Émission » : un curseur et deux listes de phrases, une table chacun. Les cartes et le
+// Les réglages de l'émission dans l'onglet « Émission » : un curseur et trois listes de phrases, une table chacun. Les cartes et le
 // rendu sont dans show-episode-cards.tsx.
 
 import { DEFAULT_SHOW_CLIP_COUNT } from "../../domain/show.rules";
@@ -23,6 +23,12 @@ export const SHOW_LISTS: readonly ListSpec[] = [
     key: "showClosingPhrases",
     label: "Phrases de clôture",
     help: "Une phrase par ligne. Jean-Renard en dit une à la fin de l'émission, avant de revenir sur /fox.",
+    rows: 4,
+  },
+  {
+    key: "showGrumblePhrases",
+    label: "Phrases si l'émission est coupée",
+    help: "Une phrase par ligne. Jean-Renard en dit une sur /fox, tourné vers Fenysk, quand l'émission est coupée en cours (la source /show cachée), au hasard, sans répéter avant d'avoir tout dit.",
     rows: 4,
   },
 ];

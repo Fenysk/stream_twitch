@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { ADDRESS_MODE } from "../domain/fox-mode.rules";
 import type { Settings } from "../domain/settings.schema";
 import type { ShowState } from "../domain/show.schema";
 import type { ClipFailure, ConfirmedClip, ConfirmedListResult } from "./clip.usecase";
+import type { QueueItem } from "./fox-queue.usecase";
 import type { ShowSpeakResult } from "./show.usecase";
 import { createShowDirector, PAGE_GRACE_MS } from "./show-director.usecase";
 
@@ -25,8 +27,11 @@ const confirmed = (name: string, playCount?: number): ConfirmedClip => ({
   ...(playCount === undefined ? {} : { playCount }),
 });
 
-// Un faux OBS (la source /show devient visible ou non), un faux renard et une fausse file qui notent leurs appels dans l'ordre, et
-// des minuteurs à la main.
+// L'heure du faux serveur au départ (ms) : `startsAt` s'y ajoute le temps de la sortie de Jean-Renard.
+const START = 100_000;
+
+// Un faux OBS (la source /show devient visible ou non), un faux renard, une fausse présence et une fausse file qui notent leurs appels
+// dans l'ordre, et des minuteurs à la main.
 const setup = (
   options: {
     clips?: ConfirmedClip[];
@@ -35,15 +40,18 @@ const setup = (
     spoken?: ShowSpeakResult;
     // Les sounds de la soundboard, par identifiant.
     sounds?: Record<string, { version: string; fader: number }>;
+    // Dans combien de ms Jean-Renard est hors de /fox quand il part (1500 par défaut).
+    awayIn?: number;
   } = {},
 ) => {
   const calls: string[] = [];
   const said: string[] = [];
   const played: string[] = [];
   const logs: string[] = [];
+  const released: (QueueItem | undefined)[] = [];
   const sceneListeners = new Set<(isVisible: boolean) => void>();
   const timers: { at: number; callback: () => void; isCancelled: boolean }[] = [];
-  const state = { now: 0, ids: 0, clips: options.clips ?? [confirmed("a.mp4"), confirmed("b.mp4")] };
+  const state = { now: START, ids: 0, clips: options.clips ?? [confirmed("a.mp4"), confirmed("b.mp4")] };
   const director = createShowDirector({
     scene: {
       subscribe(listener) {
@@ -59,8 +67,22 @@ const setup = (
     fox: { updateShow: (isOn) => calls.push(isOn ? "fox: émission" : "fox: retour") },
     queue: {
       hold: () => calls.push("file: tenue"),
-      release: () => calls.push("file: relâchée"),
+      release: (first) => {
+        released.push(first);
+        calls.push(first ? `file: relâchée avec « ${first.text} »` : "file: relâchée");
+      },
     },
+    presence: {
+      depart: () => {
+        calls.push("présence: départ");
+        return options.awayIn ?? 1500;
+      },
+      wake: () => {
+        calls.push("présence: retour");
+        return 0;
+      },
+    },
+    clock: () => state.now,
     sounds: {
       get: (id) => {
         const sound = options.sounds?.[id];
@@ -101,6 +123,7 @@ const setup = (
     said,
     played,
     logs,
+    released,
     states,
     send: (isVisible: boolean) => {
       for (const listener of sceneListeners) listener(isVisible);
@@ -136,8 +159,9 @@ describe("createShowDirector : le démarrage", () => {
       ],
       phase: "opening",
       index: 0,
+      startsAt: START + 1500,
     });
-    expect(calls).toEqual(["file: tenue", "fox: émission"]);
+    expect(calls).toEqual(["file: tenue", "présence: départ", "fox: émission"]);
     expect(states).toHaveLength(1);
     expect(logs).toEqual(["Émission : démarrée, 2 clip(s) : « a.mp4 », « b.mp4 »."]);
   });
@@ -268,7 +292,7 @@ describe("createShowDirector : le démarrage", () => {
     const { calls, states, send } = setup();
     send(true);
     send(true);
-    expect(calls).toEqual(["file: tenue", "fox: émission"]);
+    expect(calls).toEqual(["file: tenue", "présence: départ", "fox: émission"]);
     expect(states).toHaveLength(1);
   });
 
@@ -298,7 +322,7 @@ describe("createShowDirector : l'arrêt par la scène", () => {
     calls.length = 0;
     send(false);
     expect(director.getState()).toMatchObject({ status: "idle", runId: "", lineup: [] });
-    expect(calls).toEqual(["fox: retour", "file: relâchée"]);
+    expect(calls).toEqual(["fox: retour", "file: relâchée", "présence: retour"]);
     expect(logs.at(-1)).toBe("Émission : arrêtée, la source /show n'est plus visible.");
   });
 
@@ -330,6 +354,183 @@ describe("createShowDirector : l'arrêt par la scène", () => {
     expect(director.getState().status).toBe("idle");
     expect(calls).toEqual(["fox: retour", "file: relâchée"]);
     expect(sceneListeners.size).toBe(0);
+  });
+});
+
+describe("createShowDirector : Jean-Renard glisse hors de /fox avant que /show commence", () => {
+  it("tient la file, le fait partir, puis le montre dans /show : l'ouverture commence à la fin de sa sortie", () => {
+    const { director, calls, send } = setup({ awayIn: 1500 });
+    send(true);
+    expect(calls).toEqual(["file: tenue", "présence: départ", "fox: émission"]);
+    expect(director.getState().startsAt).toBe(START + 1500);
+  });
+
+  it("compte le temps de sa sortie depuis l'heure du serveur : le reste d'une descente déjà commencée, ou rien", () => {
+    const rested = setup({ awayIn: 600 });
+    rested.advance(5000);
+    rested.send(true);
+    expect(rested.director.getState().startsAt).toBe(START + 5000 + 600);
+    const away = setup({ awayIn: 0 });
+    away.send(true);
+    expect(away.director.getState().startsAt).toBe(START);
+  });
+
+  it("garde l'instant du début dans chaque état que la page rapporte", () => {
+    const { director, send } = setup({ awayIn: 1500 });
+    send(true);
+    director.report({ runId: "run1", phase: "card", index: 1 });
+    expect(director.getState()).toMatchObject({ phase: "card", startsAt: START + 1500 });
+  });
+
+  it("n'a plus d'instant de début une fois l'émission arrêtée ou finie", () => {
+    const { director, send } = setup();
+    send(true);
+    director.report({ runId: "run1", phase: "ended", index: 0 });
+    expect(director.getState().startsAt).toBe(0);
+    send(false);
+    expect(director.getState().startsAt).toBe(0);
+  });
+
+  it("ne le fait pas partir sans clip à passer : ni file tenue, ni départ, ni /show", () => {
+    const { calls, send } = setup({ clips: [] });
+    send(true);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe("createShowDirector : l'émission coupée en cours", () => {
+  const GRUMBLES = ["Phrase A", "Phrase B"];
+
+  it("fait revenir Jean-Renard sur /fox, puis passer sa phrase dans la file, puis le fait sauter pour revenir", () => {
+    const { calls, send } = setup({ custom: { showGrumblePhrases: GRUMBLES } });
+    send(true);
+    calls.length = 0;
+    send(false);
+    expect(calls).toEqual(["fox: retour", "file: relâchée avec « Phrase B »", "présence: retour"]);
+  });
+
+  it("donne à la file une phrase urgente, qu'on ne coupe pas, tournée vers Fenysk", () => {
+    const { released, send } = setup({ custom: { showGrumblePhrases: GRUMBLES } });
+    send(true);
+    send(false);
+    const [grumble] = released;
+    expect(grumble).toMatchObject({
+      kind: "grumble",
+      label: "la phrase de l'émission coupée",
+      text: "Phrase B",
+      isCuttable: false,
+      isUrgent: true,
+    });
+    expect(grumble?.toShow()).toEqual(ADDRESS_MODE);
+  });
+
+  it("l'écrit au journal avant de dire que l'émission est arrêtée", () => {
+    const { logs, send } = setup({ custom: { showGrumblePhrases: GRUMBLES } });
+    send(true);
+    send(false);
+    expect(logs.slice(-2)).toEqual([
+      "Émission : coupée en cours, Jean-Renard revient et râle : « Phrase B ».",
+      "Émission : arrêtée, la source /show n'est plus visible.",
+    ]);
+  });
+
+  it("tire sans répéter avant d'avoir tout dit, d'une émission à l'autre", () => {
+    const { released, send } = setup({ custom: { showGrumblePhrases: GRUMBLES } });
+    for (let run = 0; run < 2; run += 1) {
+      send(true);
+      send(false);
+    }
+    expect(new Set(released.map((first) => first?.text))).toEqual(new Set(GRUMBLES));
+  });
+
+  it("recommence un tour sans redire la dernière phrase dite", () => {
+    const { released, send } = setup({ custom: { showGrumblePhrases: GRUMBLES } });
+    for (let run = 0; run < 3; run += 1) {
+      send(true);
+      send(false);
+    }
+    expect(released.map((first) => first?.text)).toEqual(["Phrase B", "Phrase A", "Phrase B"]);
+  });
+
+  it("relit la liste quand les réglages changent", () => {
+    const { director, released, send } = setup({ custom: { showGrumblePhrases: GRUMBLES } });
+    director.update({ ...settings, showGrumblePhrases: ["Nouvelle"] });
+    send(true);
+    send(false);
+    expect(released.map((first) => first?.text)).toEqual(["Nouvelle"]);
+  });
+
+  it("revient quand même, sans phrase, quand la liste est vide", () => {
+    const { calls, released, logs, send } = setup({ custom: { showGrumblePhrases: [] } });
+    send(true);
+    calls.length = 0;
+    send(false);
+    expect(calls).toEqual(["fox: retour", "file: relâchée", "présence: retour"]);
+    expect(released).toEqual([undefined]);
+    expect(logs.some((line) => line.includes("râle"))).toBe(false);
+  });
+
+  it("revient quand même, sans phrase, quand la liste n'est pas réglée", () => {
+    const { calls, released, send } = setup();
+    send(true);
+    calls.length = 0;
+    send(false);
+    expect(calls).toEqual(["fox: retour", "file: relâchée", "présence: retour"]);
+    expect(released).toEqual([undefined]);
+  });
+
+  it("ne râle pas à la fin normale : il revient en sautant, sans phrase", () => {
+    const { director, calls, released, send } = setup({ custom: { showGrumblePhrases: GRUMBLES } });
+    send(true);
+    calls.length = 0;
+    director.report({ runId: "run1", phase: "ended", index: 0 });
+    expect(calls).toEqual(["fox: retour", "file: relâchée", "présence: retour"]);
+    expect(released).toEqual([undefined]);
+  });
+
+  it("ne râle pas non plus après 20 s sans page /show : il revient en sautant, sans phrase", () => {
+    const { calls, released, send, advance } = setup({ custom: { showGrumblePhrases: GRUMBLES } });
+    send(true);
+    calls.length = 0;
+    advance(PAGE_GRACE_MS);
+    expect(calls).toEqual(["fox: retour", "file: relâchée", "présence: retour"]);
+    expect(released).toEqual([undefined]);
+  });
+
+  it("ne râle pas ni ne le réveille à l'arrêt du serveur", () => {
+    const { director, calls, released, send } = setup({ custom: { showGrumblePhrases: GRUMBLES } });
+    send(true);
+    calls.length = 0;
+    director.stop();
+    expect(calls).toEqual(["fox: retour", "file: relâchée"]);
+    expect(released).toEqual([undefined]);
+  });
+
+  it("ne fait rien d'une source cachée une fois l'émission finie", () => {
+    const { director, calls, released, send } = setup({ custom: { showGrumblePhrases: GRUMBLES } });
+    send(true);
+    director.report({ runId: "run1", phase: "ended", index: 0 });
+    calls.length = 0;
+    released.length = 0;
+    send(false);
+    expect(director.getState().status).toBe("idle");
+    expect(calls).toEqual([]);
+    expect(released).toEqual([]);
+  });
+
+  it("ne fait rien d'une source cachée alors que l'émission est arrêtée", () => {
+    const { calls, released, send } = setup({ custom: { showGrumblePhrases: GRUMBLES } });
+    send(false);
+    expect(calls).toEqual([]);
+    expect(released).toEqual([]);
+  });
+
+  it("ne râle pas sans clip à passer : la source cachée ne change rien", () => {
+    const { calls, released, send } = setup({ clips: [], custom: { showGrumblePhrases: GRUMBLES } });
+    send(true);
+    send(false);
+    expect(calls).toEqual([]);
+    expect(released).toEqual([]);
   });
 });
 
@@ -372,10 +573,10 @@ describe("createShowDirector : le déroulé dit par la page", () => {
     calls.length = 0;
     expect(director.report({ runId: "run1", phase: "ended", index: 0 })).toEqual({ ok: true });
     expect(director.getState()).toMatchObject({ status: "over", runId: "", lineup: [] });
-    expect(calls).toEqual(["fox: retour", "file: relâchée"]);
+    expect(calls).toEqual(["fox: retour", "file: relâchée", "présence: retour"]);
     send(true);
     expect(director.getState().status).toBe("over");
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
   });
 
   it("repart après avoir été cachée : la source finie qui disparaît puis revient relance une émission", () => {
@@ -416,7 +617,14 @@ describe("createShowDirector : la page /show absente", () => {
     expect(director.getState().status).toBe("running");
     advance(1);
     expect(director.getState().status).toBe("over");
-    expect(calls).toEqual(["file: tenue", "fox: émission", "fox: retour", "file: relâchée"]);
+    expect(calls).toEqual([
+      "file: tenue",
+      "présence: départ",
+      "fox: émission",
+      "fox: retour",
+      "file: relâchée",
+      "présence: retour",
+    ]);
     expect(logs.at(-1)).toBe("Émission : arrêtée, aucune page /show connectée depuis 20 s.");
   });
 

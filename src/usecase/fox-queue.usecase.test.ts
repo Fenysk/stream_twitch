@@ -606,6 +606,79 @@ describe("createFoxQueue : l'émission", () => {
     ]);
   });
 
+  const grumble = (text: string) =>
+    item(text, {
+      kind: "grumble",
+      label: "la phrase de l'émission coupée",
+      isCuttable: false,
+      isUrgent: true,
+    });
+
+  it("dit en premier l'entrée donnée à release, avant les remerciements gardés, dans leur ordre", async () => {
+    const { queue, spoken, finishSynthesis, advance } = setup();
+    queue.hold();
+    queue.push(thanks("merci un"));
+    queue.push(thanks("merci deux"));
+    queue.release(grumble("il râle"));
+    expect(spoken.map(({ text }) => text)).toEqual(["il râle"]);
+    await finishSynthesis(0);
+    await advance(1400);
+    await finishSynthesis(1);
+    await advance(1400);
+    expect(spoken.map(({ text }) => text)).toEqual(["il râle", "merci un", "merci deux"]);
+  });
+
+  it("dit l'entrée donnée à release comme les autres : il revient, se tourne comme elle le demande, attend le silence d'Alexis", async () => {
+    const { queue, voice, spoken, calls, tick } = setup();
+    queue.hold();
+    talking(voice, 0);
+    queue.release(
+      item("il râle", {
+        kind: "grumble",
+        isCuttable: false,
+        isUrgent: true,
+        toShow: () => ({ kind: "address" }),
+      }),
+    );
+    await tick();
+    expect(spoken).toEqual([]);
+    Object.assign(voice, { isTalking: false, talkingFor: 0, silentFor: 1000 });
+    await tick();
+    expect(spoken.map(({ text }) => text)).toEqual(["il râle"]);
+    expect(calls.wakes).toBeGreaterThan(0);
+    expect(calls.intros.map(({ show }) => show)).toEqual([{ kind: "address" }]);
+  });
+
+  it("ne coupe pas l'entrée donnée à release quand Alexis parle plus longtemps", async () => {
+    const { queue, voice, spoken, stops, finishSynthesis, tick } = setup();
+    queue.hold();
+    queue.release(grumble("il râle"));
+    await finishSynthesis(0);
+    talking(voice, 5000);
+    await tick();
+    expect(stops.count).toBe(0);
+    expect(spoken).toHaveLength(1);
+  });
+
+  it("ne dit rien de l'entrée donnée à release sans hold, ni d'un release sans entrée quand rien n'attend", () => {
+    const { queue, spoken } = setup();
+    queue.release(grumble("il râle"));
+    queue.hold();
+    queue.release();
+    expect(spoken).toEqual([]);
+  });
+
+  it("ne compte pas l'entrée donnée à release parmi les remerciements du journal", () => {
+    const { queue, logs } = setup();
+    queue.push(item("un", { kind: "thanks", isUrgent: true }));
+    queue.hold();
+    queue.release(grumble("il râle"));
+    expect(logs).toEqual([
+      "Renard : l'émission commence, 1 remerciement(s) attendent sa fin.",
+      "Renard : l'émission est finie, 1 remerciement(s) à dire, 0 entrée(s) jetée(s) pendant.",
+    ]);
+  });
+
   it("ne fait rien d'un second hold, ni d'un release sans hold", () => {
     const { queue, logs } = setup();
     queue.release();

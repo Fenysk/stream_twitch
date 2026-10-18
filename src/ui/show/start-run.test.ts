@@ -46,13 +46,14 @@ const state: ShowState = {
   lineup: [{ name: "a.mp4", title: "A", version: "1-1", day: "2026-10-16", laughs: [] }],
   phase: "opening",
   index: 0,
+  startsAt: 0,
 };
 
 // Une page sans vidéo : le clip ne se charge pas et est passé, le reste du déroulé a lieu.
-const setup = () => {
+const setup = (shown: ShowState = state) => {
   const views: ShowView[] = [];
   const modes: FoxMode[] = [];
-  const run = startRun(state, {
+  const run = startRun(shown, {
     videoOf: () => null,
     setView: (view) => views.push(view),
     addChat: () => undefined,
@@ -97,6 +98,53 @@ describe("startRun", () => {
 
   it("garde le numéro de l'émission, de quoi savoir si une autre a pris sa place", () => {
     expect(setup().run.runId).toBe("run1");
+  });
+});
+
+describe("startRun : l'attente de la sortie de Jean-Renard", () => {
+  const startingIn = (ms: number): ShowState => ({ ...state, startsAt: Date.now() + ms });
+
+  it("n'ouvre l'émission qu'à l'instant de début : ni rapport ni phrase avant, la page reste transparente", async () => {
+    const { views, modes } = setup(startingIn(1500));
+    await vi.advanceTimersByTimeAsync(1499);
+    expect(reported()).toEqual([]);
+    expect(vi.mocked(speakInShow)).not.toHaveBeenCalled();
+    expect(views).toEqual([]);
+    expect(modes).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(reported()).toEqual([{ runId: "run1", phase: "opening", index: 0 }]);
+    expect(vi.mocked(speakInShow).mock.calls).toEqual([[{ runId: "run1", kind: "opening" }]]);
+    expect(views.map(({ kind }) => kind)).toEqual(["opening"]);
+  });
+
+  it("déroule ensuite l'émission en entier, comme sans attente", async () => {
+    const { views } = setup(startingIn(1500));
+    await vi.advanceTimersByTimeAsync(21_500);
+    expect(reported().map(({ phase }) => phase)).toEqual(["opening", "closing", "ended"]);
+    expect(views.map(({ kind }) => kind)).toEqual(["opening", "closing", "none"]);
+  });
+
+  it("ne part jamais quand l'émission s'arrête pendant l'attente : plus de minuteur, ni rapport ni phrase", async () => {
+    const { run, views } = setup(startingIn(1500));
+    await vi.advanceTimersByTimeAsync(500);
+    run.stop();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(reported()).toEqual([]);
+    expect(vi.mocked(speakInShow)).not.toHaveBeenCalled();
+    expect(views).toEqual([]);
+  });
+
+  it("commence tout de suite quand l'instant est passé : la page rechargée en pleine émission", async () => {
+    setup(startingIn(-5000));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reported()).toEqual([{ runId: "run1", phase: "opening", index: 0 }]);
+  });
+
+  it("commence tout de suite à l'instant même", async () => {
+    setup(startingIn(0));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reported()).toEqual([{ runId: "run1", phase: "opening", index: 0 }]);
   });
 });
 

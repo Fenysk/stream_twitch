@@ -18,6 +18,7 @@ import {
   type PresenceEvent,
   type PresenceRules,
   type PresenceState,
+  toAwayIn,
   toNextPresence,
   toPresenceView,
   toStartPresence,
@@ -55,6 +56,8 @@ export type FoxModeController = {
   noteSpoke(): void;
   // H : il part maintenant, s'il est là (le coucher de l'heure du live) : il bâille, puis s'en va.
   leave(): void;
+  // H : l'émission commence, il glisse hors de l'écran tout de suite, sans bâiller ; rend dans combien de ms il en est sorti.
+  depart(): number;
   // E, G et H : il revient s'il était parti, puis montre `show` pendant la durée d'une réaction (sans `show`, rien).
   introduce(show: Show | null): Intro;
   // Le sursaut d'un cri : il montre `show` de lui-même, sans phrase, le temps qu'il lui faut. Seulement visible, et si rien
@@ -233,6 +236,12 @@ export function createFoxMode({
     leave() {
       step("leave");
       publish();
+    },
+    depart() {
+      if (!rules) return 0;
+      step("depart");
+      publish();
+      return toAwayIn(presence, clock(), toPresenceRules(rules));
     },
     introduce,
     flash,

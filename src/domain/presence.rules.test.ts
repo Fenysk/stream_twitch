@@ -5,10 +5,13 @@ import {
   DIVE_ANGLE,
   HIDDEN_OFFSET,
   isAsleep,
+  isDeparting,
+  isHiddenByShow,
   type PresenceCurves,
   type PresenceEvent,
   type PresenceRules,
   type PresenceState,
+  toAwayIn,
   toNextPose,
   toNextPresence,
   toPresenceBody,
@@ -192,6 +195,135 @@ describe("M : il part tout de suite au coucher (évènement leave)", () => {
   it("se réveille pendant son bâillement de départ s'il est appelé : il reste là", () => {
     const { trail } = run(VISIBLE, 0, 10_000, { 1000: "leave", 2000: "wake" });
     expect(kindsOf(trail)).toEqual(["visible", "yawning", "visible"]);
+  });
+});
+
+describe("M : il part tout de suite au lancement de l'émission (évènement depart)", () => {
+  it("glisse aussitôt, sans bâiller, depuis visible, avec son dernier silence gardé", () => {
+    const visible: PresenceState = { kind: "visible", since: 0, spokeAt: 7 };
+    expect(toNextPresence(visible, { now: 5000, event: "depart" }, rules)).toEqual({
+      kind: "leaving",
+      since: 5000,
+      spokeAt: 7,
+    });
+  });
+
+  it("glisse aussitôt depuis le bâillement ou le saut de retour, sans attendre la fin de la phase", () => {
+    const yawning: PresenceState = { kind: "yawning", since: THREE_MINUTES, spokeAt: 40 };
+    expect(toNextPresence(yawning, { now: THREE_MINUTES + 500, event: "depart" }, rules)).toEqual({
+      kind: "leaving",
+      since: THREE_MINUTES + 500,
+      spokeAt: 40,
+    });
+    const returning: PresenceState = { kind: "returning", since: 1000, spokeAt: 1000 };
+    expect(toNextPresence(returning, { now: 1200, event: "depart" }, rules)).toEqual({
+      kind: "leaving",
+      since: 1200,
+      spokeAt: 1000,
+    });
+  });
+
+  it("ne change rien quand il glisse déjà ou qu'il est déjà parti", () => {
+    const leaving: PresenceState = { kind: "leaving", since: 100, spokeAt: 0 };
+    expect(toNextPresence(leaving, { now: 200, event: "depart" }, rules)).toEqual(leaving);
+    const away: PresenceState = { kind: "away", since: 100, spokeAt: 0 };
+    expect(toNextPresence(away, { now: 200, event: "depart" }, rules)).toEqual(away);
+  });
+
+  it("glisse 1,5 s puis est parti, sans jamais bâiller", () => {
+    const { trail } = run(VISIBLE, 0, 10_000, { 1000: "depart" });
+    expect(kindsOf(trail)).toEqual(["visible", "leaving", "away"]);
+    const at = (kind: string) => trail.find(({ state }) => state.kind === kind)?.now;
+    expect(at("leaving")).toBe(1000);
+    expect(at("away")).toBe(2500);
+  });
+
+  it("revient comme d'habitude quand on le réveille ensuite", () => {
+    const { trail } = run(VISIBLE, 0, 8000, { 1000: "depart", 5000: "wake" });
+    expect(kindsOf(trail)).toEqual(["visible", "leaving", "away", "returning", "visible"]);
+  });
+});
+
+describe("toAwayIn : dans combien de ms il est hors de l'écran", () => {
+  it("le reste de la descente quand il glisse, 0 une fois la descente finie", () => {
+    const leaving: PresenceState = { kind: "leaving", since: 1000, spokeAt: 0 };
+    expect(toAwayIn(leaving, 1000, rules)).toBe(1500);
+    expect(toAwayIn(leaving, 1400, rules)).toBe(1100);
+    expect(toAwayIn(leaving, 2500, rules)).toBe(0);
+    expect(toAwayIn(leaving, 9000, rules)).toBe(0);
+  });
+
+  it("tout de suite quand il est parti", () => {
+    expect(toAwayIn({ kind: "away", since: 0, spokeAt: 0 }, 5, rules)).toBe(0);
+  });
+
+  it("la descente entière quand il est visible, qu'il bâille ou qu'il revient : il partirait maintenant", () => {
+    expect(toAwayIn(VISIBLE, 5, rules)).toBe(1500);
+    expect(toAwayIn({ kind: "yawning", since: 0, spokeAt: 0 }, 5, rules)).toBe(1500);
+    expect(toAwayIn({ kind: "returning", since: 0, spokeAt: 0 }, 5, rules)).toBe(1500);
+  });
+});
+
+describe("isDeparting : il joue sa sortie", () => {
+  const pose = (kind: "visible" | "leaving" | "away" | "returning", elapsed: number) => ({
+    kind,
+    elapsed,
+    from: IDLE_PLACE,
+  });
+
+  it("l'est tant que la descente dure : s'accroupir, sauter et plonger (1,5 s en tout)", () => {
+    expect(isDeparting(pose("leaving", 0), curves)).toBe(true);
+    expect(isDeparting(pose("leaving", 299), curves)).toBe(true);
+    expect(isDeparting(pose("leaving", 1499), curves)).toBe(true);
+  });
+
+  it("ne l'est plus à la fin du plongeon, ni après", () => {
+    expect(isDeparting(pose("leaving", 1500), curves)).toBe(false);
+    expect(isDeparting(pose("leaving", 9999), curves)).toBe(false);
+  });
+
+  it("ne l'est pas hors de la phase leaving", () => {
+    expect(isDeparting(pose("visible", 100), curves)).toBe(false);
+    expect(isDeparting(pose("away", 100), curves)).toBe(false);
+    expect(isDeparting(pose("returning", 100), curves)).toBe(false);
+  });
+
+  it("suit les durées réglées : un plongeon plus court finit plus tôt", () => {
+    expect(isDeparting(pose("leaving", 1100), { ...curves, diveMs: 400 })).toBe(false);
+    expect(isDeparting(pose("leaving", 1100), curves)).toBe(true);
+  });
+});
+
+describe("isHiddenByShow : /fox et l'aperçu cèdent le renard à /show", () => {
+  const pose = (kind: "visible" | "leaving" | "away" | "returning", elapsed: number) => ({
+    kind,
+    elapsed,
+    from: IDLE_PLACE,
+  });
+
+  it("le montrent tant que l'émission ne passe pas, quelle que soit sa pose", () => {
+    expect(isHiddenByShow(false, pose("visible", 0), curves)).toBe(false);
+    expect(isHiddenByShow(false, pose("leaving", 100), curves)).toBe(false);
+    expect(isHiddenByShow(false, pose("away", 0), undefined)).toBe(false);
+  });
+
+  it("le montrent pendant sa sortie quand l'émission passe : il joue son plongeon", () => {
+    expect(isHiddenByShow(true, pose("leaving", 0), curves)).toBe(false);
+    expect(isHiddenByShow(true, pose("leaving", 1499), curves)).toBe(false);
+  });
+
+  it("le cachent une fois sa sortie jouée", () => {
+    expect(isHiddenByShow(true, pose("leaving", 1500), curves)).toBe(true);
+    expect(isHiddenByShow(true, pose("away", 0), curves)).toBe(true);
+  });
+
+  it("le cachent aussitôt quand il n'était pas en train de partir", () => {
+    expect(isHiddenByShow(true, pose("visible", 0), curves)).toBe(true);
+    expect(isHiddenByShow(true, pose("returning", 100), curves)).toBe(true);
+  });
+
+  it("le cachent aussitôt sans les temps de sa sortie : les règles ne sont pas arrivées", () => {
+    expect(isHiddenByShow(true, pose("leaving", 100), undefined)).toBe(true);
   });
 });
 

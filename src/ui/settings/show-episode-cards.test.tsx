@@ -33,6 +33,7 @@ const running: ShowState = {
   ],
   phase: "clip",
   index: 1,
+  startsAt: 0,
 };
 
 describe("les cartes de l'émission", () => {
@@ -63,6 +64,12 @@ describe("les cartes de l'émission", () => {
     expect(html).toContain("Phrases de clôture");
     expect(html).toContain("Adieu.");
   });
+
+  it("montre les phrases de coupure, une par ligne, dans la carte des phrases de Jean-Renard", () => {
+    const html = render(IDLE_SHOW, { showGrumblePhrases: ["Hé !", "Rends-moi mon émission."] });
+    expect(html).toContain("Phrases si l&#x27;émission est coupée");
+    expect(html).toContain("Hé !\nRends-moi mon émission.");
+  });
 });
 
 describe("les réglages de l'émission", () => {
@@ -74,7 +81,20 @@ describe("les réglages de l'émission", () => {
     );
   });
 
-  it("écrivent les deux listes de phrases dans l'ordre : ouverture, clôture", () => {
-    expect(SHOW_LISTS.map(({ key }) => key)).toEqual(["showOpeningPhrases", "showClosingPhrases"]);
+  it("écrivent les trois listes de phrases dans l'ordre : ouverture, clôture, coupure", () => {
+    expect(SHOW_LISTS.map(({ key }) => key)).toEqual([
+      "showOpeningPhrases",
+      "showClosingPhrases",
+      "showGrumblePhrases",
+    ]);
+  });
+
+  it("décrivent la liste des phrases de coupure : son nom, son aide et ses 4 lignes", () => {
+    expect(SHOW_LISTS[2]).toEqual({
+      key: "showGrumblePhrases",
+      label: "Phrases si l'émission est coupée",
+      help: "Une phrase par ligne. Jean-Renard en dit une sur /fox, tourné vers Fenysk, quand l'émission est coupée en cours (la source /show cachée), au hasard, sans répéter avant d'avoir tout dit.",
+      rows: 4,
+    });
   });
 });

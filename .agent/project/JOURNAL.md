@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-17 — Jean-Renard glisse hors de `/fox` avant l'émission, et râle (`grumble`) quand Alexis la coupe
+
+**Contexte.** Au lancement de l'émission, Jean-Renard disparaissait d'un coup de `/fox` ; coupée en cours, elle le rendait à `/fox` sans un mot.
+**Décision.** Au début, sa présence passe à `leaving` sans bâiller (évènement `depart`), `/fox` le cache une fois la sortie jouée, et `ShowState.startsAt` (la fin de la sortie) fait attendre l'ouverture de `/show`. Toute fin, sauf l'arrêt du serveur, le fait revenir en sautant ; la source `/show` cachée en pleine émission fait passer d'abord dans la file une phrase de `showGrumblePhrases` (réglage nouveau, onglet Émission), tournée vers Fenysk, avant les remerciements gardés. `lexique.json` : nouveau nom `grumble`.
+**Renoncement.** Retarder l'état « en cours » jusqu'à la fin de la sortie : une source cachée pendant la sortie aurait demandé un état de plus. Une durée réglable : la sortie dure `foxCrouchDuration + foxJumpDuration + foxDiveDuration`, comme hors émission.
+
 ## 2026-10-17 — Un curseur règle la force des rires d'un clip : `laughFader` entre dans son JSON
 
 **Contexte.** Au premier test, les rires couvraient le son du clip ; Alexis veut un seul curseur, simple et bien placé.

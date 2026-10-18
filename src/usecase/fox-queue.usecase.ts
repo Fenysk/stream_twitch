@@ -11,7 +11,7 @@ type MicKind = "shout" | "tunnel" | "comeback" | "balance";
 // d'heure du live, ou le bilan du live. `label` nomme l'entrée dans le journal (« message de Alice »). Un message garde de quoi
 // la retirer quand la modération le supprime.
 export type QueueItem = {
-  kind: "message" | "thanks" | "jab" | "reminder" | MicKind | "hours" | "review";
+  kind: "message" | "thanks" | "jab" | "reminder" | MicKind | "hours" | "review" | "grumble";
   label: string;
   text: string;
   messageId?: string | undefined;
@@ -53,8 +53,8 @@ export type FoxQueue = {
   // L'émission passe : la lecture en cours s'arrête et rien n'est plus lu avant `release`. Les remerciements (`thanks`, dont les
   // phrases des récompenses) attendent la fin de l'émission, le reste est jeté (`onDone(false)`), même ce qui arrive pendant.
   hold(): void;
-  // L'émission est finie : les remerciements gardés se disent, dans l'ordre.
-  release(): void;
+  // L'émission est finie : les remerciements gardés se disent, dans l'ordre. Avec `first`, cette entrée se dit avant eux.
+  release(first?: QueueItem): void;
 };
 
 // Le silence entre deux entrées lues : la page met un instant à charger le WAV, et le renard reprend son souffle.
@@ -231,12 +231,13 @@ export function createFoxQueue({
       for (const item of lost) drop(item);
       log(`Renard : l'émission commence, ${waiting.length} remerciement(s) attendent sa fin.`);
     },
-    release() {
+    release(first) {
       if (!isHeld) return;
       isHeld = false;
       log(
         `Renard : l'émission est finie, ${waiting.length} remerciement(s) à dire, ${dropped} entrée(s) jetée(s) pendant.`,
       );
+      if (first) waiting.unshift({ ...first, queuedAt: clock() });
       startNext();
     },
     count: (isCounted) => waiting.filter(isCounted).length + (current && isCounted(current.item) ? 1 : 0),

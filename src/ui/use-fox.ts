@@ -14,6 +14,7 @@ import { toFoxTransform } from "../domain/fox-transform.rules";
 import { NO_JOY, toJoyBody } from "../domain/joy.rules";
 import { MIRROR_START, toMirrorScale, toNextMirror } from "../domain/mirror.rules";
 import {
+  isHiddenByShow,
   type PresencePose,
   toNextPose,
   toPresenceBody,
@@ -40,7 +41,7 @@ type FoxLoopDeps = {
   body: () => HTMLElement | null;
   onImage: (image: FoxImage) => void;
   onMuted: (isMuted: boolean) => void;
-  // L'émission passe : le renard n'est plus à montrer ici (`/fox` et l'aperçu), il est dans `/show`.
+  // L'émission passe : le renard n'est plus à montrer ici (`/fox` et l'aperçu), il est dans `/show`, une fois sa sortie jouée.
   onHidden: (isHidden: boolean) => void;
 };
 
@@ -71,6 +72,9 @@ const startFox = ({ place, body, onImage, onMuted, onHidden }: FoxLoopDeps): Fox
       ? SHOW_POSE
       : { kind: toPresenceView(toStartPresence(0)), elapsed: 0, from: { offset: 0, angle: 0 } };
   let poseAt = 0;
+  // L'émission passe (le serveur le dit), et ce que la page en a fait : `onHidden` n'est appelé que quand cela change.
+  let isShowOn = false;
+  let isHidden = false;
   let shown: FoxImage | undefined;
   const output = getSoundOutput();
   const player =
@@ -94,6 +98,14 @@ const startFox = ({ place, body, onImage, onMuted, onHidden }: FoxLoopDeps): Fox
   };
 
   const currentPose = (now: number): PresencePose => ({ ...pose, elapsed: pose.elapsed + now - poseAt });
+
+  // Il joue sa sortie avant de laisser la place à `/show` ; sans les règles, il est caché tout de suite.
+  const updateHidden = (now: number) => {
+    const next = isHiddenByShow(isShowOn, currentPose(now), rules);
+    if (next === isHidden) return;
+    isHidden = next;
+    onHidden(next);
+  };
 
   const source = new EventSource(toFoxEventsUrl(place));
   source.onmessage = (message: MessageEvent<string>) => {
@@ -131,9 +143,10 @@ const startFox = ({ place, body, onImage, onMuted, onHidden }: FoxLoopDeps): Fox
         break;
       }
       case "show":
-        // Le renard passe dans `/show` : ici il se tait et se cache, le serveur ne lui envoie plus de phrase.
+        // Le renard passe dans `/show` : ici il se tait et, sa sortie jouée, se cache ; le serveur ne lui envoie plus de phrase.
         if (foxEvent.isOn) player?.stop();
-        onHidden(foxEvent.isOn);
+        isShowOn = foxEvent.isOn;
+        updateHidden(performance.now());
         break;
     }
   };
@@ -141,6 +154,7 @@ const startFox = ({ place, body, onImage, onMuted, onHidden }: FoxLoopDeps): Fox
   let animation = 0;
   const tick = (now: number) => {
     animation = requestAnimationFrame(tick);
+    updateHidden(now);
     if (!isReady || !rules) return;
     state = toNextFox({
       previous: state,

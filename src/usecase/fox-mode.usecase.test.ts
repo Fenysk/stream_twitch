@@ -1055,6 +1055,69 @@ describe("H : il démarre caché", () => {
   });
 });
 
+describe("H : il part tout de suite au lancement de l'émission", () => {
+  it("glisse aussitôt sans bâiller, puis est parti 1,5 s plus tard, et rend ce temps", async () => {
+    const harness = build();
+    await harness.run(1000);
+    const since = harness.events.length;
+    expect(harness.mode.depart()).toBe(1500);
+    expect(harness.timeline(since)).toEqual([{ at: 1000, label: "presence:leaving" }]);
+    await harness.run(1500);
+    expect(harness.timeline(since)).toEqual([
+      { at: 1000, label: "presence:leaving" },
+      { at: 2500, label: "presence:away" },
+    ]);
+  });
+
+  it("interrompt son bâillement : il glisse tout de suite, et ne bâille plus", async () => {
+    const harness = build();
+    await harness.run(180_500);
+    const since = harness.events.length;
+    expect(harness.mode.depart()).toBe(1500);
+    expect(harness.timeline(since).map(({ label: name }) => name)).toEqual(["presence:leaving", "mode:idle"]);
+    await harness.run(3000);
+    expect(harness.timeline(since).map(({ label: name }) => name)).toEqual([
+      "presence:leaving",
+      "mode:idle",
+      "presence:away",
+    ]);
+  });
+
+  it("rend le reste de la descente quand il glisse déjà, sans rien republier", async () => {
+    const harness = build();
+    await harness.run(182_500);
+    const since = harness.events.length;
+    expect(harness.mode.depart()).toBe(1000);
+    expect(harness.timeline(since)).toEqual([]);
+  });
+
+  it("rend 0 quand il est déjà parti, sans rien publier", async () => {
+    const harness = build();
+    await harness.run(AWAY_AT);
+    const since = harness.events.length;
+    expect(harness.mode.depart()).toBe(0);
+    expect(harness.timeline(since)).toEqual([]);
+  });
+
+  it("rend 0 sans les réglages du renard, sans rien publier", async () => {
+    const harness = build();
+    harness.mode.update({ obsAddress: settings.obsAddress, micName: "x", threshold: -40, delay: 250 });
+    const since = harness.events.length;
+    expect(harness.mode.depart()).toBe(0);
+    expect(harness.timeline(since)).toEqual([]);
+  });
+
+  it("revient en sautant quand un message l'appelle ensuite", async () => {
+    const harness = build();
+    await harness.run(1000);
+    harness.mode.depart();
+    await harness.run(5000);
+    const since = harness.events.length;
+    expect(harness.mode.wake()).toBe(800);
+    expect(harness.timeline(since)).toEqual([{ at: 6000, label: "presence:returning" }]);
+  });
+});
+
 describe("le contrôleur : démarrage, arrêt et sans réglages", () => {
   it("n'a plus rien de programmé après l'arrêt, et n'écoute plus le micro", async () => {
     const harness = build();

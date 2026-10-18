@@ -1,5 +1,5 @@
 // Les cartes de l'onglet « Émission » qui règlent l'émission : où elle en est et combien de clips elle passe, puis les phrases de
-// Jean-Renard au début et à la fin. L'onglet garde les réglages et l'état ; ces cartes ne font qu'afficher.
+// Jean-Renard au début, à la fin et quand elle est coupée. L'onglet garde les réglages et l'état ; ces cartes ne font qu'afficher.
 
 import type { ShowState } from "../../domain/show.schema";
 import { toShowStatusText } from "../clips/clip-text";
