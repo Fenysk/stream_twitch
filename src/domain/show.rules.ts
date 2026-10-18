@@ -66,7 +66,7 @@ export const toRecordedDay = ({ rawName, confirmedAt }: { rawName: string; confi
 // Le bandeau de l'ouverture et celui de la clôture : le petit texte au-dessus, puis le titre en gros. Celui d'un clip porte le jour de
 // son enregistrement puis son titre.
 export const OPENING_BANNER = { kicker: "Ce soir", title: "Les bêtises de Fenysk" } as const;
-export const CLOSING_BANNER = { kicker: "Fin de l'émission", title: "À la prochaine bêtise" } as const;
+export const CLOSING_BANNER = { kicker: "Fin de l'émission", title: "À la prochaine !" } as const;
 
 // La phrase des rires d'avant les phrases de fin : un JSON de clip avec des rires et sans `endPhrase` la reçoit à la lecture
 // (`toEndPhraseJson`). Elle ne sert plus qu'à ça.

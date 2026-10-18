@@ -51,7 +51,7 @@ describe("la page de l'émission", () => {
   it("montre le bandeau de l'ouverture et de la clôture, avec Jean-Renard grand à droite, sans vidéo", () => {
     for (const [kind, title] of [
       ["opening", "Les bêtises de Fenysk"],
-      ["closing", "À la prochaine bêtise"],
+      ["closing", "À la prochaine !"],
     ] as const) {
       state.view = { kind };
       const html = render();
