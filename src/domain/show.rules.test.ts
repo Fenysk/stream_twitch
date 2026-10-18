@@ -25,6 +25,8 @@ import {
   toRecordedDay,
   toRemainingMs,
   toShowFader,
+  toShowLengthMs,
+  toShowLengthText,
 } from "./show.rules";
 
 describe("toLineup", () => {
@@ -209,6 +211,114 @@ describe("le retour de Fenysk", () => {
       expect(toCountdownText(1)).toBe("Retour de Fenysk dans moins d'une minute");
       expect(toCountdownText(0)).toBe("Retour de Fenysk dans moins d'une minute");
       expect(toCountdownText(-5000)).toBe("Retour de Fenysk dans moins d'une minute");
+    });
+  });
+});
+
+describe("la durée de l'émission", () => {
+  // La phrase estimée donne : carton 6000 ms, phrase des rires 6000 ms, ouverture et clôture 6200 ms chacune (12 400 ms les deux).
+  const LINES = 12_400;
+  const LAUGH = { at: 2000, sound: "rires001" };
+  const clip = (name: string, playCount: number, durationMs: number, laughs: readonly unknown[] = []) => ({
+    name,
+    playCount,
+    durationMs,
+    laughs,
+  });
+
+  describe("toShowLengthMs", () => {
+    it("Quand les clips ont été passés autant de fois et que leurs durées diffèrent, le système doit donner la fourchette : les clips les plus courts, puis les plus longs", () => {
+      // Un clip pèse 6000 de carton plus sa durée : 16 000, 26 000, 36 000 et 46 000.
+      const candidates = [
+        clip("a", 0, 30_000),
+        clip("b", 0, 10_000),
+        clip("c", 0, 40_000),
+        clip("d", 0, 20_000),
+      ];
+      expect(toShowLengthMs(candidates, 2)).toEqual({
+        shortestMs: LINES + 16_000 + 26_000,
+        longestMs: LINES + 36_000 + 46_000,
+      });
+    });
+
+    it("Quand un clip a des rires, le système doit compter la phrase des rires dans sa longueur, pas seulement sa durée", () => {
+      // Le clip a est le plus court par sa durée (28 s contre 30 s) mais pèse 6000 + 28 000 + 6000 = 40 000 contre 36 000.
+      const candidates = [clip("a", 0, 28_000, [LAUGH]), clip("b", 0, 30_000)];
+      expect(toShowLengthMs(candidates, 1)).toEqual({
+        shortestMs: LINES + 36_000,
+        longestMs: LINES + 40_000,
+      });
+    });
+
+    it("Quand un clip n'a pas de rire, le système doit compter son carton et sa durée, sans phrase des rires", () => {
+      expect(toShowLengthMs([clip("a", 0, 10_000)], 1)).toEqual({
+        shortestMs: LINES + 16_000,
+        longestMs: LINES + 16_000,
+      });
+      expect(toShowLengthMs([clip("a", 0, 10_000, [LAUGH])], 1)).toEqual({
+        shortestMs: LINES + 22_000,
+        longestMs: LINES + 22_000,
+      });
+    });
+
+    it("Quand les clips ont des passages différents, le système doit donner un seul tirage possible : les moins passés, jamais les autres", () => {
+      // Seuls a et b viennent : c a été passé plus de fois que le seuil, même s'il est le plus court.
+      const candidates = [clip("a", 0, 10_000), clip("b", 1, 50_000), clip("c", 2, 1000)];
+      const length = LINES + 16_000 + 56_000;
+      expect(toShowLengthMs(candidates, 2)).toEqual({ shortestMs: length, longestMs: length });
+    });
+
+    it("Quand le seuil de passages ne départage qu'une partie des clips, le système doit garder les moins passés et tirer le reste parmi les ex æquo du seuil", () => {
+      // a vient toujours (moins passé) ; b, c et d sont à égalité au seuil et il en faut deux ; e n'a aucune chance.
+      const candidates = [
+        clip("e", 2, 5000),
+        clip("c", 1, 30_000),
+        clip("a", 0, 20_000),
+        clip("d", 1, 50_000),
+        clip("b", 1, 10_000),
+      ];
+      expect(toShowLengthMs(candidates, 3)).toEqual({
+        shortestMs: LINES + 26_000 + 16_000 + 36_000,
+        longestMs: LINES + 26_000 + 36_000 + 56_000,
+      });
+    });
+
+    it("Quand il y a moins de clips que demandé, le système doit les compter tous", () => {
+      const candidates = [clip("a", 0, 10_000), clip("b", 3, 20_000)];
+      const length = LINES + 16_000 + 26_000;
+      expect(toShowLengthMs(candidates, 5)).toEqual({ shortestMs: length, longestMs: length });
+    });
+
+    it("Quand il n'y a aucun clip, ou aucun demandé, le système doit compter l'ouverture et la clôture seules", () => {
+      expect(toShowLengthMs([], 5)).toEqual({ shortestMs: LINES, longestMs: LINES });
+      expect(toShowLengthMs([clip("a", 0, 10_000)], 0)).toEqual({ shortestMs: LINES, longestMs: LINES });
+    });
+
+    it("Quand il calcule la fourchette, le système doit laisser la liste qu'on lui donne telle quelle", () => {
+      const candidates = [clip("b", 1, 10_000), clip("a", 0, 20_000)];
+      toShowLengthMs(candidates, 1);
+      expect(candidates.map(({ name }) => name)).toEqual(["b", "a"]);
+    });
+  });
+
+  describe("toShowLengthText", () => {
+    it("Quand les deux durées arrondies à la minute sont égales, le système doit dire une seule durée", () => {
+      expect(toShowLengthText({ shortestMs: 360_000, longestMs: 360_000 })).toBe("Durée estimée : 6 min");
+      expect(toShowLengthText({ shortestMs: 336_000, longestMs: 384_000 })).toBe("Durée estimée : 6 min");
+    });
+
+    it("Quand elles diffèrent, le système doit dire la fourchette en minutes", () => {
+      expect(toShowLengthText({ shortestMs: 300_000, longestMs: 420_000 })).toBe("Durée estimée : 5 à 7 min");
+    });
+
+    it("Quand une durée tombe entre deux minutes, le système doit l'arrondir à la plus proche", () => {
+      expect(toShowLengthText({ shortestMs: 329_999, longestMs: 329_999 })).toBe("Durée estimée : 5 min");
+      expect(toShowLengthText({ shortestMs: 330_000, longestMs: 330_000 })).toBe("Durée estimée : 6 min");
+    });
+
+    it("Quand une durée fait moins de 30 s, le système doit dire 1 min, jamais 0", () => {
+      expect(toShowLengthText({ shortestMs: 12_400, longestMs: 12_400 })).toBe("Durée estimée : 1 min");
+      expect(toShowLengthText({ shortestMs: 12_400, longestMs: 150_000 })).toBe("Durée estimée : 1 à 3 min");
     });
   });
 });

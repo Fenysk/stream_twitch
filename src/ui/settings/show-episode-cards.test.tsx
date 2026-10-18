@@ -1,19 +1,23 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import type { ConfirmedSummary } from "../../domain/clip.schema";
 import type { EditableSettings } from "../../domain/settings.schema";
 import { IDLE_SHOW, type ShowState } from "../../domain/show.schema";
 import { EpisodeCards } from "./show-episode-cards";
 import { SHOW_CLIP_COUNT_SLIDER, SHOW_LISTS } from "./show-fields";
 import type { UseSettings } from "./use-settings";
 
-const settings = (effective: Partial<EditableSettings> | null): UseSettings => ({
+const settings = (
+  effective: Partial<EditableSettings> | null,
+  drafts: UseSettings["drafts"] = {},
+): UseSettings => ({
   view: effective && {
     defaults: { threshold: -40 },
     local: {},
     effective: { threshold: -40, ...effective },
   },
-  drafts: {},
+  drafts,
   errors: { byKey: {}, general: [] },
   edit: () => undefined,
   choose: async () => undefined,
@@ -21,8 +25,29 @@ const settings = (effective: Partial<EditableSettings> | null): UseSettings => (
   reset: async () => undefined,
 });
 
-const render = (state: ShowState, effective: Partial<EditableSettings> | null): string =>
-  renderToStaticMarkup(createElement(EpisodeCards, { state, settings: settings(effective) }));
+const render = (
+  state: ShowState,
+  effective: Partial<EditableSettings> | null,
+  confirmed: readonly ConfirmedSummary[] | null = null,
+  drafts: UseSettings["drafts"] = {},
+): string =>
+  renderToStaticMarkup(
+    createElement(EpisodeCards, { state, settings: settings(effective, drafts), confirmed }),
+  );
+
+// Un clip confirmé dont la partie gardée dure `end - start` secondes.
+const confirmedClip = (name: string, overrides: Partial<ConfirmedSummary> = {}): ConfirmedSummary => ({
+  name,
+  title: name,
+  phrase: "",
+  start: 0,
+  end: 60,
+  rawName: name,
+  processedName: null,
+  confirmedAt: "2026-10-16T10:00:00.000Z",
+  version: "1-1",
+  ...overrides,
+});
 
 const running: ShowState = {
   status: "running",
@@ -34,6 +59,7 @@ const running: ShowState = {
   phase: "clip",
   index: 1,
   startsAt: 0,
+  returnAt: 0,
   showFader: 100,
 };
 
@@ -70,6 +96,62 @@ describe("les cartes de l'émission", () => {
     const html = render(IDLE_SHOW, { showGrumblePhrases: ["Hé !", "Rends-moi mon émission."] });
     expect(html).toContain("Phrases si l&#x27;émission est coupée");
     expect(html).toContain("Hé !\nRends-moi mon émission.");
+  });
+});
+
+describe("la durée estimée sous le nombre de clips", () => {
+  // Un clip pèse 6000 de carton plus sa partie gardée (plus 6000 de phrase des rires s'il en a) ; l'ouverture et la clôture 12 400.
+  const clips = [
+    confirmedClip("a.mp4", { end: 120 }),
+    confirmedClip("b.mp4", { end: 60 }),
+    confirmedClip("c.mp4", { start: 10, end: 40 }),
+  ];
+
+  it("Quand les clips confirmés sont lus, le système doit dire sous le curseur la durée de l'émission : la fourchette du tirage le plus court au plus long", () => {
+    // Deux clips parmi trois jamais passés : 36 000 + 66 000 au plus court, 126 000 + 66 000 au plus long.
+    const html = render(IDLE_SHOW, { showClipCount: 2 }, clips);
+    expect(html).toContain("Durée estimée : 2 à 3 min");
+    expect(html.indexOf("Clips par émission")).toBeLessThan(html.indexOf("Durée estimée"));
+  });
+
+  it("Quand le curseur bouge, le système doit suivre le geste en cours (le brouillon), pas seulement le réglage enregistré", () => {
+    const html = render(IDLE_SHOW, { showClipCount: 2 }, clips, { showClipCount: 3 });
+    expect(html).toContain("Durée estimée : 4 min");
+    expect(html).not.toContain("2 à 3 min");
+  });
+
+  it("Quand le réglage n'a pas de valeur, le système doit compter les 5 clips par défaut", () => {
+    expect(render(IDLE_SHOW, {}, clips)).toContain("Durée estimée : 4 min");
+  });
+
+  it("Quand un clip a été plus passé que le seuil, le système doit l'écarter du calcul", () => {
+    const html = render(IDLE_SHOW, { showClipCount: 1 }, [
+      confirmedClip("a.mp4", { end: 60 }),
+      confirmedClip("b.mp4", { end: 600, playCount: 5 }),
+    ]);
+    expect(html).toContain("Durée estimée : 1 min");
+  });
+
+  it("Quand un clip a des rires dans sa partie gardée, le système doit compter la phrase des rires, pas ceux d'avant son début", () => {
+    // 126,6 s gardées : 12 400 + 6000 + 126 600 = 145 000 ms sans phrase des rires (2 min), 151 000 avec (3 min).
+    const laugh = (at: number) => ({ laughs: [{ at, sound: "rires001" }] });
+    const render126 = (clip: ConfirmedSummary) => render(IDLE_SHOW, { showClipCount: 1 }, [clip]);
+    expect(render126(confirmedClip("a.mp4", { end: 126.6 }))).toContain("Durée estimée : 2 min");
+    expect(render126(confirmedClip("a.mp4", { end: 126.6, ...laugh(20) }))).toContain(
+      "Durée estimée : 3 min",
+    );
+    expect(render126(confirmedClip("a.mp4", { start: 10, end: 136.6, ...laugh(5) }))).toContain(
+      "Durée estimée : 2 min",
+    );
+  });
+
+  it("Quand la liste des clips n'est pas encore lue, ou vide, le système doit ne rien estimer", () => {
+    expect(render(IDLE_SHOW, { showClipCount: 2 }, null)).not.toContain("Durée estimée");
+    expect(render(IDLE_SHOW, { showClipCount: 2 }, [])).not.toContain("Durée estimée");
+  });
+
+  it("Quand les réglages ne sont pas là, le système doit ne rien estimer", () => {
+    expect(render(IDLE_SHOW, null, clips)).not.toContain("Durée estimée");
   });
 });
 

@@ -90,6 +90,7 @@ describe("toShowStatusText", () => {
     phase,
     index,
     startsAt: 0,
+    returnAt: 0,
     showFader: 100,
   });
 

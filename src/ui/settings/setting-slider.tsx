@@ -7,16 +7,22 @@ import type { UseSettings } from "./use-settings";
 
 type SettingSliderProps = { spec: SliderSpec; settings: UseSettings; effective: EditableSettings };
 
+// La valeur que montre le curseur : le geste en cours (brouillon), sinon le réglage appliqué, calée sur un cran.
+export const toSliderValue = (
+  spec: SliderSpec,
+  { drafts }: UseSettings,
+  effective: EditableSettings,
+): number => toNearestStep(spec, spec.key in drafts ? drafts[spec.key] : effective[spec.key]);
+
 export const SettingSlider = ({ spec, settings, effective }: SettingSliderProps) => {
   const { key } = spec;
-  const chosen = key in settings.drafts ? settings.drafts[key] : effective[key];
   const error = settings.errors.byKey[key];
   return (
     <div className="settings-slider">
       <Slider
         label={spec.label}
         steps={spec.steps}
-        value={toNearestStep(spec, chosen)}
+        value={toSliderValue(spec, settings, effective)}
         onMove={(value) => settings.edit(key, value)}
         onPick={(value) => settings.edit(key, value)}
       />

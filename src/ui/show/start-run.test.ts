@@ -48,6 +48,7 @@ const state: ShowState = {
   phase: "opening",
   index: 0,
   startsAt: 0,
+  returnAt: 0,
   showFader: 100,
 };
 
@@ -55,18 +56,16 @@ const state: ShowState = {
 const setup = (shown: ShowState = state) => {
   const views: ShowView[] = [];
   const modes: FoxMode[] = [];
-  const returnAts: number[] = [];
   const foxFaders: number[] = [];
   const run = startRun(shown, {
     videoOf: () => null,
     setView: (view) => views.push(view),
-    setReturnAt: (at) => returnAts.push(at),
     addChat: () => undefined,
     clearChat: () => undefined,
     setFoxMode: (mode) => modes.push(mode),
     setFoxFader: (fader) => foxFaders.push(fader),
   });
-  return { run, views, modes, returnAts, foxFaders };
+  return { run, views, modes, foxFaders };
 };
 
 const reported = () => vi.mocked(reportShowProgress).mock.calls.map(([progress]) => progress);
@@ -96,17 +95,19 @@ describe("startRun", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("donne à la page l'instant estimé du retour de Fenysk à chaque temps, et rien de plus une fois arrêtée", async () => {
-    const startedAt = Date.now();
-    const { run, returnAts } = setup();
+  it("dit au serveur chaque temps avec le numéro de l'émission, de quoi estimer le retour de Fenysk, et plus rien une fois arrêtée", async () => {
+    const { run } = setup();
     await vi.advanceTimersByTimeAsync(0);
-    // Ouverture 6200 + le clip (carton 6000 + 10 000, sans rire) + clôture 6200 : le clip ne se lit pas, la clôture le recalcule.
-    expect(returnAts).toEqual([startedAt + 28_400]);
+    expect(reported()).toEqual([{ runId: "run1", phase: "opening", index: 0 }]);
+    // Le clip ne se lit pas : l'ouverture finie (2,5 s), la clôture suit.
     await vi.advanceTimersByTimeAsync(2500);
-    expect(returnAts).toEqual([startedAt + 28_400, startedAt + 2500 + 6200]);
+    expect(reported()).toEqual([
+      { runId: "run1", phase: "opening", index: 0 },
+      { runId: "run1", phase: "closing", index: 0 },
+    ]);
     run.stop();
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(returnAts).toHaveLength(2);
+    expect(reported()).toHaveLength(2);
   });
 
   it("calme Jean-Renard quand l'émission s'arrête", () => {
@@ -211,7 +212,6 @@ describe("startRun : un clip qui joue", () => {
     const run = startRun(laughing, {
       videoOf: () => video,
       setView: (view) => events.push(`vue ${view.kind}`),
-      setReturnAt: () => undefined,
       addChat: (messages) => {
         if (messages.length > 0) events.push(`tchat ${messages.map(({ id }) => id).join(",")}`);
       },
@@ -346,7 +346,6 @@ describe("startRun : le fader du son de l'émission", () => {
       {
         videoOf: (slot) => videos[slot] ?? null,
         setView: () => undefined,
-        setReturnAt: () => undefined,
         addChat: () => undefined,
         clearChat: () => undefined,
         setFoxMode: () => undefined,
@@ -565,7 +564,6 @@ describe("startRun : le fader de l'émission sur de vrais rires", () => {
       {
         videoOf: (slot) => videos[slot] ?? null,
         setView: () => undefined,
-        setReturnAt: () => undefined,
         addChat: () => undefined,
         clearChat: () => undefined,
         setFoxMode: () => undefined,

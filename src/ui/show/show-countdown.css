@@ -1,0 +1,39 @@
+/* La page `/countdown` : transparente hors émission ; pendant elle, une pill à gauche, centrée en hauteur. Source OBS d'environ 800 × 100 :
+   tailles en vw, la pill suit la largeur de la source. */
+
+.show-countdown {
+  --countdown-fade: 0.8s; /* le même fondu que /show (--show-fade) */
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding-left: 1vw;
+  overflow: hidden;
+  color: var(--ink);
+}
+
+.show-countdown-fade {
+  opacity: 0;
+  transition: opacity var(--countdown-fade) ease;
+}
+
+.show-countdown-fade.is-visible {
+  opacity: 1;
+}
+
+.show-countdown-pill {
+  --pill-opacity: 88%;
+  box-sizing: border-box;
+  padding: 0.8vw 2vw;
+  border-radius: 3.2vw;
+}
+
+.show-countdown-text {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 4vw;
+  line-height: 1.2;
+  font-weight: 800;
+  white-space: nowrap;
+}

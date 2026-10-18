@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ChatRouteImport } from './routes/chat'
+import { Route as CountdownRouteImport } from './routes/countdown'
 import { Route as FoxRouteImport } from './routes/fox'
 import { Route as HeadRouteImport } from './routes/head'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -34,6 +35,11 @@ const IndexRoute = IndexRouteImport.update({
 const ChatRoute = ChatRouteImport.update({
   id: '/chat',
   path: '/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CountdownRoute = CountdownRouteImport.update({
+  id: '/countdown',
+  path: '/countdown',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FoxRoute = FoxRouteImport.update({
@@ -110,6 +116,7 @@ const SettingsTwitchRoute = SettingsTwitchRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
+  '/countdown': typeof CountdownRoute
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -128,6 +135,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
+  '/countdown': typeof CountdownRoute
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
   '/show': typeof ShowRoute
@@ -146,6 +154,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
+  '/countdown': typeof CountdownRoute
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -166,6 +175,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/chat'
+    | '/countdown'
     | '/fox'
     | '/head'
     | '/settings'
@@ -184,6 +194,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/chat'
+    | '/countdown'
     | '/fox'
     | '/head'
     | '/show'
@@ -201,6 +212,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/chat'
+    | '/countdown'
     | '/fox'
     | '/head'
     | '/settings'
@@ -220,6 +232,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChatRoute: typeof ChatRoute
+  CountdownRoute: typeof CountdownRoute
   FoxRoute: typeof FoxRoute
   HeadRoute: typeof HeadRoute
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -241,6 +254,13 @@ declare module '@tanstack/react-router' {
       path: '/chat'
       fullPath: '/chat'
       preLoaderRoute: typeof ChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/countdown': {
+      id: '/countdown'
+      path: '/countdown'
+      fullPath: '/countdown'
+      preLoaderRoute: typeof CountdownRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fox': {
@@ -375,6 +395,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRoute,
+  CountdownRoute: CountdownRoute,
   FoxRoute: FoxRoute,
   HeadRoute: HeadRoute,
   SettingsRoute: SettingsRouteWithChildren,

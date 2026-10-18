@@ -124,37 +124,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Le temps avant le retour de Fenysk : une pill en haut à droite pendant toute l'émission (le haut droit reste libre à chaque temps,
-   Jean-Renard commence plus bas) */
-.show-countdown {
-  position: absolute;
-  top: 1.5vw;
-  right: 1.5vw;
-  opacity: 0;
-  transition: opacity var(--show-fade) ease;
-  pointer-events: none;
-}
-
-.show-countdown.is-visible {
-  opacity: 1;
-}
-
-.show-countdown-pill {
-  --pill-opacity: 88%;
-  box-sizing: border-box;
-  padding: 0.6vw 1.4vw;
-  border-radius: 1.4vw;
-}
-
-.show-countdown-text {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: 1.3vw;
-  line-height: 1.2;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
 /* Le tchat d'origine du clip : la colonne du tchat du direct, en bas à gauche, sur le côté du clip (le centre reste libre) */
 .show-chat {
   --chat-source-width: 24vw;

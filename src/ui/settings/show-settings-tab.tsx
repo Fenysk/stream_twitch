@@ -52,7 +52,7 @@ export const ShowSettingsTab = () => {
           {list ? toConfirmedText(list.confirmedCount) : DESIGN_TEXTS.loading}
         </p>
       </SettingsCard>
-      <EpisodeCards state={showState} settings={settings} />
+      <EpisodeCards state={showState} settings={settings} confirmed={list?.confirmed ?? null} />
       {notice && (
         <p role="status" className="settings-card lp-type-body">
           {notice}

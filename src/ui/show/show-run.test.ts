@@ -45,8 +45,8 @@ const setup = (
   } = {},
 ) => {
   const events: string[] = [];
-  // Les instants du retour de Fenysk reçus, à part des évènements : ils ne changent pas l'ordre qu'on y vérifie.
-  const returnAts: number[] = [];
+  // Les rapports envoyés au serveur (heure, temps, clip), à part des évènements : c'est d'eux que le serveur estime le retour de Fenysk.
+  const reports: string[] = [];
   const cuesAsked: string[] = [];
   const playedWith: (ShowCues | null)[] = [];
   const playedLaughs: (readonly ShowLaugh[])[] = [];
@@ -62,7 +62,6 @@ const setup = (
   const deps: EpisodeDeps = {
     screen: {
       setView: (view) => events.push(`${at()} vue ${describeView(view)}`),
-      setReturnAt: (instant) => returnAts.push(instant),
       async load(slot, { name }) {
         const isLoaded = options.isLoaded?.(name) ?? true;
         events.push(`${at()} charge ${name} dans ${slot}${isLoaded ? "" : " (échec)"}`);
@@ -88,7 +87,10 @@ const setup = (
         await sleep(options.speechDelayMs ?? 0);
         return options.speechMs ?? 0;
       }),
-    report: ({ phase, index }) => events.push(`${at()} rapport ${phase} ${index}`),
+    report: ({ phase, index }) => {
+      events.push(`${at()} rapport ${phase} ${index}`);
+      reports.push(`${at()} ${phase} ${index}`);
+    },
     sleep,
     now: Date.now,
     isStopped: () => isStopped,
@@ -96,7 +98,7 @@ const setup = (
   };
   return {
     events,
-    returnAts,
+    reports,
     cuesAsked,
     playedWith,
     playedLaughs,
@@ -419,49 +421,57 @@ describe("la clôture et la fin", () => {
   });
 });
 
-describe("l'instant du retour de Fenysk", () => {
-  const FIRST: ShowLaugh = { id: "rires001", version: "1", fader: 80, at: 2000 };
-  const laughing: ShowClip = { ...A, laughs: [FIRST] };
-  // La phrase estimée donne : carton 6000 ms, phrase des rires 6000 ms, ouverture et clôture 6200 ms. Le clip A (20 s, un rire) pèse
-  // 32 000 ms en tout, le clip B (30 s, sans rire) 36 000 ms.
+describe("les rapports au serveur, d'où il estime le retour de Fenysk", () => {
+  const LAUGH: ShowLaugh = { id: "rires001", version: "1", fader: 80, at: 2000 };
+  const laughing: ShowClip = { ...A, laughs: [LAUGH] };
 
-  it("le donne à chaque temps, à partir de ce qui reste : ouverture, carton, clip, rires, carton suivant, clip suivant, clôture", async () => {
+  it("dit à chaque temps où l'émission en est, avec son clip, de l'ouverture à la fin : la phrase des rires n'est pas un temps", async () => {
     // Seule la phrase des rires dure (2 s) : l'ouverture dure 2,5 s, un carton 3 s, la phrase des rires 2,5 s.
-    const { returnAts, run, finish } = setup([laughing, B], {
+    const { reports, run, finish } = setup([laughing, B], {
       speak: async (speech) => (speech.kind === "laugh" ? 2000 : 0),
     });
     void run();
     await advance(0);
-    expect(returnAts).toEqual([6200 + 32_000 + 36_000 + 6200]);
+    expect(reports).toEqual(["0ms opening 0"]);
     await advance(2500);
-    expect(returnAts.at(-1)).toBe(2500 + 32_000 + 36_000 + 6200);
+    expect(reports).toEqual(["0ms opening 0", "2500ms card 0"]);
     await advance(3000);
-    expect(returnAts.at(-1)).toBe(5500 + 20_000 + 6000 + 36_000 + 6200);
+    expect(reports.at(-1)).toBe("5500ms clip 0");
     await advance(19_500);
     finish(0, true);
     await advance(0);
-    expect(returnAts.at(-1)).toBe(25_000 + 6000 + 36_000 + 6200);
+    expect(reports).toHaveLength(3);
     await advance(2500);
-    expect(returnAts.at(-1)).toBe(27_500 + 36_000 + 6200);
+    expect(reports.at(-1)).toBe("27500ms card 1");
     await advance(3000);
-    expect(returnAts.at(-1)).toBe(30_500 + 30_000 + 6200);
+    expect(reports.at(-1)).toBe("30500ms clip 1");
     await advance(30_000);
     finish(1);
     await advance(0);
-    expect(returnAts).toEqual([80_400, 76_700, 73_700, 73_200, 69_700, 66_700, 66_700]);
+    expect(reports.at(-1)).toBe("60500ms closing 0");
+    await advance(2500);
+    expect(reports).toEqual([
+      "0ms opening 0",
+      "2500ms card 0",
+      "5500ms clip 0",
+      "27500ms card 1",
+      "30500ms clip 1",
+      "60500ms closing 0",
+      "63000ms ended 0",
+    ]);
   });
 
-  it("ne le donne pas aux rires quand aucun n'a joué : le carton suivant le recalcule", async () => {
-    const { returnAts, run, finish } = setup([laughing, B]);
+  it("passe au carton suivant sans autre rapport quand aucun rire n'a joué : pas de phrase des rires à compter", async () => {
+    const { reports, run, finish } = setup([laughing, B]);
     void run();
     await advance(5500);
     finish(0, false);
     await advance(0);
-    expect(returnAts).toEqual([80_400, 76_700, 73_700, 5500 + 36_000 + 6200]);
+    expect(reports).toEqual(["0ms opening 0", "2500ms card 0", "5500ms clip 0", "5500ms card 1"]);
   });
 
-  it("ne le donne pas pour un clip qui ne se lit pas : le carton suivant le recalcule", async () => {
-    const { returnAts, run } = setup(
+  it("ne rapporte ni carton ni clip pour un clip qui ne se lit pas : le suivant garde son index dans l'émission", async () => {
+    const { reports, run, finish } = setup(
       [
         {
           name: "cassé.mp4",
@@ -477,7 +487,23 @@ describe("l'instant du retour de Fenysk", () => {
     );
     void run();
     await advance(5500);
-    // Ouverture : 6200 + (6000 + 5000) + 36 000 + 6200 ; carton de B à 2500 ms ; B à 5500 ms.
-    expect(returnAts).toEqual([59_400, 2500 + 36_000 + 6200, 5500 + 30_000 + 6200]);
+    expect(reports).toEqual(["0ms opening 0", "2500ms card 1", "5500ms clip 1"]);
+    await advance(30_000);
+    finish(1);
+    await advance(2500);
+    expect(reports.at(-2)).toBe("35500ms closing 0");
+    expect(reports.at(-1)).toBe("38000ms ended 0");
+  });
+
+  it("ne rapporte plus rien une fois l'émission arrêtée : ni la clôture, ni la fin", async () => {
+    const { reports, run, finish, stop } = setup([A, B]);
+    void run();
+    await advance(5500);
+    expect(reports).toEqual(["0ms opening 0", "2500ms card 0", "5500ms clip 0"]);
+    stop();
+    finish(0);
+    await advance(60_000);
+    expect(reports).toHaveLength(3);
+    expect(reports.map((report) => report.split(" ")[1])).not.toContain("ended");
   });
 });

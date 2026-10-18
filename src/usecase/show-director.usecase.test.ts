@@ -200,6 +200,8 @@ describe("createShowDirector : le démarrage", () => {
       phase: "opening",
       index: 0,
       startsAt: START + 1500,
+      // Ouverture 6200, deux clips de 10 s (carton 6000 + 10 000 chacun), clôture 6200 : 44 400 ms depuis le début de l'ouverture.
+      returnAt: START + 1500 + 44_400,
       showFader: 100,
     });
     expect(calls).toEqual(["file: tenue", "présence: départ", "fox: émission"]);
@@ -656,6 +658,103 @@ describe("createShowDirector : le déroulé dit par la page", () => {
       status: 409,
     });
     expect(played).toEqual([]);
+  });
+});
+
+describe("createShowDirector : le retour de Fenysk estimé", () => {
+  // La phrase estimée donne : carton 6000 ms, phrase des rires 6000 ms, ouverture et clôture 6200 ms. Les clips d'essai durent 10 s
+  // sans rire : un clip pèse 16 000 ms, deux 32 000.
+
+  it("l'estime au début depuis `startsAt` : l'ouverture, tous les clips et la clôture", () => {
+    const { director, advance, send } = setup({ awayIn: 600 });
+    advance(5000);
+    send(true);
+    expect(director.getState().startsAt).toBe(START + 5000 + 600);
+    expect(director.getState().returnAt).toBe(START + 5000 + 600 + 6200 + 32_000 + 6200);
+  });
+
+  it("compte la phrase des rires des clips qui en ont, pas des autres", () => {
+    const { director, send } = setup({
+      clips: [{ ...confirmed("a.mp4"), laughs: [{ at: 2, sound: "abcd1234" }] }, confirmed("b.mp4")],
+      sounds: { abcd1234: { version: "1", fader: 100 } },
+    });
+    send(true);
+    expect(director.getState().returnAt).toBe(START + 1500 + 6200 + 6000 + 10_000 + 6000 + 16_000 + 6200);
+  });
+
+  it("le recalcule à chaque rapport de la page depuis l'heure du serveur : carton, clip, clip suivant, clôture", () => {
+    const { director, advance, send } = setup();
+    send(true);
+    // Une page connectée : sans elle l'émission s'arrête au bout de 20 s.
+    director.openPage();
+    advance(2500);
+    director.report({ runId: "run1", phase: "card", index: 0 });
+    expect(director.getState().returnAt).toBe(START + 2500 + 32_000 + 6200);
+    advance(7000);
+    director.report({ runId: "run1", phase: "clip", index: 0 });
+    expect(director.getState().returnAt).toBe(START + 9500 + 10_000 + 16_000 + 6200);
+    advance(20_000);
+    director.report({ runId: "run1", phase: "card", index: 1 });
+    expect(director.getState().returnAt).toBe(START + 29_500 + 16_000 + 6200);
+    advance(5500);
+    director.report({ runId: "run1", phase: "clip", index: 1 });
+    expect(director.getState().returnAt).toBe(START + 35_000 + 10_000 + 6200);
+    advance(11_000);
+    director.report({ runId: "run1", phase: "closing", index: 0 });
+    expect(director.getState().returnAt).toBe(START + 46_000 + 6200);
+  });
+
+  it("le recalcule même quand la page redit le même temps : l'estimation suit l'heure, pas le nombre de rapports", () => {
+    const { director, advance, send } = setup();
+    send(true);
+    director.report({ runId: "run1", phase: "card", index: 1 });
+    advance(4000);
+    director.report({ runId: "run1", phase: "card", index: 1 });
+    expect(director.getState().returnAt).toBe(START + 4000 + 16_000 + 6200);
+  });
+
+  it("le garde quand un rapport est refusé : un autre clip, une autre émission", () => {
+    const { director, advance, send } = setup();
+    send(true);
+    const started = director.getState().returnAt;
+    advance(3000);
+    expect(director.report({ runId: "run1", phase: "clip", index: 2 })).toMatchObject({ ok: false });
+    expect(director.report({ runId: "ancienne", phase: "card", index: 0 })).toMatchObject({ ok: false });
+    expect(director.getState().returnAt).toBe(started);
+  });
+
+  it("le garde tel quel quand le fader de l'émission change, et le publie avec", () => {
+    const { director, states, hear, send } = setup();
+    send(true);
+    const started = director.getState().returnAt;
+    hear(0);
+    expect(director.getState()).toMatchObject({ showFader: TALK_SHOW_FADER, returnAt: started });
+    expect(states.map(({ returnAt }) => returnAt)).toEqual([started, started]);
+  });
+
+  it("repasse à 0 sans émission : finie par la page, source cachée, sans page connectée, arrêt du serveur", () => {
+    const ended = setup();
+    ended.send(true);
+    ended.director.report({ runId: "run1", phase: "ended", index: 0 });
+    expect(ended.director.getState()).toMatchObject({ status: "over", returnAt: 0 });
+    const hidden = setup();
+    hidden.send(true);
+    hidden.send(false);
+    expect(hidden.director.getState()).toMatchObject({ status: "idle", returnAt: 0 });
+    const abandoned = setup();
+    abandoned.send(true);
+    abandoned.advance(PAGE_GRACE_MS);
+    expect(abandoned.director.getState()).toMatchObject({ status: "over", returnAt: 0 });
+    const stopped = setup();
+    stopped.send(true);
+    stopped.director.stop();
+    expect(stopped.director.getState()).toMatchObject({ status: "idle", returnAt: 0 });
+  });
+
+  it("n'en a pas sans clip à passer", () => {
+    const { director, send } = setup({ clips: [] });
+    send(true);
+    expect(director.getState()).toMatchObject({ status: "over", returnAt: 0 });
   });
 });
 

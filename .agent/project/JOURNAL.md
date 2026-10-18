@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-18 — Le retour de Fenysk quitte `/show` pour sa page `/countdown`, le serveur l'estime (`ShowState.returnAt`), l'onglet Émission prévoit la durée
+
+**Contexte.** Alexis veut placer le retour de Fenysk dans OBS comme un widget à part, et voir la durée d'une émission en réglant le nombre de clips.
+**Décision.** `ShowState.returnAt` (ms, horloge du serveur, 0 sans émission) : le director le recalcule avec `toRemainingMs` au début (depuis `startsAt`) et à chaque rapport de la page. La page `/countdown` (source OBS sur `countdown.localhost:4747`, un autre hôte pour CEF, donc ses 6 connexions à elle) le lit dans le flux SSE de l'émission ; `/show` ne l'affiche plus, et ses tests du compte à rebours sont réécrits pour ce comportement sans perdre de cas ni d'assertion. Sous « Clips par émission », `toShowLengthMs` donne l'émission la plus courte et la plus longue que le tirage peut faire.
+**Renoncement.** `/show` qui envoie sa propre estimation : le temps des rires n'est pas un rapport, et deux calculs dériveraient. `localhost` ou `127.0.0.1` pour la source : leurs connexions servent déjà les autres sources et `/show`.
+
 ## 2026-10-18 — Tout le son de l'émission baisse quand Fenysk parle, à 15 % et deux secondes de plus : `clipFader` devient `showFader`
 
 **Contexte.** Testé dans OBS, ne baisser que la vidéo du clip ne suffisait pas : les rires et la voix de Jean-Renard couvraient encore Fenysk.

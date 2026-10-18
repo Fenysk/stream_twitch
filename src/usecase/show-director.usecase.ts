@@ -3,11 +3,13 @@ import { toLaughFader } from "../domain/laugh.rules";
 import { toNextPick } from "../domain/pick.rules";
 import type { Settings } from "../domain/settings.schema";
 import {
+  type CountdownStep,
   DEFAULT_SHOW_CLIP_COUNT,
   LAUGH_PHRASE,
   toLaughSchedule,
   toLineup,
   toRecordedDay,
+  toRemainingMs,
   toShowFader,
 } from "../domain/show.rules";
 import {
@@ -74,6 +76,10 @@ export type ShowDirector = {
 // Une émission en cours dont aucune page /show n'est connectée depuis 20 s s'arrête : la source n'est pas chargée, ou la page a
 // planté, et Jean-Renard ne doit pas rester absent de /fox.
 export const PAGE_GRACE_MS = 20_000;
+
+// Le temps que la page rapporte, tel que `toRemainingMs` le compte : seuls le carton et le clip ont un index.
+const toStep = (phase: ShowState["phase"], index: number): CountdownStep =>
+  phase === "opening" || phase === "closing" ? { phase } : { phase, index };
 
 const STALE = { ok: false, status: 409, message: "cette émission n'est plus en cours" } as const;
 const STALE_SPEECH: ShowSpeakResult = STALE;
@@ -230,13 +236,15 @@ export function createShowDirector({
       durationMs: Math.round((clip.end - clip.start) * 1000),
       laughs: toLaughs(clip),
     }));
+    const startsAt = clock() + awayIn;
     publish({
       status: "running",
       runId: createId(),
       lineup,
       phase: "opening",
       index: 0,
-      startsAt: clock() + awayIn,
+      startsAt,
+      returnAt: startsAt + toRemainingMs(lineup, { phase: "opening" }),
       showFader: state.showFader,
     });
     log(
@@ -303,7 +311,12 @@ export function createShowDirector({
       if ((phase === "card" || phase === "clip") && index >= state.lineup.length) {
         return { ok: false, status: 400, message: "ce clip n'est pas dans l'émission" };
       }
-      publish({ ...state, phase, index });
+      publish({
+        ...state,
+        phase,
+        index,
+        returnAt: clock() + toRemainingMs(state.lineup, toStep(phase, index)),
+      });
       if (phase === "clip") noteClip(index);
       return { ok: true };
     },

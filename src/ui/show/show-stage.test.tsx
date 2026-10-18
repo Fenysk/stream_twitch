@@ -1,25 +1,19 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ShowStage } from "./show-stage";
 import type { ShowView } from "./show-view";
 
 // Ce que le déroulé montre, par test.
 const state = vi.hoisted(() => ({
   view: { kind: "none" } as { kind: string; title?: string; slot?: number; day?: string },
-  returnAt: null as number | null,
 }));
 
 vi.mock("./use-show", () => ({
-  useShow: () => ({
-    videos: [{ current: null }, { current: null }],
-    view: state.view as ShowView,
-    returnAt: state.returnAt,
-  }),
+  useShow: () => ({ videos: [{ current: null }, { current: null }], view: state.view as ShowView }),
 }));
 
 beforeEach(() => {
   state.view = { kind: "none" };
-  state.returnAt = null;
 });
 
 const render = (): string => renderToStaticMarkup(<ShowStage />);
@@ -80,44 +74,37 @@ describe("la page de l'émission", () => {
   });
 });
 
+// Le retour de Fenysk a sa page, `/countdown` : /show n'en dit rien à aucun temps de l'émission.
 describe("le retour de Fenysk dans la page", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(0);
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("Quand l'émission joue et qu'un retour est estimé, le système doit dire dans combien de temps Fenysk revient, dans une pill visible", () => {
-    state.view = { kind: "clip", slot: 0, title: "Le saut" };
-    state.returnAt = 181_000;
-    const html = render();
-    expect(html).toMatch(/show-countdown is-visible/);
-    expect(html).toContain("lp-pill show-countdown-pill");
-    expect(html).toContain("Retour de Fenysk dans 4 min");
-    expect(html).not.toMatch(/show-countdown is-visible"[^>]*aria-hidden="true"/);
-  });
-
-  it("Quand il reste une minute ou moins, le système doit dire moins d'une minute, dès l'ouverture", () => {
+  it("Quand l'ouverture joue, le système doit ne rien dire du retour de Fenysk", () => {
     state.view = { kind: "opening" };
-    state.returnAt = 45_000;
-    expect(render()).toContain("Retour de Fenysk dans moins d&#x27;une minute");
-  });
-
-  it("Quand il n'y a pas d'émission, le système doit cacher le retour de Fenysk, sans texte, même si un instant reste", () => {
-    state.returnAt = 181_000;
     const html = render();
-    expect(html).not.toMatch(/show-countdown is-visible/);
-    expect(html).toMatch(/show-countdown"[^>]*aria-hidden="true"/);
+    expect(html).toContain('data-view="opening"');
     expect(html).not.toContain("Retour de Fenysk");
+    expect(html).not.toContain("countdown");
   });
 
-  it("Quand l'émission joue sans retour estimé, le système doit cacher le retour de Fenysk", () => {
+  it("Quand le carton d'un clip joue, le système doit ne rien dire du retour de Fenysk", () => {
     state.view = { kind: "card", slot: 0, title: "Le saut", day: "2026-10-16" };
     const html = render();
-    expect(html).not.toMatch(/show-countdown is-visible/);
+    expect(html).toContain('data-view="card"');
     expect(html).not.toContain("Retour de Fenysk");
+    expect(html).not.toContain("countdown");
+  });
+
+  it("Quand le clip joue, le système doit ne rien dire du retour de Fenysk, le titre du coin mis à part", () => {
+    state.view = { kind: "clip", slot: 0, title: "Le saut" };
+    const html = render();
+    expect(html).toContain("Le saut");
+    expect(html).not.toContain("Retour de Fenysk");
+    expect(html).not.toContain("countdown");
+  });
+
+  it("Quand la clôture joue, le système doit ne rien dire du retour de Fenysk", () => {
+    state.view = { kind: "closing" };
+    const html = render();
+    expect(html).toContain('data-view="closing"');
+    expect(html).not.toContain("Retour de Fenysk");
+    expect(html).not.toContain("countdown");
   });
 });

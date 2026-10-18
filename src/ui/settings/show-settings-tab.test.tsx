@@ -1,12 +1,30 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipList } from "../../domain/clip.schema";
+import type { EditableSettings } from "../../domain/settings.schema";
 import { ShowSettingsTab } from "./show-settings-tab";
 
-// Ce que le hook rend, par test : la liste des clips, ou le refus du serveur.
+// Ce que les hooks rendent, par test : la liste des clips, ou le refus du serveur ; les réglages (`null` : pas encore lus).
 const state = vi.hoisted(() => ({
   list: null as ClipList | null,
   error: null as string | null,
+  effective: null as Partial<EditableSettings> | null,
+}));
+
+vi.mock("./use-settings", () => ({
+  useSettings: () => ({
+    view: state.effective && {
+      defaults: { threshold: -40 },
+      local: {},
+      effective: { threshold: -40, ...state.effective },
+    },
+    drafts: {},
+    errors: { byKey: {}, general: [] },
+    edit: () => undefined,
+    choose: async () => undefined,
+    change: async () => true,
+    reset: async () => undefined,
+  }),
 }));
 
 vi.mock("./use-clips", () => ({
@@ -25,6 +43,7 @@ vi.mock("./use-clips", () => ({
 beforeEach(() => {
   state.list = { clips: [], confirmedCount: 0, confirmed: [] };
   state.error = null;
+  state.effective = null;
 });
 
 describe("l'onglet Émission", () => {
@@ -88,6 +107,35 @@ describe("l'onglet Émission", () => {
     expect(html).toContain("1:00");
     expect(html).toContain("validé le");
     expect(html).not.toContain("Aucun clip validé");
+  });
+
+  it("prévoit la durée de l'émission sous le nombre de clips, d'après les clips confirmés qu'il a lus", () => {
+    state.effective = { showClipCount: 1 };
+    state.list = {
+      clips: [],
+      confirmedCount: 1,
+      confirmed: [
+        {
+          name: "Replay 2026-10-15 15-09-05.mp4",
+          title: "Le saut",
+          phrase: "",
+          start: 10,
+          end: 130,
+          rawName: "Replay 2026-10-15 15-09-05.mp4",
+          processedName: null,
+          confirmedAt: "2026-10-16T10:24:46.845Z",
+          version: "1-1",
+        },
+      ],
+    };
+    // 12 400 d'ouverture et de clôture, 6000 de carton, 120 000 de partie gardée : 138 400 ms.
+    expect(renderToStaticMarkup(<ShowSettingsTab />)).toContain("Durée estimée : 2 min");
+  });
+
+  it("ne prévoit aucune durée tant que la liste des clips n'est pas lue", () => {
+    state.effective = { showClipCount: 1 };
+    state.list = null;
+    expect(renderToStaticMarkup(<ShowSettingsTab />)).not.toContain("Durée estimée");
   });
 
   it("dit qu'aucun clip n'est validé quand la liste de l'émission est vide", () => {

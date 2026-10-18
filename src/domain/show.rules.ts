@@ -2,7 +2,7 @@
 
 import type { ClipChat, ClipLaugh } from "./clip.schema";
 import { isLaughKept } from "./laugh.rules";
-import type { ShowChatEntry, ShowClip } from "./show.schema";
+import type { ShowChatEntry } from "./show.schema";
 import type { Trim } from "./trim.rules";
 
 // Combien de clips une émission passe quand les réglages ne le disent pas (`showClipCount`).
@@ -85,7 +85,8 @@ export type CountdownStep =
   | { phase: "card" | "clip" | "laugh"; index: number }
   | { phase: "closing" };
 
-type CountdownClip = Pick<ShowClip, "durationMs" | "laughs">;
+// Un clip compté : sa partie gardée en ms et ses rires (un `ShowClip` comme un clip confirmé).
+type CountdownClip = { durationMs: number; laughs: readonly unknown[] };
 
 // Sans rire dans le clip, pas de phrase des rires.
 const toClipLaughMs = ({ laughs }: CountdownClip): number =>
@@ -116,6 +117,28 @@ export const toRemainingMs = (lineup: readonly CountdownClip[], step: CountdownS
   }
 };
 
+type ShowLength = { shortestMs: number; longestMs: number };
+
+// L'émission entière pour le tirage de `toLineup` le plus court et le plus long : les ex æquo du seuil se départagent, les autres non.
+export const toShowLengthMs = (
+  candidates: readonly (LineupCandidate & CountdownClip)[],
+  count: number,
+): ShowLength => {
+  const wanted = Math.max(0, count);
+  const ranked = [...candidates].sort((first, second) => first.playCount - second.playCount);
+  const threshold = ranked[Math.min(wanted, ranked.length) - 1]?.playCount;
+  const sure = ranked.filter(({ playCount }) => threshold !== undefined && playCount < threshold);
+  const tied = ranked
+    .filter(({ playCount }) => playCount === threshold)
+    .sort((first, second) => toClipMs(first) - toClipMs(second));
+  const places = wanted - sure.length;
+  const lengthOf = (clips: readonly CountdownClip[]): number => toRemainingMs(clips, { phase: "opening" });
+  return {
+    shortestMs: lengthOf([...sure, ...tied.slice(0, places)]),
+    longestMs: lengthOf([...sure, ...tied.slice(Math.max(0, tied.length - places))]),
+  };
+};
+
 const MINUTE_MS = 60_000;
 
 // « Retour de Fenysk dans 4 min » (minute supérieure), puis « dans moins d'une minute » à 60 s ou moins.
@@ -123,6 +146,17 @@ export const toCountdownText = (remainingMs: number): string =>
   remainingMs > MINUTE_MS
     ? `Retour de Fenysk dans ${Math.ceil(remainingMs / MINUTE_MS)} min`
     : "Retour de Fenysk dans moins d'une minute";
+
+const toMinutes = (ms: number): number => Math.max(1, Math.round(ms / MINUTE_MS));
+
+// « Durée estimée : 6 min », ou « 5 à 7 min » quand les deux arrondis à la minute diffèrent ; jamais moins d'une minute.
+export const toShowLengthText = ({ shortestMs, longestMs }: ShowLength): string => {
+  const shortest = toMinutes(shortestMs);
+  const longest = toMinutes(longestMs);
+  return shortest === longest
+    ? `Durée estimée : ${shortest} min`
+    : `Durée estimée : ${shortest} à ${longest} min`;
+};
 
 // Le tchat réagit à ce qu'il voit : ses messages paraissent 4 s plus tôt que sur le direct (`showChatLead`, en ms).
 export const DEFAULT_CHAT_LEAD_MS = 4000;
