@@ -48,7 +48,11 @@ type FoxLoopDeps = {
 // Ce que la page `/show` ne reçoit pas du serveur : le renard y est toujours là, au repos tant que la page ne lui donne pas un mode.
 const SHOW_POSE: PresencePose = { kind: "visible", elapsed: 0, from: { offset: 0, angle: 0 } };
 
-type FoxLoop = { stop: () => void; setMode: (mode: FoxMode) => void };
+type FoxLoop = {
+  stop: () => void;
+  setMode: (mode: FoxMode) => void;
+  setFader: (fader: number) => void;
+};
 
 // Fait vivre le renard : les règles, les voix, le mode et la présence arrivent du flux du serveur ; à chaque image de
 // l'écran, le pas de l'animation (domain) choisit l'image, l'échelle du corps et sa place (il glisse hors de la source,
@@ -200,6 +204,9 @@ const startFox = ({ place, body, onImage, onMuted, onHidden }: FoxLoopDeps): Fox
     setMode(next) {
       mode = next;
     },
+    setFader(next) {
+      player?.setFader(next);
+    },
   };
 };
 
@@ -212,6 +219,9 @@ export type FoxView = {
   isMuted: boolean;
   // Ce qu'il montre en plus de sa bouche, donné par la page elle-même : seule la page `/show` s'en sert (le serveur ne le lui dit pas).
   updateMode: (mode: FoxMode) => void;
+  // Le fader de sa voix (0 à 100 %), donné par la page elle-même : seule la page `/show` s'en sert (tout le son de l'émission baisse
+  // quand Fenysk parle).
+  updateFader: (fader: number) => void;
 };
 
 export const useFox = (place: FoxPlace): FoxView => {
@@ -235,5 +245,6 @@ export const useFox = (place: FoxPlace): FoxView => {
     };
   }, [place]);
   const updateMode = useCallback((mode: FoxMode) => loop.current?.setMode(mode), []);
-  return { image: isHidden ? null : image, bodyRef, isMuted, updateMode };
+  const updateFader = useCallback((fader: number) => loop.current?.setFader(fader), []);
+  return { image: isHidden ? null : image, bodyRef, isMuted, updateMode, updateFader };
 };

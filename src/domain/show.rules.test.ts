@@ -11,9 +11,10 @@ import {
   LINE_AFTER_SPEECH_MS,
   LINE_MIN_MS,
   OPENING_BANNER,
+  TALK_HOLD_MS,
+  TALK_SHOW_FADER,
   toCardMs,
   toChatSchedule,
-  toClipFader,
   toCountdownText,
   toDue,
   toFadingFader,
@@ -23,6 +24,7 @@ import {
   toLineup,
   toRecordedDay,
   toRemainingMs,
+  toShowFader,
 } from "./show.rules";
 
 describe("toLineup", () => {
@@ -362,23 +364,29 @@ describe("toLaughSchedule", () => {
   });
 });
 
-describe("toClipFader", () => {
+describe("toShowFader", () => {
   it("baisse le son tant que Fenysk parle (silentFor à 0)", () => {
-    expect(toClipFader(0, 250)).toBe(30);
+    expect(toShowFader(0, 250)).toBe(TALK_SHOW_FADER);
   });
 
-  it("le garde baissé jusqu'à une seconde après la fin de sa voix (delay compris), pas plus", () => {
-    expect(toClipFader(1249, 250)).toBe(30);
-    expect(toClipFader(1250, 250)).toBe(100);
+  it("le garde baissé jusqu'à deux secondes après la fin de sa voix (delay compris), pas plus", () => {
+    expect(toShowFader(250 + TALK_HOLD_MS - 1, 250)).toBe(TALK_SHOW_FADER);
+    expect(toShowFader(250 + TALK_HOLD_MS, 250)).toBe(100);
   });
 
   it("suit le delay de la détection de la tête", () => {
-    expect(toClipFader(1499, 500)).toBe(30);
-    expect(toClipFader(1500, 500)).toBe(100);
+    expect(toShowFader(500 + TALK_HOLD_MS - 1, 500)).toBe(TALK_SHOW_FADER);
+    expect(toShowFader(500 + TALK_HOLD_MS, 500)).toBe(100);
+  });
+
+  it("Quand Fenysk vient de parler (silentFor 0, delay 250), le fader de l'émission doit valoir 15, encore à 2249, puis 100 à 2250", () => {
+    expect(toShowFader(0, 250)).toBe(15);
+    expect(toShowFader(2249, 250)).toBe(15);
+    expect(toShowFader(2250, 250)).toBe(100);
   });
 
   it("laisse le son entier quand Fenysk n'a rien dit depuis le démarrage", () => {
-    expect(toClipFader(Number.POSITIVE_INFINITY, 250)).toBe(100);
+    expect(toShowFader(Number.POSITIVE_INFINITY, 250)).toBe(100);
   });
 });
 

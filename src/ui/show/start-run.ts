@@ -7,7 +7,7 @@ import type { FoxMode } from "../../domain/fox.schema";
 import { IDLE_MODE, STARTLE_MODE } from "../../domain/fox-mode.rules";
 import type { ShowState } from "../../domain/show.schema";
 import { getShowCues, reportShowProgress, speakInShow, toShowVideoUrl } from "../show-api";
-import { createClipFader } from "./show-fader";
+import { createShowFader } from "./show-fader";
 import { createLaughFiles } from "./show-laugh";
 import { runEpisode } from "./show-run";
 import { createShowTicker } from "./show-ticker";
@@ -15,7 +15,7 @@ import { playVideo, prepareVideo } from "./show-video";
 import type { ShowView, Slot } from "./show-view";
 
 // Ce que la page prête à l'émission : ses deux <video>, de quoi changer ce qu'elle montre, le tchat du clip qui joue (les messages qui
-// paraissent, `clearChat` quand le clip change) et ce que Jean-Renard montre (il sursaute).
+// paraissent, `clearChat` quand le clip change) et ce que Jean-Renard montre (il sursaute) et dit (le fader de sa voix).
 export type ShowPage = {
   videoOf(slot: Slot): HTMLVideoElement | null;
   setView(view: ShowView): void;
@@ -24,22 +24,28 @@ export type ShowPage = {
   addChat(messages: ChatMessage[]): void;
   clearChat(): void;
   setFoxMode(mode: FoxMode): void;
+  setFoxFader(fader: number): void;
 };
 
-// `updateFader` : le serveur dit un nouveau fader pour le son des vidéos ; la page y fond en `TALK_FADE_MS`.
+// `updateFader` : le serveur dit un nouveau fader pour tout le son de l'émission ; la page y fond en `TALK_FADE_MS`.
 export type Run = { runId: string; updateFader(fader: number): void; stop(): void };
 
 // Le fondu du tchat dure 0,8 s (show-stage.css) : une marge de plus, puis ses messages partent.
 const CHAT_CLEAR_MS = 1000;
 
-export const startRun = ({ runId, lineup, startsAt, clipFader }: ShowState, page: ShowPage): Run => {
+export const startRun = ({ runId, lineup, startsAt, showFader }: ShowState, page: ShowPage): Run => {
   let isStopped = false;
-  // Le son des vidéos baisse tant que Fenysk parle : le fader de départ est posé tout de suite, les suivants viennent en fondu.
-  const fader = createClipFader((slot) => page.videoOf(slot), clipFader);
   // Ce qui attend (un minuteur, une vidéo ou des rires qui jouent) et que l'arrêt réveille aussitôt.
   const wakes = new Set<() => void>();
   const aborted = new Promise<void>((resolve) => wakes.add(resolve));
   const laughFiles = createLaughFiles(aborted);
+  // Tout le son de l'émission baisse tant que Fenysk parle : le fader de départ est posé tout de suite, les suivants viennent en fondu,
+  // le même pas pour les vidéos, les rires et la voix de Jean-Renard.
+  const fader = createShowFader((next) => {
+    for (const video of [page.videoOf(0), page.videoOf(1)]) if (video) video.volume = next / 100;
+    laughFiles.setFader(next);
+    page.setFoxFader(next);
+  }, showFader);
   const sleep = (ms: number): Promise<void> =>
     new Promise((resolve) => {
       const wake = () => {

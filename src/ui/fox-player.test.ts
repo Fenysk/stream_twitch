@@ -7,6 +7,8 @@ type FakeSound = {
   isStopped: boolean;
   // Muet au départ, puis à chaque changement : le dernier état est celui que le haut-parleur entend.
   isMuted: boolean;
+  // Le fader (0 à 100) de même : au départ, puis à chaque changement.
+  fader: number;
   end: () => void;
   playback: SoundPlayback;
 };
@@ -16,16 +18,20 @@ const setup = (options: { fetchFails?: boolean; decodeDelay?: Promise<void> } = 
   const errors: unknown[] = [];
   const fetched: string[] = [];
   const output: SoundOutput = {
-    async play(encoded, onEnd, isMuted) {
+    async play(encoded, onEnd, isMuted, fader) {
       await options.decodeDelay;
       const sound: FakeSound = {
         amplitude: new Uint8Array(encoded)[0] ?? 0,
         isStopped: false,
         isMuted,
+        fader,
         end: onEnd,
         playback: {
           setMuted(next) {
             sound.isMuted = next;
+          },
+          setFader(next) {
+            sound.fader = next;
           },
           readSamples(into) {
             into.fill(sound.amplitude / 100);
@@ -99,6 +105,56 @@ describe("createFoxPlayer : muet ou non", () => {
     release();
     await playing;
     expect(sounds[0]?.isMuted).toBe(true);
+  });
+});
+
+describe("createFoxPlayer : le fader de la voix", () => {
+  it("joue au fader entier par défaut", async () => {
+    const { player, sounds } = setup();
+    await player.play("/s/10");
+    expect(sounds[0]?.fader).toBe(100);
+  });
+
+  it("Quand le fader passe à 15, la phrase en cours doit le suivre, et le retrouver quand il remonte à 100", async () => {
+    const { player, sounds } = setup();
+    await player.play("/s/10");
+    player.setFader(15);
+    expect(sounds[0]?.fader).toBe(15);
+    player.setFader(100);
+    expect(sounds[0]?.fader).toBe(100);
+  });
+
+  it("garde son fader d'une phrase à la suivante", async () => {
+    const { player, sounds } = setup();
+    player.setFader(15);
+    await player.play("/s/10");
+    await player.play("/s/20");
+    expect(sounds.map(({ fader }) => fader)).toEqual([15, 15]);
+  });
+
+  it("donne le fader le plus récent à un son qui finissait de décoder quand il a changé", async () => {
+    let release: () => void = () => undefined;
+    const slow = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { player, sounds } = setup({ decodeDelay: slow });
+    const playing = player.play("/s/10");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    player.setFader(15);
+    release();
+    await playing;
+    expect(sounds[0]?.fader).toBe(15);
+  });
+
+  it("ne touche pas au muet, ni au level mesuré : la bouche bouge comme avant", async () => {
+    const { player, sounds } = setup();
+    player.setMuted(true);
+    await player.play("/s/10");
+    player.setFader(15);
+    expect(sounds[0]?.isMuted).toBe(true);
+    player.setMuted(false);
+    expect(sounds[0]?.fader).toBe(15);
+    expect(player.getLevel()).toBeCloseTo(20 * Math.log10(0.1), 6);
   });
 });
 

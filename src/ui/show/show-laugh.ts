@@ -12,6 +12,8 @@ export type LaughFiles = {
   // Joue le rire par-dessus le son du clip ; `false` quand il ne joue pas (fichier supprimé ou illisible, lecture refusée) ou que
   // l'émission s'arrête : alors le son est coupé aussitôt. `true` : il a joué jusqu'au bout.
   play(laugh: ShowLaugh): Promise<boolean>;
+  // Le fader de l'émission (0 à 100 %, 100 au départ) : chaque rire joue à son fader × celui-ci, ceux qui jouent déjà comme ceux qui partiront.
+  setFader(fader: number): void;
   // Libère les adresses d'objet des fichiers téléchargés.
   clear(): void;
 };
@@ -25,7 +27,13 @@ const toKey = ({ id, version }: ShowLaugh): string => `${id}|${version}`;
 export const createLaughFiles = (aborted: Promise<void>): LaughFiles => {
   const downloads = new Map<string, Promise<void>>();
   const urls = new Map<string, string>();
+  // Les rires qui jouent, avec leur fader propre ; le fader de l'émission s'y applique à tous, au départ comme en route.
+  const playing = new Map<HTMLAudioElement, number>();
+  let showFader = 100;
   let isCleared = false;
+
+  // Le facteur (0 à 1) de l'<audio> : le fader d'un rire fois celui de l'émission.
+  const toMixedFader = (fader: number): number => (fader * showFader) / 10_000;
 
   const download = async (laugh: ShowLaugh): Promise<void> => {
     const interruption = new AbortController();
@@ -60,8 +68,10 @@ export const createLaughFiles = (aborted: Promise<void>): LaughFiles => {
     play: (laugh) =>
       new Promise((resolve) => {
         const audio = new Audio(urls.get(toKey(laugh)) ?? toSoundFileUrl(laugh.id, laugh.version));
-        audio.volume = laugh.fader / 100;
+        playing.set(audio, laugh.fader);
+        audio.volume = toMixedFader(laugh.fader);
         const finish = (isPlayed: boolean) => {
+          playing.delete(audio);
           release(audio);
           resolve(isPlayed);
         };
@@ -73,6 +83,10 @@ export const createLaughFiles = (aborted: Promise<void>): LaughFiles => {
           finish(false);
         });
       }),
+    setFader(fader) {
+      showFader = fader;
+      for (const [audio, own] of playing) audio.volume = toMixedFader(own);
+    },
     clear() {
       isCleared = true;
       for (const url of urls.values()) URL.revokeObjectURL(url);

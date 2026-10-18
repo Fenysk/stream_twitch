@@ -164,16 +164,17 @@ export const toLaughSchedule = (laughs: readonly ClipLaugh[], trim: Trim): Sched
     .map(({ at, sound }) => ({ at: Math.max(0, Math.round((at - trim.start) * 1000)), sound }))
     .sort((first, second) => first.at - second.at);
 
-// Le son des vidéos des clips baisse à 30 % pendant que Fenysk parle au mic, en fondu linéaire de 300 ms d'un fader à l'autre, et il
-// remonte à 100 % une seconde après la fin de sa voix (le delay passé, `TALK_HOLD_MS` de plus).
-export const TALK_CLIP_FADER = 30;
+// Tout le son de l'émission (les vidéos des clips, les rires, la voix de Jean-Renard) baisse à 15 % pendant que Fenysk parle au mic, en
+// fondu linéaire de 300 ms d'un fader à l'autre, et il remonte à 100 % deux secondes après la fin de sa voix (le delay passé,
+// `TALK_HOLD_MS` de plus).
+export const TALK_SHOW_FADER = 15;
 export const TALK_FADE_MS = 300;
-export const TALK_HOLD_MS = 1000;
+export const TALK_HOLD_MS = 2000;
 
-// Le fader voulu pour les vidéos des clips, d'après depuis combien de ms (`silentFor`) Fenysk ne dit plus rien ; `delay` : celui de la
-// détection de la tête.
-export const toClipFader = (silentFor: number, delay: number): number =>
-  silentFor < delay + TALK_HOLD_MS ? TALK_CLIP_FADER : 100;
+// Le fader voulu pour tout le son de l'émission, d'après depuis combien de ms (`silentFor`) Fenysk ne dit plus rien ; `delay` : celui de
+// la détection de la tête.
+export const toShowFader = (silentFor: number, delay: number): number =>
+  silentFor < delay + TALK_HOLD_MS ? TALK_SHOW_FADER : 100;
 
 // Le fader atteint `elapsed` ms après le début d'un fondu de `from` vers `to` : une rampe linéaire sur `TALK_FADE_MS`, bornée.
 export const toFadingFader = (from: number, to: number, elapsed: number): number =>

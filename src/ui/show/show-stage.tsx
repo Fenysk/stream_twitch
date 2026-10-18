@@ -67,7 +67,7 @@ const ShowCountdown = ({ returnAt }: ShowCountdownProps) => {
 
 export const ShowStage = () => {
   const fox = useFox("show");
-  const { videos, view, chat, returnAt } = useShow(fox.updateMode);
+  const { videos, view, chat, returnAt } = useShow(fox.updateMode, fox.updateFader);
   const { look } = useChatView();
   const banner = toBanner(view, Date.now());
   // Le titre du coin reste écrit pendant qu'il s'efface.

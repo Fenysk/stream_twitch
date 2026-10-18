@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-18 — Tout le son de l'émission baisse quand Fenysk parle, à 15 % et deux secondes de plus : `clipFader` devient `showFader`
+
+**Contexte.** Testé dans OBS, ne baisser que la vidéo du clip ne suffisait pas : les rires et la voix de Jean-Renard couvraient encore Fenysk.
+**Décision.** `ShowState.clipFader` → `showFader` (`TALK_SHOW_FADER`, `toShowFader`, `createShowFader`) : 15 % au lieu de 30 tant qu'il parle, retour à 100 % `TALK_HOLD_MS` = 2 s après sa voix (1 s avant), fondu de 300 ms. Un seul fondu (`toFadingFader`), appliqué à chaque pas aux vidéos, aux rires (fader du rire × fader de l'émission, y compris un rire en cours) et à la voix de Jean-Renard dans `/show` seulement (`useFox().updateFader`, gain Web Audio à 0 si muet, sinon fader / 100). `/fox`, `lexique.json` et `architecture.json` ne bougent pas.
+**Renoncement.** Ne baisser que la vidéo : Alexis veut tout. Mettre l'émission en pause quand il parle : elle continue de tourner. Une connexion ou une détection du mic de plus : OBS n'a que 6 connexions vers `localhost:4747`.
+
 ## 2026-10-18 — `/show` affiche dans combien de temps Fenysk revient : chaque `ShowClip` porte sa durée gardée (`durationMs`)
 
 **Contexte.** Pendant l'émission, les viewers ne savent pas quand Fenysk revient, et `/show` ne connaît pas la durée gardée des clips.

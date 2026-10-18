@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ADDRESS_MODE } from "../domain/fox-mode.rules";
 import type { Settings } from "../domain/settings.schema";
+import { TALK_HOLD_MS, TALK_SHOW_FADER } from "../domain/show.rules";
 import type { ShowState } from "../domain/show.schema";
 import type { ClipFailure, ConfirmedClip, ConfirmedListResult } from "./clip.usecase";
 import type { QueueItem } from "./fox-queue.usecase";
@@ -199,7 +200,7 @@ describe("createShowDirector : le démarrage", () => {
       phase: "opening",
       index: 0,
       startsAt: START + 1500,
-      clipFader: 100,
+      showFader: 100,
     });
     expect(calls).toEqual(["file: tenue", "présence: départ", "fox: émission"]);
     expect(states).toHaveLength(1);
@@ -782,36 +783,50 @@ describe("createShowDirector : ce que Jean-Renard dit dans l'émission", () => {
   });
 });
 
-describe("createShowDirector : le son des clips baisse quand Fenysk parle", () => {
-  it("baisse le fader des clips à 30 dès que sa voix vient d'être entendue, et le publie", () => {
+describe("createShowDirector : le son de l'émission baisse quand Fenysk parle", () => {
+  // Le delay des réglages de `setup` : 250 ms.
+  const DELAY = settings.delay;
+
+  it("baisse le fader de l'émission dès que sa voix vient d'être entendue, et le publie", () => {
     const { director, states, hear } = setup();
     hear(0);
-    expect(director.getState().clipFader).toBe(30);
-    expect(states.map(({ clipFader }) => clipFader)).toEqual([30]);
+    expect(director.getState().showFader).toBe(TALK_SHOW_FADER);
+    expect(states.map(({ showFader }) => showFader)).toEqual([TALK_SHOW_FADER]);
     expect(states[0]).toMatchObject({ status: "idle", runId: "" });
   });
 
-  it("garde le fader baissé jusqu'à une seconde après la fin de sa voix (delay compris), puis le remonte à 100", () => {
+  it("garde le fader baissé jusqu'à deux secondes après la fin de sa voix (delay compris), puis le remonte à 100", () => {
     const { director, states, hear } = setup();
     hear(0);
-    hear(1249);
-    expect(director.getState().clipFader).toBe(30);
-    hear(1250);
-    expect(director.getState().clipFader).toBe(100);
-    expect(states.map(({ clipFader }) => clipFader)).toEqual([30, 100]);
+    hear(DELAY + TALK_HOLD_MS - 1);
+    expect(director.getState().showFader).toBe(TALK_SHOW_FADER);
+    hear(DELAY + TALK_HOLD_MS);
+    expect(director.getState().showFader).toBe(100);
+    expect(states.map(({ showFader }) => showFader)).toEqual([TALK_SHOW_FADER, 100]);
+  });
+
+  it("Quand Fenysk vient de parler (delay 250), le fader de l'émission doit valoir 15, encore à 2249 ms de silence, puis 100 à 2250", () => {
+    const { director, states, hear } = setup();
+    hear(0);
+    expect(director.getState().showFader).toBe(15);
+    hear(2249);
+    expect(director.getState().showFader).toBe(15);
+    hear(2250);
+    expect(director.getState().showFader).toBe(100);
+    expect(states.map(({ showFader }) => showFader)).toEqual([15, 100]);
   });
 
   it("suit le delay des réglages, aussi quand il change en cours de route", () => {
     const { director, hear } = setup({ custom: { delay: 500 } });
-    hear(1499);
-    expect(director.getState().clipFader).toBe(30);
-    hear(1500);
-    expect(director.getState().clipFader).toBe(100);
+    hear(500 + TALK_HOLD_MS - 1);
+    expect(director.getState().showFader).toBe(TALK_SHOW_FADER);
+    hear(500 + TALK_HOLD_MS);
+    expect(director.getState().showFader).toBe(100);
     director.update({ ...settings, delay: 100 });
-    hear(1099);
-    expect(director.getState().clipFader).toBe(30);
-    hear(1100);
-    expect(director.getState().clipFader).toBe(100);
+    hear(100 + TALK_HOLD_MS - 1);
+    expect(director.getState().showFader).toBe(TALK_SHOW_FADER);
+    hear(100 + TALK_HOLD_MS);
+    expect(director.getState().showFader).toBe(100);
   });
 
   it("ne publie rien de plus tant que le fader ne change pas", () => {
@@ -823,7 +838,7 @@ describe("createShowDirector : le son des clips baisse quand Fenysk parle", () =
     hear(100);
     hear(1000);
     expect(states).toHaveLength(1);
-    hear(1250);
+    hear(DELAY + TALK_HOLD_MS);
     hear(3000);
     hear(Number.POSITIVE_INFINITY);
     expect(states).toHaveLength(2);
@@ -833,33 +848,41 @@ describe("createShowDirector : le son des clips baisse quand Fenysk parle", () =
     const { director, states, hear, send } = setup();
     hear(0);
     send(true);
-    expect(director.getState()).toMatchObject({ status: "running", runId: "run1", clipFader: 30 });
-    expect(states.map(({ clipFader }) => clipFader)).toEqual([30, 30]);
+    expect(director.getState()).toMatchObject({
+      status: "running",
+      runId: "run1",
+      showFader: TALK_SHOW_FADER,
+    });
+    expect(states.map(({ showFader }) => showFader)).toEqual([TALK_SHOW_FADER, TALK_SHOW_FADER]);
   });
 
   it("garde le fader baissé quand l'émission se termine pendant qu'il parle : finie par la page, source cachée, arrêt du serveur", () => {
     const { director, hear, send } = setup();
     send(true);
     hear(0);
-    expect(director.getState()).toMatchObject({ status: "running", runId: "run1", clipFader: 30 });
+    expect(director.getState()).toMatchObject({
+      status: "running",
+      runId: "run1",
+      showFader: TALK_SHOW_FADER,
+    });
     director.report({ runId: "run1", phase: "ended", index: 0 });
-    expect(director.getState()).toMatchObject({ status: "over", clipFader: 30 });
+    expect(director.getState()).toMatchObject({ status: "over", showFader: TALK_SHOW_FADER });
     send(false);
-    expect(director.getState()).toMatchObject({ status: "idle", clipFader: 30 });
+    expect(director.getState()).toMatchObject({ status: "idle", showFader: TALK_SHOW_FADER });
     send(true);
-    expect(director.getState()).toMatchObject({ status: "running", clipFader: 30 });
+    expect(director.getState()).toMatchObject({ status: "running", showFader: TALK_SHOW_FADER });
     send(false);
-    expect(director.getState()).toMatchObject({ status: "idle", clipFader: 30 });
+    expect(director.getState()).toMatchObject({ status: "idle", showFader: TALK_SHOW_FADER });
     send(true);
     director.stop();
-    expect(director.getState()).toMatchObject({ status: "idle", clipFader: 30 });
+    expect(director.getState()).toMatchObject({ status: "idle", showFader: TALK_SHOW_FADER });
   });
 
   it("garde le fader baissé quand l'émission n'a aucun clip à passer", () => {
     const { director, hear, send } = setup({ clips: [] });
     hear(0);
     send(true);
-    expect(director.getState()).toMatchObject({ status: "over", clipFader: 30 });
+    expect(director.getState()).toMatchObject({ status: "over", showFader: TALK_SHOW_FADER });
   });
 
   it("remonte le fader en pleine émission sans toucher à son déroulé", () => {
@@ -867,17 +890,17 @@ describe("createShowDirector : le son des clips baisse quand Fenysk parle", () =
     send(true);
     director.report({ runId: "run1", phase: "clip", index: 1 });
     hear(0);
-    hear(1250);
+    hear(DELAY + TALK_HOLD_MS);
     const running = director.getState();
     expect(running).toMatchObject({
       status: "running",
       runId: "run1",
       phase: "clip",
       index: 1,
-      clipFader: 100,
+      showFader: 100,
     });
     expect(running.lineup).toHaveLength(2);
-    expect(states.map(({ clipFader }) => clipFader)).toEqual([100, 100, 30, 100]);
+    expect(states.map(({ showFader }) => showFader)).toEqual([100, 100, TALK_SHOW_FADER, 100]);
   });
 
   it("n'écoute le mic qu'entre le démarrage et l'arrêt du director", () => {
@@ -888,6 +911,6 @@ describe("createShowDirector : le son des clips baisse quand Fenysk parle", () =
     director.stop();
     expect(micListeners.size).toBe(0);
     hear(0);
-    expect(director.getState().clipFader).toBe(100);
+    expect(director.getState().showFader).toBe(100);
   });
 });

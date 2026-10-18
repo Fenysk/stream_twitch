@@ -19,7 +19,11 @@ export type UseShow = {
 };
 
 // `setFoxMode` : ce que Jean-Renard montre en plus de sa bouche (il sursaute avec le son du clip) ; la page `/show` le lui donne seule.
-export const useShow = (setFoxMode: (mode: FoxMode) => void): UseShow => {
+// `setFoxFader` : le fader de sa voix, qui baisse comme le reste du son de l'émission.
+export const useShow = (
+  setFoxMode: (mode: FoxMode) => void,
+  setFoxFader: (fader: number) => void,
+): UseShow => {
   const first = useRef<HTMLVideoElement>(null);
   const second = useRef<HTMLVideoElement>(null);
   const [view, setView] = useState<ShowView>(NO_VIEW);
@@ -28,6 +32,8 @@ export const useShow = (setFoxMode: (mode: FoxMode) => void): UseShow => {
   // La dernière version de `setFoxMode`, que l'effet lit sans se relancer quand elle change.
   const foxMode = useRef(setFoxMode);
   foxMode.current = setFoxMode;
+  const foxFader = useRef(setFoxFader);
+  foxFader.current = setFoxFader;
 
   useEffect(() => {
     const page = {
@@ -42,6 +48,7 @@ export const useShow = (setFoxMode: (mode: FoxMode) => void): UseShow => {
       },
       clearChat: () => setChat([]),
       setFoxMode: (mode: FoxMode) => foxMode.current(mode),
+      setFoxFader: (fader: number) => foxFader.current(fader),
     };
     let run: Run | undefined;
     const end = () => {
@@ -52,14 +59,14 @@ export const useShow = (setFoxMode: (mode: FoxMode) => void): UseShow => {
     };
     // Le serveur dit l'état à la connexion puis à chaque changement ; une émission nouvelle (un autre `runId`) remplace la courante,
     // un état sans émission en cours (arrêtée, finie) coupe tout. Les rapports de la page elle-même reviennent avec le même `runId` :
-    // seul le fader du son des vidéos y change quelque chose.
+    // seul le fader du son de l'émission y change quelque chose.
     const close = watchShowState(true, (state) => {
       if (state.status !== "running") {
         if (run) end();
         return;
       }
       if (run?.runId === state.runId) {
-        run.updateFader(state.clipFader);
+        run.updateFader(state.showFader);
         return;
       }
       end();

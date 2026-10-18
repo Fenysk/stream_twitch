@@ -49,8 +49,8 @@ export const ShowPhaseSchema = z.enum(SHOW_PHASES);
 // L'état de l'émission, tel que le serveur le dit aux pages (`/show` et l'onglet Émission). `runId` change à chaque émission : une
 // page qui en avait une autre sait que celle-ci est nouvelle. `lineup` : les clips de l'émission dans l'ordre de passage. `phase` et
 // `index` : où la page en est, qu'elle dit au serveur. `startsAt` : l'instant (ms depuis l'epoch, horloge du serveur, la même machine
-// qu'OBS) où la page commence l'ouverture, la fin de la sortie de Jean-Renard hors de /fox ; 0 sans émission. `clipFader` : le fader du son
-// des vidéos des clips (0 à 100 %), baissé pendant que Fenysk parle au mic et à 100 sinon, quel que soit `status`.
+// qu'OBS) où la page commence l'ouverture, la fin de la sortie de Jean-Renard hors de /fox ; 0 sans émission. `showFader` : le fader de tout
+// le son de l'émission (0 à 100 %), baissé pendant que Fenysk parle au mic et à 100 sinon, quel que soit `status`.
 export const ShowStateSchema = z.object({
   status: ShowStatusSchema,
   runId: z.string(),
@@ -58,7 +58,7 @@ export const ShowStateSchema = z.object({
   phase: ShowPhaseSchema,
   index: z.number().int().min(0),
   startsAt: z.number().min(0),
-  clipFader: z.number().int().min(0).max(100),
+  showFader: z.number().int().min(0).max(100),
 });
 export type ShowState = z.infer<typeof ShowStateSchema>;
 
@@ -69,7 +69,7 @@ export const IDLE_SHOW: ShowState = {
   phase: "opening",
   index: 0,
   startsAt: 0,
-  clipFader: 100,
+  showFader: 100,
 };
 
 // Ce que la page dit au serveur : elle passe à ce temps (et à ce clip), ou l'émission est finie (`ended`).

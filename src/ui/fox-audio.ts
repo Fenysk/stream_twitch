@@ -21,7 +21,7 @@ export const unlockSound = (): void => {
 const BLOCKED_WAIT_MS = 100;
 
 const toSoundOutput = (context: AudioContext): SoundOutput => ({
-  async play(encoded, onEnd, isMuted) {
+  async play(encoded, onEnd, isMuted, startFader) {
     const buffer = await context.decodeAudioData(encoded);
     if (context.state !== "running") {
       await Promise.race([context.resume(), new Promise((done) => setTimeout(done, BLOCKED_WAIT_MS))]);
@@ -31,10 +31,16 @@ const toSoundOutput = (context: AudioContext): SoundOutput => ({
     }
     const source = context.createBufferSource();
     const analyser = context.createAnalyser();
-    // Un gain à 0 coupe le son sans couper le graphe : l'analyseur continue de mesurer la voix muette.
+    // Un gain à 0 coupe le son sans couper le graphe, un gain plus bas le baisse de même : l'analyseur, placé avant, mesure toujours
+    // la voix entière.
     const fader = context.createGain();
+    let isMutedNow = isMuted;
+    let faderNow = startFader;
+    const applyFader = () => {
+      fader.gain.value = isMutedNow ? 0 : faderNow / 100;
+    };
     analyser.fftSize = ANALYSIS_SIZE;
-    fader.gain.value = isMuted ? 0 : 1;
+    applyFader();
     source.buffer = buffer;
     source.connect(analyser);
     analyser.connect(fader);
@@ -44,8 +50,13 @@ const toSoundOutput = (context: AudioContext): SoundOutput => ({
     return {
       readSamples: (into) => analyser.getFloatTimeDomainData(into),
       stop: () => source.stop(),
-      setMuted: (isMutedNow) => {
-        fader.gain.value = isMutedNow ? 0 : 1;
+      setMuted: (next) => {
+        isMutedNow = next;
+        applyFader();
+      },
+      setFader: (next) => {
+        faderNow = next;
+        applyFader();
       },
     };
   },

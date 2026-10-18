@@ -5,10 +5,10 @@ import type { Settings } from "../domain/settings.schema";
 import {
   DEFAULT_SHOW_CLIP_COUNT,
   LAUGH_PHRASE,
-  toClipFader,
   toLaughSchedule,
   toLineup,
   toRecordedDay,
+  toShowFader,
 } from "../domain/show.rules";
 import {
   IDLE_SHOW,
@@ -36,7 +36,7 @@ export type ShowDirectorDeps = {
   queue: Pick<FoxQueue, "hold" | "release">;
   // Sa présence : il glisse hors de /fox au début de l'émission, et revient en sautant à la fin.
   presence: Pick<FoxModeController, "depart" | "wake">;
-  // Sa voix au mic : le son des clips baisse tant qu'il parle, à chaque pas de la détection de la tête (celle de /fox, pas une seconde).
+  // Sa voix au mic : tout le son de l'émission baisse tant qu'il parle, à chaque pas de la détection de la tête (celle de /fox, pas une seconde).
   mic: Pick<FoxModeController, "getVoice" | "subscribe">;
   // L'heure en ms : `startsAt` de l'émission est un instant de cette horloge, celle d'OBS (la même machine).
   clock: () => number;
@@ -123,17 +123,17 @@ export function createShowDirector({
     for (const listener of listeners) listener(state);
   };
 
-  // Sans émission, l'état garde le fader des clips courant : il suit la voix de Fenysk quel que soit le statut.
+  // Sans émission, l'état garde le fader de l'émission courant : il suit la voix de Fenysk quel que soit le statut.
   const toIdle = (status: "idle" | "over"): ShowState => ({
     ...IDLE_SHOW,
     status,
-    clipFader: state.clipFader,
+    showFader: state.showFader,
   });
 
-  // À chaque pas de la détection de la tête : le fader des clips suit sa voix, et ne part que s'il change.
+  // À chaque pas de la détection de la tête : le fader de l'émission suit sa voix, et ne part que s'il change.
   const onVoice = () => {
-    const clipFader = toClipFader(mic.getVoice().silentFor, delay);
-    if (clipFader !== state.clipFader) publish({ ...state, clipFader });
+    const showFader = toShowFader(mic.getVoice().silentFor, delay);
+    if (showFader !== state.showFader) publish({ ...state, showFader });
   };
 
   // La phrase de coupure tirée sans répétition ; `undefined` quand la liste est vide.
@@ -237,7 +237,7 @@ export function createShowDirector({
       phase: "opening",
       index: 0,
       startsAt: clock() + awayIn,
-      clipFader: state.clipFader,
+      showFader: state.showFader,
     });
     log(
       `Émission : démarrée, ${lineup.length} clip(s) : ${lineup.map(({ name }) => `« ${name} »`).join(", ")}.`,

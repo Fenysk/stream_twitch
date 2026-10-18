@@ -208,3 +208,53 @@ describe("les fichiers de rire d'une émission", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("les fichiers de rire d'une émission : le fader de l'émission", () => {
+  it("Quand le fader de l'émission passe à 15, un rire qui joue doit atteindre son fader × 0,15", () => {
+    const files = createLaughFiles(NEVER);
+    void files.play(laugh("aaaa0001"));
+    const [audio] = FakeAudio.instances;
+    expect(audio?.volume).toBe(0.6);
+    files.setFader(15);
+    expect(audio?.volume).toBeCloseTo(0.6 * 0.15, 6);
+  });
+
+  it("fait partir directement à cette valeur un rire qui part après la baisse, sans passer par son fader seul", () => {
+    const files = createLaughFiles(NEVER);
+    files.setFader(15);
+    void files.play(laugh("aaaa0001"));
+    expect(FakeAudio.instances[0]?.volume).toBeCloseTo(0.6 * 0.15, 6);
+  });
+
+  it("suit chaque pas du fondu pour tous les rires qui jouent, chacun à son propre fader", () => {
+    const files = createLaughFiles(NEVER);
+    void files.play(laugh("aaaa0001"));
+    void files.play({ ...laugh("bbbb0002"), fader: 80 });
+    files.setFader(50);
+    expect(FakeAudio.instances.map(({ volume }) => volume)).toEqual([0.3, 0.4]);
+    files.setFader(100);
+    expect(FakeAudio.instances.map(({ volume }) => volume)).toEqual([0.6, 0.8]);
+  });
+
+  it("joue au fader de son sound seul quand l'émission n'a rien baissé", () => {
+    const files = createLaughFiles(NEVER);
+    void files.play(laugh("aaaa0001"));
+    expect(FakeAudio.instances[0]?.volume).toBe(0.6);
+  });
+
+  it("ne touche plus un rire fini ou coupé", async () => {
+    let stop: () => void = () => undefined;
+    const aborted = new Promise<void>((resolve) => {
+      stop = resolve;
+    });
+    const files = createLaughFiles(aborted);
+    const ended = files.play(laugh("aaaa0001"));
+    void files.play(laugh("bbbb0002"));
+    FakeAudio.instances[0]?.emit("ended");
+    await ended;
+    stop();
+    await vi.advanceTimersByTimeAsync(0);
+    files.setFader(15);
+    expect(FakeAudio.instances.map(({ volume }) => volume)).toEqual([0.6, 0.6]);
+  });
+});

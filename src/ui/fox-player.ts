@@ -8,17 +8,18 @@ import { toLevel } from "../domain/mic.rules";
 export const ANALYSIS_SIZE = 2048;
 
 // Un son en train de jouer : on peut y lire les derniers échantillons (-1 à 1), l'arrêter, et lui couper le son sans
-// l'arrêter : un son muet se mesure toujours.
+// l'arrêter : un son muet se mesure toujours. Son fader (0 à 100 %) le baisse de la même façon, sans le couper.
 export type SoundPlayback = {
   readSamples(into: Float32Array<ArrayBuffer>): void;
   stop(): void;
   setMuted(isMuted: boolean): void;
+  setFader(fader: number): void;
 };
 
 export type SoundOutput = {
-  // Décode le WAV et le joue, muet ou non dès le premier échantillon ; `onEnd` part à la fin du son (aussi quand `stop`
-  // l'interrompt).
-  play(encoded: ArrayBuffer, onEnd: () => void, isMuted: boolean): Promise<SoundPlayback>;
+  // Décode le WAV et le joue, muet ou non et à ce fader dès le premier échantillon ; `onEnd` part à la fin du son (aussi quand
+  // `stop` l'interrompt).
+  play(encoded: ArrayBuffer, onEnd: () => void, isMuted: boolean, fader: number): Promise<SoundPlayback>;
 };
 
 export type FoxPlayerDeps = {
@@ -35,6 +36,8 @@ export type FoxPlayer = {
   stop(): void;
   // Muet : la voix ne sort pas du haut-parleur mais se mesure comme avant. Vaut pour la phrase en cours et les suivantes.
   setMuted(isMuted: boolean): void;
+  // Le fader de la voix (0 à 100 %, 100 au départ) : vaut pour la phrase en cours et les suivantes ; muette, elle reste muette.
+  setFader(fader: number): void;
 };
 
 type Playing = { playback: SoundPlayback | undefined };
@@ -45,6 +48,7 @@ export function createFoxPlayer({ output, getSpeech, onError }: FoxPlayerDeps): 
   // Chaque demande a un numéro : une demande plus ancienne qui finit de charger après une plus récente se tait.
   let latest = 0;
   let isMuted = false;
+  let fader = 100;
 
   const halt = () => {
     const previous = current;
@@ -67,13 +71,15 @@ export function createFoxPlayer({ output, getSpeech, onError }: FoxPlayerDeps): 
             if (current === entry) current = undefined;
           },
           isMuted,
+          fader,
         );
         if (mine !== latest) {
           entry.playback.stop();
           return;
         }
-        // Le réglage a pu changer pendant le décodage.
+        // Les réglages ont pu changer pendant le décodage.
         entry.playback.setMuted(isMuted);
+        entry.playback.setFader(fader);
         current = entry;
       } catch (error) {
         onError(error);
@@ -92,6 +98,10 @@ export function createFoxPlayer({ output, getSpeech, onError }: FoxPlayerDeps): 
     setMuted(next) {
       isMuted = next;
       current?.playback?.setMuted(next);
+    },
+    setFader(next) {
+      fader = next;
+      current?.playback?.setFader(next);
     },
   };
 }
