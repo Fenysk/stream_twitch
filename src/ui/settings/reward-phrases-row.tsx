@@ -1,11 +1,10 @@
-// Une récompense de la chaîne et ses phrases de Jean-Renard : un champ, une phrase par ligne, qui s'applique en perdant le focus,
+// Les phrases de Jean-Renard d'une récompense de la chaîne : un champ, une phrase par ligne, qui s'applique en perdant le focus,
 // et « Tester ». Une récompense du renard (clash, wake) n'a pas de champ ici : ses phrases se règlent dans l'onglet Renard.
 
 import { Volume2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { REWARD_PHRASE_VARIABLES } from "../../domain/reward-phrase.rules";
 import type { RewardPhrasesEntry } from "../../domain/reward-phrase.schema";
-import { Badge } from "../design/badge";
 import { Button } from "../design/button";
 import { unlockSound } from "../fox-audio";
 import { LinesEditor } from "./lines-editor";
@@ -46,7 +45,7 @@ const RewardPhrasesEditor = ({ entry, onSave, onTest }: RewardPhrasesRowProps) =
   };
 
   return (
-    <>
+    <div className="reward-phrases">
       <LinesEditor
         label="Phrases de Jean-Renard"
         help={HELP}
@@ -69,33 +68,13 @@ const RewardPhrasesEditor = ({ entry, onSave, onTest }: RewardPhrasesRowProps) =
           {testError}
         </p>
       )}
-    </>
+    </div>
   );
 };
 
-export const RewardPhrasesRow = (props: RewardPhrasesRowProps) => {
-  const { entry } = props;
-  return (
-    <li className="sound-row">
-      <div className="sound-summary">
-        <p className="lp-type-body">
-          {entry.title}
-          {entry.isMissing && (
-            <>
-              {" "}
-              <Badge
-                label="Pas sur Twitch"
-                title="Cette récompense n'existe plus sur Twitch : ses phrases restent, sans rachat possible."
-              />
-            </>
-          )}
-        </p>
-      </div>
-      {entry.isReserved ? (
-        <p className="lp-type-caption lp-muted">Phrases réglées dans l'onglet Renard</p>
-      ) : (
-        <RewardPhrasesEditor {...props} />
-      )}
-    </li>
+export const RewardPhrasesRow = (props: RewardPhrasesRowProps) =>
+  props.entry.isReserved ? (
+    <p className="lp-type-caption lp-muted">Phrases réglées dans l'onglet Renard</p>
+  ) : (
+    <RewardPhrasesEditor {...props} />
   );
-};

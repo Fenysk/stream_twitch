@@ -1,39 +1,20 @@
-// Le formulaire d'un son : le fichier audio, la récompense (neuve : titre, coût et cooldown ; ou une récompense déjà faite sur
-// Twitch, dont les valeurs se lisent et ne se changent pas ici), et le volume. Le même sert à ajouter un son et à en modifier
-// un (le fichier est alors facultatif : on garde l'ancien). Le serveur reste juge : il dit ce qui ne va pas.
+// Le formulaire d'un sound : le fichier audio, son titre et son volume. Le même sert à ajouter un sound et à en modifier un (le
+// fichier est alors facultatif : on garde l'ancien). Le serveur reste juge : il dit ce qui ne va pas.
 
 import { Upload } from "lucide-react";
 import { useRef, useState } from "react";
-import {
-  type RewardChoice,
-  SOUND_LIMITS,
-  type SoundInput,
-  type SoundSummary,
-} from "../../domain/sound.schema";
+import { SOUND_LIMITS, type SoundInput, type SoundSummary } from "../../domain/sound.schema";
 import { Button } from "../design/button";
-import { Segmented, type SegmentedOption } from "../design/segmented";
 import { Slider, type SliderStep } from "../design/slider";
+import { TextField } from "../design/text-field";
 import { getSoundFile } from "./read-sound-file";
-import { ExistingRewardPicker, OwnRewardFields, TwitchFields } from "./reward-fields";
-import {
-  type ChosenFile,
-  type Draft,
-  isReady,
-  type RewardSource,
-  toDraft,
-  toInput,
-} from "./sound-form-input";
+import { type ChosenFile, type Draft, isReady, toDraft, toInput } from "./sound-form-input";
 
 // Un cran par pourcent : le fader se règle au pourcent près.
 const FADER_STEPS: readonly SliderStep[] = Array.from({ length: SOUND_LIMITS.faderMax + 1 }, (_, value) => ({
   value,
   label: `${value} %`,
 }));
-
-const SOURCES: readonly SegmentedOption<RewardSource>[] = [
-  { value: "new", label: "Nouvelle récompense" },
-  { value: "existing", label: "Récompense existante" },
-];
 
 type FilePickerProps = {
   file: ChosenFile | null;
@@ -70,65 +51,15 @@ const FilePicker = ({ file, hasPreviousFile, isDisabled, onChoose }: FilePickerP
   );
 };
 
-type RewardPartProps = {
-  initial: SoundSummary | null;
-  draft: Draft;
-  choices: readonly RewardChoice[] | null;
-  isBusy: boolean;
-  patch: (change: Partial<Draft>) => void;
-};
-
-// La partie « récompense » : à la création, le choix entre une récompense neuve et une existante ; à la modification, les
-// champs de la récompense de l'app, ou les valeurs de Twitch en lecture seule quand l'app ne la gère pas.
-const RewardPart = ({ initial, draft, choices, isBusy, patch }: RewardPartProps) => {
-  if (initial && !initial.isManaged) {
-    return <TwitchFields title={initial.title} cost={initial.cost} pace={initial.pace} />;
-  }
-  const fields = (
-    <OwnRewardFields
-      title={draft.title}
-      cost={draft.cost}
-      pace={draft.pace}
-      isDisabled={isBusy}
-      onTitle={(title) => patch({ title })}
-      onCost={(cost) => patch({ cost })}
-      onPace={(pace) => patch({ pace })}
-    />
-  );
-  if (initial) return fields;
-  return (
-    <>
-      <Segmented
-        label="Récompense"
-        options={SOURCES}
-        value={draft.source}
-        onSelect={(source) => patch({ source })}
-      />
-      {draft.source === "new" ? (
-        fields
-      ) : (
-        <ExistingRewardPicker
-          choices={choices}
-          value={draft.rewardId}
-          isDisabled={isBusy}
-          onPick={(rewardId) => patch({ rewardId })}
-        />
-      )}
-    </>
-  );
-};
-
 type SoundFormProps = {
-  // Le son à modifier ; `null` : un son à ajouter.
+  // Le sound à modifier ; `null` : un sound à ajouter.
   initial: SoundSummary | null;
-  // Les récompenses de la chaîne qui n'ont pas de son ; `null` : Twitch ne les a pas données.
-  choices: readonly RewardChoice[] | null;
-  // Rend le refus à montrer, ou `null` quand le son est enregistré.
+  // Rend le refus à montrer, ou `null` quand le sound est enregistré.
   onSubmit: (input: SoundInput) => Promise<string | null>;
   onCancel?: () => void;
 };
 
-export const SoundForm = ({ initial, choices, onSubmit, onCancel }: SoundFormProps) => {
+export const SoundForm = ({ initial, onSubmit, onCancel }: SoundFormProps) => {
   const [draft, setDraft] = useState(() => toDraft(initial));
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -141,17 +72,12 @@ export const SoundForm = ({ initial, choices, onSubmit, onCancel }: SoundFormPro
   };
 
   const submit = async () => {
-    const form = toInput(draft, choices);
-    if (!form.ok) {
-      setError(form.message);
-      return;
-    }
     setIsBusy(true);
     setError(null);
-    const refusal = await onSubmit(form.input);
+    const refusal = await onSubmit(toInput(draft));
     setIsBusy(false);
     setError(refusal);
-    // Un son ajouté vide le formulaire, prêt pour le suivant.
+    // Un sound ajouté vide le formulaire, prêt pour le suivant.
     if (refusal === null && initial === null) setDraft(toDraft(null));
   };
 
@@ -170,7 +96,14 @@ export const SoundForm = ({ initial, choices, onSubmit, onCancel }: SoundFormPro
         isDisabled={isBusy}
         onChoose={(chosen) => void chooseFile(chosen)}
       />
-      <RewardPart initial={initial} draft={draft} choices={choices} isBusy={isBusy} patch={patch} />
+      <TextField
+        label="Titre du son"
+        value={draft.title}
+        onInput={(title) => patch({ title })}
+        placeholder="Applaudissements"
+        maxLength={SOUND_LIMITS.titleMax}
+        isDisabled={isBusy}
+      />
       <Slider
         label="Volume"
         steps={FADER_STEPS}

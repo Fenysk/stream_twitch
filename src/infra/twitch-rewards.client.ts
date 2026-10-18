@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { toRewardChange, toRewardCreation, toRewardRefusal } from "../domain/reward.rules";
-import type { RewardStatus } from "../domain/reward.types";
-import type { RewardChoice } from "../domain/sound.schema";
-import type { RewardPort, RewardResult } from "../usecase/sound.usecase";
+import type { RewardChoice, RewardStatus } from "../domain/reward.types";
+import type { RewardPort, RewardResult } from "../usecase/reward.usecase";
 
 export type RewardsClientSettings = {
   clientId: string;

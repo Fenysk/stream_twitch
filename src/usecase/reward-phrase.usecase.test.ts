@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { RewardChoice } from "../domain/reward.types";
 import type { RewardPhrasesFile } from "../domain/reward-phrase.schema";
-import type { RewardChoice } from "../domain/sound.schema";
+import type { RewardResult } from "./reward.usecase";
 import { createRewardPhraseLibrary } from "./reward-phrase.usecase";
-import type { RewardResult } from "./sound.usecase";
 
 const choice = (id: string, title: string): RewardChoice => ({
   id,

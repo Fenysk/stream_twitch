@@ -9,7 +9,7 @@ describe("toTwitchHint : ce que l'onglet Points de chaîne dit de la connexion",
 
   it("dit d'aller dans l'onglet Twitch quand Twitch n'est pas connecté", () => {
     expect(toTwitchHint({ kind: "disconnected", lastError: null })).toBe(
-      "Twitch n'est pas connecté : connecte-le dans l'onglet Twitch pour créer les récompenses des sons.",
+      "Twitch n'est pas connecté : connecte-le dans l'onglet Twitch pour gérer les récompenses.",
     );
   });
 

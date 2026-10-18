@@ -10,12 +10,10 @@ import { LaughPanel, NOT_KEPT_TEXT, OVER_END_TEXT } from "./laugh-panel";
 const sound = (id: string, title: string): SoundSummary => ({
   id,
   title,
-  cost: 100,
-  pace: 30,
   fader: 80,
   version: "1-1",
-  hasReward: true,
-  isManaged: true,
+  rewardTitles: [],
+  clipCount: 0,
 });
 
 const SOUNDS = [sound("aaaa0001", "Applaudissements"), sound("bbbb0002", "Rire gras")];

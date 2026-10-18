@@ -1,62 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { RewardEvent } from "../domain/reward.types";
-import type { SoundEvent, SoundSummary } from "../domain/sound.schema";
+import type { SoundEvent } from "../domain/sound.schema";
+import type { PlayableSound } from "./sound.usecase";
 import { createSoundQueue, MAX_PLAY_MS } from "./sound-queue.usecase";
 
-const sounds = new Map<string, SoundSummary>([
-  [
-    "rire0001",
-    {
-      id: "rire0001",
-      title: "Rire",
-      cost: 100,
-      pace: 30,
-      fader: 80,
-      version: "1.10",
-      hasReward: true,
-      isManaged: true,
-    },
-  ],
-  [
-    "bravo002",
-    {
-      id: "bravo002",
-      title: "Bravo",
-      cost: 200,
-      pace: 0,
-      fader: 35,
-      version: "2.20",
-      hasReward: true,
-      isManaged: true,
-    },
-  ],
-  [
-    // Une récompense qu'Alexis a faite sur Twitch : l'app ne la gère pas.
-    "clash0004",
-    {
-      id: "clash0004",
-      title: "Clash",
-      cost: 300,
-      pace: 0,
-      fader: 60,
-      version: "4.40",
-      hasReward: true,
-      isManaged: false,
-    },
-  ],
-  [
-    "zut00003",
-    {
-      id: "zut00003",
-      title: "Zut",
-      cost: 50,
-      pace: 10,
-      fader: 100,
-      version: "3.30",
-      hasReward: true,
-      isManaged: true,
-    },
-  ],
+const sounds = new Map<string, PlayableSound>([
+  ["rire0001", { id: "rire0001", title: "Rire", fader: 80, version: "1.10" }],
+  ["bravo002", { id: "bravo002", title: "Bravo", fader: 35, version: "2.20" }],
+  ["clash0004", { id: "clash0004", title: "Clash", fader: 60, version: "4.40" }],
+  ["zut00003", { id: "zut00003", title: "Zut", fader: 100, version: "3.30" }],
 ]);
 
 // Le reward de chaque son : « reward-rire », « reward-bravo », « reward-zut ».
@@ -65,6 +17,15 @@ const rewardOf: Record<string, string> = {
   rire0001: "reward-rire",
   bravo002: "reward-bravo",
   zut00003: "reward-zut",
+};
+
+// Une récompense qu'Alexis a faite sur Twitch (clash0004) : l'app ne la gère pas, ses rachats ne se marquent pas.
+const unmanaged = new Set(["clash0004"]);
+
+// data/rewards.json vu de la queue : le sound de chaque reward, et si l'app le gère.
+const getRecord = (rewardId: string) => {
+  const soundId = Object.keys(rewardOf).find((id) => rewardOf[id] === rewardId);
+  return soundId === undefined ? undefined : { sound: soundId, isManaged: !unmanaged.has(soundId) };
 };
 
 const spend = (id: string, soundId = "rire0001"): RewardEvent => ({
@@ -90,9 +51,9 @@ const setup = () => {
   const queue = createSoundQueue({
     library: {
       get: (id) => library.get(id),
-      getByReward: (rewardId) => [...library.values()].find(({ id }) => rewardOf[id] === rewardId),
       getAudio: (id) => (missingFiles.has(id) ? undefined : new Uint8Array(1)),
     },
+    records: { getRecord },
     rewards: {
       async settle(target, status) {
         settled.push(`${target.id}@${target.rewardId}:${status}`);
@@ -422,9 +383,9 @@ describe("createSoundQueue : une redemption joue le son de son reward", () => {
     const queue = createSoundQueue({
       library: {
         get: (id) => sounds.get(id),
-        getByReward: () => sounds.get("rire0001"),
         getAudio: () => new Uint8Array(1),
       },
+      records: { getRecord },
       rewards: {
         settle: async () => ({ ok: false, status: 404, message: "Twitch ne connaît plus ce rachat." }),
       },
@@ -749,5 +710,100 @@ describe("createSoundQueue : onPlay suit le départ du son", () => {
     page.disconnect();
     await flush();
     expect(count).toBe(0);
+  });
+});
+
+// Un reward désigne son sound dans data/rewards.json : plusieurs rewards peuvent désigner le même.
+describe("createSoundQueue : le sound vient de l'enregistrement du reward", () => {
+  const records = new Map<string, { sound: string | null; isManaged: boolean }>([
+    ["reward-a", { sound: "rire0001", isManaged: true }],
+    ["reward-b", { sound: "rire0001", isManaged: true }],
+    ["reward-twitch", { sound: "rire0001", isManaged: false }],
+    ["reward-vide", { sound: null, isManaged: true }],
+    ["reward-perdu", { sound: "disparu1", isManaged: true }],
+  ]);
+  const settled: string[] = [];
+  const setupRecords = () => {
+    settled.length = 0;
+    const queue = createSoundQueue({
+      library: { get: (id) => sounds.get(id), getAudio: () => new Uint8Array(1) },
+      records: { getRecord: (rewardId) => records.get(rewardId) },
+      rewards: {
+        async settle(target, status) {
+          settled.push(`${target.id}@${target.rewardId}:${status}`);
+          return { ok: true, value: null };
+        },
+      },
+      createId: () => "play",
+      schedule: () => () => undefined,
+      log: () => undefined,
+    });
+    const events: SoundEvent[] = [];
+    queue.subscribe((event) => events.push(event));
+    return { queue, events };
+  };
+  const spendFor = (id: string, rewardId: string): RewardEvent => ({
+    kind: "reward",
+    id,
+    rewardId,
+    title: rewardId,
+    user: "Alice",
+  });
+
+  it("joue le même sound pour deux rewards qui le désignent, et marque le rachat de chacun", async () => {
+    const { queue, events } = setupRecords();
+    expect(queue.redeem(spendFor("red-a", "reward-a"))).toBe(true);
+    expect(queue.redeem(spendFor("red-b", "reward-b"))).toBe(true);
+    queue.finish("play", "ended");
+    queue.finish("play", "ended");
+    await flush();
+    expect(events.filter(({ kind }) => kind === "play")).toHaveLength(2);
+    expect(events[0]).toMatchObject({ kind: "play", soundId: "rire0001", fader: 80 });
+    expect(settled).toEqual(["red-a@reward-a:FULFILLED", "red-b@reward-b:FULFILLED"]);
+  });
+
+  it("rend faux, sans rien jouer ni marquer, pour un reward sans sound, sans enregistrement ou dont le sound a disparu", async () => {
+    const { queue, events } = setupRecords();
+    expect(queue.redeem(spendFor("red-1", "reward-vide"))).toBe(false);
+    expect(queue.redeem(spendFor("red-2", "reward-perdu"))).toBe(false);
+    expect(queue.redeem(spendFor("red-3", "reward-inconnu"))).toBe(false);
+    await flush();
+    expect(events).toEqual([]);
+    expect(settled).toEqual([]);
+  });
+
+  it("ne marque pas le rachat d'un reward que l'app ne gère pas, même quand son sound a joué", async () => {
+    const { queue, events } = setupRecords();
+    expect(queue.redeem(spendFor("red-t", "reward-twitch"))).toBe(true);
+    queue.finish("play", "ended");
+    await flush();
+    expect(events).toHaveLength(1);
+    expect(settled).toEqual([]);
+  });
+});
+
+describe("createSoundQueue : supprimer un reward", () => {
+  it("rembourse les rachats en attente de ce reward, coupe le sound qui joue pour lui, et laisse les autres rewards", async () => {
+    const { queue, connect, settled } = setup();
+    const page = connect();
+    queue.redeem(spend("red-1", "rire0001"));
+    queue.redeem(spend("red-2", "bravo002"));
+    queue.redeem(spend("red-3", "rire0001"));
+    await queue.forgetReward("reward-rire");
+    expect(settled.sort()).toEqual(["red-1@reward-rire:CANCELED", "red-3@reward-rire:CANCELED"]);
+    expect(page.events).toContainEqual({ kind: "stop" });
+    expect(page.events.at(-1)).toMatchObject({ kind: "play", soundId: "bravo002" });
+  });
+
+  it("ne marque rien pour un reward que l'app ne gère pas, et ne touche pas à « Jouer dans OBS »", async () => {
+    const { queue, connect, settled } = setup();
+    const page = connect();
+    queue.play("bravo002");
+    queue.redeem(spend("red-1", "clash0004"));
+    await queue.forgetReward("reward-clash");
+    expect(settled).toEqual([]);
+    expect(page.events).toEqual([
+      { kind: "play", playId: "play1", soundId: "bravo002", version: "2.20", fader: 35 },
+    ]);
   });
 });

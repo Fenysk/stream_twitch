@@ -19,7 +19,7 @@ const FADER_STEPS: readonly SliderStep[] = Array.from({ length: 101 }, (_, value
   label: `${value} %`,
 }));
 
-export const NO_SOUND_TEXT = "Aucun sound dans la soundboard : ajoute-en un dans l'onglet Points de chaîne.";
+export const NO_SOUND_TEXT = "Aucun sound dans la soundboard : ajoute-en un dans l'onglet Sons.";
 
 type ClipTimelineSectionProps = {
   duration: number;

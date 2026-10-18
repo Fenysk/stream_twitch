@@ -7,12 +7,10 @@ import { LaughChoice, toLaughChoices } from "./laugh-choice";
 const sound = (id: string, title: string): SoundSummary => ({
   id,
   title,
-  cost: 100,
-  pace: 30,
   fader: 80,
   version: "1-1",
-  hasReward: true,
-  isManaged: true,
+  rewardTitles: [],
+  clipCount: 0,
 });
 
 const SOUNDS = [

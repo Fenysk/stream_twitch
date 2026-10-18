@@ -1,5 +1,5 @@
-/* L'onglet « Points de chaîne » : la liste des sons, chacun avec ses boutons, puis le formulaire d'ajout. Les cartes sont celles
-   de la page commune (settings-page.css). */
+/* Les onglets « Sons » et « Points de chaîne » : une liste de lignes (un sound, une récompense), chacune avec ses boutons, puis un
+   formulaire d'ajout. Les cartes sont celles de la page commune (settings-page.css). */
 
 .sound-global {
   display: flex;
@@ -56,24 +56,15 @@
   min-width: 0;
 }
 
-/* Les deux choix de la récompense, plus longs que la carte sur un écran étroit : la piste défile au lieu de dépasser */
-.sound-form .lp-segmented {
-  overflow-x: auto;
-  scrollbar-width: none;
+/* Le menu du sound d'une récompense : pas plus large qu'un titre de sound */
+.sound-pick {
+  max-width: 24rem;
 }
 
-/* Le titre, le coût et le cooldown d'une récompense faite sur Twitch : lus, pas réglés ici */
-.sound-twitch {
+/* Les phrases de Jean-Renard d'une récompense, sous son menu */
+.reward-phrases {
   display: grid;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--chip-hover);
-}
-
-.sound-twitch p {
-  margin: 0;
-  overflow-wrap: anywhere;
+  gap: var(--space-3);
 }
 
 /* Le coût et le cooldown côte à côte, l'un sous l'autre sur un écran étroit */

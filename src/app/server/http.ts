@@ -1,3 +1,6 @@
+import type { z } from "zod";
+import { toIssuesMessage } from "../../shared/zod-issues";
+
 // Les réponses communes des API du serveur local.
 export const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), {
@@ -20,3 +23,13 @@ export const getBodyJson = async (request: Request): Promise<unknown> => {
     return undefined;
   }
 };
+
+// Le corps JSON d'une écriture, vérifié par son schéma : sa valeur, ou la réponse qui refuse la demande.
+export async function getBody<Schema extends z.ZodType>(
+  request: Request,
+  schema: Schema,
+): Promise<z.output<Schema> | Response> {
+  if (!isJson(request)) return refuse(415, "le corps doit être du JSON (content-type: application/json)");
+  const parsed = schema.safeParse(await getBodyJson(request));
+  return parsed.success ? parsed.data : refuse(400, toIssuesMessage(parsed.error));
+}

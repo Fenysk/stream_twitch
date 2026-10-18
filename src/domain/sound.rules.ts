@@ -1,4 +1,4 @@
-import { type AudioFormat, SOUND_LIMITS } from "./sound.schema";
+import { type AudioFormat, type LegacySoundFile, SOUND_LIMITS } from "./sound.schema";
 import { isWav } from "./voice.rules";
 
 const hasText = (bytes: Uint8Array, text: string): boolean =>
@@ -48,6 +48,23 @@ export function toAudioFile(bytes: Uint8Array): AudioFile {
 
 const toTitleKey = (title: string): string => title.trim().toLocaleLowerCase("fr");
 
-// Twitch refuse deux récompenses de même titre, majuscules et blancs de bord compris pour rien.
+// Deux sounds ne portent pas le même titre, majuscules et blancs de bord comptés pour rien.
 export const isTitleTaken = (title: string, others: readonly string[]): boolean =>
   others.some((other) => toTitleKey(other) === toTitleKey(title));
+
+// Un sound.json d'avant porte encore le coût, la pace, le reward ou `isManaged` : ils ont quitté le sound.
+export const hasLegacyFields = ({ cost, pace, rewardId, isManaged }: LegacySoundFile): boolean =>
+  [cost, pace, rewardId, isManaged].some((field) => field !== undefined);
+
+// Combien de clips confirmés ont au moins un rire de chaque sound : un clip qui répète un rire ne compte qu'une fois.
+export function toClipCounts(
+  clips: readonly { laughs?: readonly { sound: string }[] | undefined }[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const clip of clips) {
+    for (const sound of new Set((clip.laughs ?? []).map((laugh) => laugh.sound))) {
+      counts.set(sound, (counts.get(sound) ?? 0) + 1);
+    }
+  }
+  return counts;
+}

@@ -1,25 +1,22 @@
-// L'onglet « Points de chaîne » : les sons de la soundboard, en trois cartes sur la page commune (Sons, Ajouter un son, Phrases
-// de Jean-Renard), une seule colonne. On ajoute un son (fichier, titre, coût, cooldown, volume) : l'app
-// crée sa récompense sur Twitch ; on l'écoute dans cette page, on le joue dans OBS (page /sounds), on le modifie ou on le
-// supprime (sa récompense suit) ; « Couper le son » arrête le son en cours dans OBS et vide la queue. Les refus de Twitch
-// (chaîne non affiliée, titre pris, 50 récompenses) se lisent tels quels. Dessous, chaque récompense de la chaîne peut recevoir
-// des phrases de Jean-Renard, avec ou sans son.
+// L'onglet « Points de chaîne » : les récompenses de la chaîne, réglées à part des sounds, en deux cartes sur la page commune
+// (Récompenses, Créer une récompense), une seule colonne. Chaque récompense choisit son sound dans un menu (aucun, ou un sound de
+// l'onglet Sons) et peut faire parler Jean-Renard. Celles que l'application a créées se modifient et se suppriment ici, et sur
+// Twitch avec elles ; celles qu'Alexis a faites sur Twitch s'y règlent. Les refus de Twitch (chaîne non affiliée, titre pris,
+// 50 récompenses) se lisent tels quels.
 
-import { RefreshCw, VolumeX } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useState } from "react";
-import type { SoundInput, SoundSummary } from "../../domain/sound.schema";
+import type { RewardCreation } from "../../domain/reward.schema";
 import { Button } from "../design/button";
 import { DESIGN_TEXTS } from "../design/design-texts";
-import { createSound, deleteSound, playSound, stopSounds, updateSound } from "../sounds-api";
-import { RewardPhrasesSection } from "./reward-phrases-section";
+import { RewardForm } from "./reward-form";
+import { RewardRow } from "./reward-row";
+import { toRewardRows } from "./reward-rows";
 import { SettingsCard, SettingsPage } from "./settings-page";
 import { toSectionLabel } from "./settings-sections";
-import { SoundForm } from "./sound-form";
-import { SoundRow } from "./sound-row";
 import { toTwitchHint } from "./twitch-hint";
-import { useRewardChoices } from "./use-reward-choices";
 import { useRewardPhrases } from "./use-reward-phrases";
-import { useSoundPreview } from "./use-sound-preview";
+import { useRewards } from "./use-rewards";
 import { useSounds } from "./use-sounds";
 import { useTwitch } from "./use-twitch";
 
@@ -29,91 +26,80 @@ const TITLE = toSectionLabel("rewards");
 type Notice = { text: string; isError: boolean };
 
 export const RewardsSettingsTab = () => {
-  const { sounds, refresh } = useSounds();
-  const preview = useSoundPreview();
+  const { sounds } = useSounds();
   const twitchHint = toTwitchHint(useTwitch().status);
-  const twitchRewards = useRewardChoices();
-  const rewardPhrases = useRewardPhrases();
-  // Ce que la liste de Twitch donne au formulaire : `null` quand Twitch ne l'a pas donnée.
-  const choices = twitchRewards.rewards?.choices ?? null;
-  const missing = new Set(twitchRewards.rewards?.missing);
+  const rewards = useRewards();
+  const phrases = useRewardPhrases();
   const [editedId, setEditedId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
   const say = (text: string) => setNotice({ text, isError: false });
   const refuse = (text: string) => setNotice({ text, isError: true });
+  const refreshAll = () => Promise.all([rewards.refresh(), phrases.refresh()]);
 
-  const create = async (input: SoundInput): Promise<string | null> => {
-    const answer = await createSound(input);
-    if (!answer.ok) return answer.message;
-    await refresh();
-    say(`« ${answer.value.title} » est ajouté, sa récompense existe sur Twitch.`);
+  const create = async (input: RewardCreation): Promise<string | null> => {
+    const refusal = await rewards.createReward(input);
+    if (refusal !== null) return refusal;
+    await phrases.refresh();
+    say(`« ${input.title} » est créée sur Twitch.`);
     return null;
   };
 
-  const update = async (id: string, input: SoundInput): Promise<string | null> => {
-    const answer = await updateSound(id, input);
-    if (!answer.ok) return answer.message;
+  const update = async (id: string, input: RewardCreation): Promise<string | null> => {
+    const refusal = await rewards.updateReward(id, input);
+    if (refusal !== null) return refusal;
     setEditedId(null);
-    await refresh();
-    say(`« ${answer.value.title} » est enregistré.`);
+    await phrases.refresh();
+    say(`« ${input.title} » est modifiée sur Twitch.`);
     return null;
   };
 
-  const deleteOne = async (sound: SoundSummary) => {
+  const deleteOne = async (id: string, title: string) => {
     setIsBusy(true);
-    const answer = await deleteSound(sound.id);
+    const refusal = await rewards.deleteReward(id);
     setIsBusy(false);
-    if (!answer.ok) {
-      refuse(answer.message);
+    if (refusal !== null) {
+      refuse(refusal);
       return;
     }
-    await refresh();
-    say(`« ${sound.title} » est supprimé, sa récompense aussi.`);
+    await phrases.refresh();
+    say(`« ${title} » est supprimée de Twitch.`);
   };
 
-  const playInObs = async (sound: SoundSummary) => {
-    const answer = await playSound(sound.id);
-    if (answer.ok) say(`« ${sound.title} » part dans OBS.`);
-    else refuse(answer.message);
-  };
-
-  const stop = async () => {
-    const answer = await stopSounds();
-    if (answer.ok) say("Le son s'arrête dans OBS, la file est vide.");
-    else refuse(answer.message);
-  };
+  const rows = rewards.rewards ? toRewardRows(rewards.rewards, phrases.rewards) : [];
 
   return (
     <SettingsPage title={TITLE}>
-      <SettingsCard title="Sons">
-        <div className="sound-global">
-          <Button label="Couper le son" icon={VolumeX} variant="danger" onPress={() => void stop()} />
-        </div>
-        <p className="lp-type-caption lp-muted">
-          Chaque son a sa récompense de points de chaîne, créée par l'application sur Twitch : la modifier ou
-          la supprimer ici suit sur Twitch. Un viewer qui la dépense lance le son dans la source navigateur
-          OBS /sounds (taille libre, aucune image), l'un après l'autre : ses points sont gardés si le son joue
-          jusqu'au bout, rendus sinon. Coche « Contrôler l'audio via OBS » pour régler les sons dans le
-          mélangeur.
-        </p>
+      <SettingsCard title="Récompenses">
         <div className="sound-global">
           <Button
             label="Rafraîchir"
             icon={RefreshCw}
-            isDisabled={twitchRewards.isLoading || rewardPhrases.isLoading}
-            onPress={() => void Promise.all([twitchRewards.refresh(), rewardPhrases.refresh()])}
+            isDisabled={rewards.isLoading || phrases.isLoading}
+            onPress={() => void refreshAll()}
           />
           <p className="lp-type-caption lp-muted">
-            {twitchRewards.rewards
-              ? `${twitchRewards.rewards.choices.length} récompense(s) de la chaîne sans son.`
+            {rewards.rewards
+              ? `${rewards.rewards.length} récompense(s) sur la chaîne.`
               : "Les récompenses de la chaîne se lisent sur Twitch."}
           </p>
         </div>
-        {twitchRewards.error && (
+        <p className="lp-type-caption lp-muted">
+          Chaque récompense joue le son que tu lui choisis quand un viewer la dépense : ses points sont gardés
+          si le son joue jusqu'au bout, rendus sinon (seulement pour celles que l'application a créées). Elle
+          peut aussi faire parler Jean-Renard : à chaque rachat, il dit une phrase tirée au hasard, {"{user}"}{" "}
+          devient le nickname du viewer. Les récompenses du renard (clash, réveil) se règlent dans l'onglet
+          Renard.
+        </p>
+        {rewards.error && (
           <p role="status" className="lp-type-caption lp-muted">
-            {twitchRewards.error}
+            {rewards.error}
+          </p>
+        )}
+        {phrases.error && !rewards.error && (
+          <p role="status" className="lp-type-caption lp-muted">
+            {phrases.error}
           </p>
         )}
         {twitchHint && (
@@ -129,46 +115,51 @@ export const RewardsSettingsTab = () => {
             {notice.text}
           </p>
         )}
-        {preview.error && (
-          <p role="alert" className="lp-type-body lp-danger">
-            {preview.error}
+        {rewards.rewards === null && rewards.isLoading && (
+          <p className="lp-type-body lp-muted">{DESIGN_TEXTS.loading}</p>
+        )}
+        {rewards.rewards && rows.length === 0 && (
+          <p className="lp-type-body lp-muted">
+            Aucune récompense sur la chaîne. « Rafraîchir » relit la liste.
           </p>
         )}
-        {sounds === null && <p className="lp-type-body lp-muted">{DESIGN_TEXTS.loading}</p>}
-        {sounds?.length === 0 && <p className="lp-type-body lp-muted">Aucun son pour l'instant.</p>}
-        {sounds && sounds.length > 0 && (
-          <ul className="sound-list" aria-label="Sons">
-            {sounds.map((sound) =>
-              sound.id === editedId ? (
-                <li key={sound.id} className="sound-row">
-                  <SoundForm
-                    initial={sound}
-                    choices={choices}
-                    onSubmit={(input) => update(sound.id, input)}
+        {rows.length > 0 && (
+          <ul className="sound-list" aria-label="Récompenses de la chaîne">
+            {rows.map(({ reward, phrases: entry }) =>
+              reward.id === editedId ? (
+                <li key={reward.id} className="sound-row">
+                  <RewardForm
+                    initial={reward}
+                    sounds={sounds}
+                    onSubmit={(input) => update(reward.id, input)}
                     onCancel={() => setEditedId(null)}
                   />
                 </li>
               ) : (
-                <SoundRow
-                  key={sound.id}
-                  sound={sound}
-                  isPlaying={preview.playingId === sound.id}
+                <RewardRow
+                  key={reward.id}
+                  reward={reward}
+                  phrases={entry}
+                  sounds={sounds}
                   isBusy={isBusy}
-                  isMissing={missing.has(sound.id)}
-                  onPreview={() => preview.toggle(sound)}
-                  onPlay={() => void playInObs(sound)}
-                  onEdit={() => setEditedId(sound.id)}
-                  onDelete={() => void deleteOne(sound)}
+                  onPickSound={rewards.updateRewardSound}
+                  onSavePhrases={phrases.save}
+                  onTestPhrases={phrases.test}
+                  onEdit={() => setEditedId(reward.id)}
+                  onDelete={() => void deleteOne(reward.id, reward.title)}
                 />
               ),
             )}
           </ul>
         )}
       </SettingsCard>
-      <SettingsCard title="Ajouter un son">
-        <SoundForm initial={null} choices={choices} onSubmit={create} />
+      <SettingsCard title="Créer une récompense">
+        <p className="lp-type-caption lp-muted">
+          L'application la crée sur Twitch (50 récompenses au plus sur la chaîne), puis la modifie, la met en
+          pause hors stream et marque ses rachats.
+        </p>
+        <RewardForm initial={null} sounds={sounds} onSubmit={create} />
       </SettingsCard>
-      <RewardPhrasesSection phrases={rewardPhrases} />
     </SettingsPage>
   );
 };

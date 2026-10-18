@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-17 — Les sounds et les rewards se règlent à part : le lien sound ↔ reward passe côté reward, dans `data/rewards.json`
+
+**Contexte.** Un sound portait son reward (`rewardId`, `isManaged`, et le titre, le coût et la pace de Twitch) : Alexis a supprimé le sound des rires de l'émission, badgé « Pas sur Twitch », en croyant supprimer une récompense.
+**Décision.** `sound.json` ne garde que `title`, `fader`, `format` (l'id du dossier ne change jamais : les rires des clips le désignent) ; `cost` et `pace` sont ceux du reward, sur Twitch. `data/rewards.json` (`{ [rewardId]: { title, sound, isManaged } }`) garde le sound d'un reward (un sound peut servir à plusieurs) et les rewards créés par l'app (`isManaged`) : seuls ceux-là se modifient, se suppriment, se mettent en pause et se remboursent. Deux onglets : « Sons » (`/settings/sounds`) et « Points de chaîne ». Un ancien `sound.json` relié est converti au démarrage. `lexique.json` : le sens de `sound`, `pace` et `reward` suit. Les tests des sons et des récompenses sont réécrits pour ce comportement sans perdre de cas ni d'assertion.
+**Renoncement.** Garder le lien dans `sound.json` : supprimer un sound resterait supprimer une récompense. Mettre en pause tous les rewards que Twitch dit gérables : le client id est aussi celui de LivePlace, ses rewards seraient mis en pause et remboursés. Fondre `reward-phrases.json` dans `rewards.json` : un diff bien plus grand pour rien de visible.
+
 ## 2026-10-17 — Jean-Renard glisse hors de `/fox` avant l'émission, et râle (`grumble`) quand Alexis la coupe
 
 **Contexte.** Au lancement de l'émission, Jean-Renard disparaissait d'un coup de `/fox` ; coupée en cours, elle le rendait à `/fox` sans un mot.

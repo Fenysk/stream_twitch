@@ -1,8 +1,9 @@
 import { toPhraseLines } from "../domain/phrase.rules";
+import type { RewardChoice } from "../domain/reward.types";
 import { toPhraseIssues } from "../domain/reward-phrase.rules";
 import type { RewardPhrasesEntry, RewardPhrasesFile } from "../domain/reward-phrase.schema";
-import type { RewardChoice } from "../domain/sound.schema";
-import { type RewardPort, refuse, refuseReward, type SoundResult } from "./sound.usecase";
+import { type RewardPort, refuseReward } from "./reward.usecase";
+import { refuse, type SoundResult } from "./sound.usecase";
 
 // Le disque vu du usecase : infra l'implémente (data/reward-phrases.json, écriture atomique). `update` peut lever.
 export type RewardPhraseStore = {

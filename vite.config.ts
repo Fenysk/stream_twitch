@@ -23,6 +23,8 @@ export default defineConfig({
         "/api/fox/review": "./src/app/server/fox-review.ts",
         "/api/fox/speech/:id": "./src/app/server/fox-speech.ts",
         "/api/rewards": "./src/app/server/rewards-api.ts",
+        "/api/rewards/:id": "./src/app/server/reward-api.ts",
+        "/api/rewards/:id/sound": "./src/app/server/reward-sound-api.ts",
         "/api/reward-phrases": "./src/app/server/reward-phrases-api.ts",
         "/api/reward-phrases/:id": "./src/app/server/reward-phrase-api.ts",
         "/api/reward-phrases/:id/test": "./src/app/server/reward-phrase-test.ts",

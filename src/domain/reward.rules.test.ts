@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { toRewardChange, toRewardCreation, toRewardRefusal } from "./reward.rules";
+import {
+  isRecordKept,
+  type LegacySound,
+  toRewardChange,
+  toRewardCreation,
+  toRewardRefusal,
+  toUpgradedRecords,
+} from "./reward.rules";
+import type { RewardRecordsFile } from "./reward.schema";
 
 // Les corps de Twitch sont en snake_case : ils s'écrivent en JSON, et se lisent par `JSON.parse`.
 const body = (json: string): unknown => JSON.parse(json);
@@ -83,5 +91,77 @@ describe("toRewardRefusal : ce que Twitch refuse, en français", () => {
     );
     expect(toRewardRefusal(503, "")).toBe("Twitch a refusé (HTTP 503).");
     expect(toRewardRefusal(400, "x".repeat(500))).toBe(`Twitch a refusé (HTTP 400 : ${"x".repeat(120)}).`);
+  });
+});
+
+describe("isRecordKept : un enregistrement de data/rewards.json a une raison d'être", () => {
+  it("garde le reward qui a un sound, ou que l'app a créé", () => {
+    expect(isRecordKept({ title: "Prout.", sound: "823e2671", isManaged: false })).toBe(true);
+    expect(isRecordKept({ title: "Rire", sound: null, isManaged: true })).toBe(true);
+    expect(isRecordKept({ title: "Rire", sound: "rire0001", isManaged: true })).toBe(true);
+  });
+
+  it("retire le reward que l'app n'a pas créé et qui n'a plus de sound", () => {
+    expect(isRecordKept({ title: "Prout.", sound: null, isManaged: false })).toBe(false);
+  });
+});
+
+// Les deux sound.json réels d'avant la séparation des sounds et des rewards.
+const SITCOM: LegacySound = {
+  id: "48ae9a52",
+  file: {
+    title: "Rires de sitcom",
+    cost: 100,
+    pace: 30,
+    fader: 80,
+    format: "mp3",
+    rewardId: null,
+    isManaged: false,
+  },
+};
+const PROUT: LegacySound = {
+  id: "823e2671",
+  file: {
+    title: "Prout.",
+    cost: 50,
+    pace: 10,
+    fader: 80,
+    format: "mp3",
+    rewardId: "bf38114f-2b75-4538-b5b5-a071db82f77e",
+    isManaged: false,
+  },
+};
+
+describe("toUpgradedRecords : le reward d'un ancien sound.json devient un enregistrement", () => {
+  it("relie « Prout. » à son reward, avec son titre et son isManaged, et laisse « Rires de sitcom » sans reward", () => {
+    expect(toUpgradedRecords({}, [SITCOM, PROUT])).toEqual({
+      "bf38114f-2b75-4538-b5b5-a071db82f77e": { title: "Prout.", sound: "823e2671", isManaged: false },
+    });
+  });
+
+  it("tient le reward d'un ancien sound.json sans isManaged pour créé par l'app", () => {
+    const { isManaged: _unsaid, ...file } = PROUT.file;
+    expect(toUpgradedRecords({}, [{ id: PROUT.id, file }])).toEqual({
+      "bf38114f-2b75-4538-b5b5-a071db82f77e": { title: "Prout.", sound: "823e2671", isManaged: true },
+    });
+  });
+
+  it("garde l'enregistrement qui existe déjà pour ce reward, et celui des autres", () => {
+    const file: RewardRecordsFile = {
+      "bf38114f-2b75-4538-b5b5-a071db82f77e": {
+        title: "Prout. (Twitch)",
+        sound: "autre001",
+        isManaged: false,
+      },
+      other: { title: "Autre", sound: null, isManaged: true },
+    };
+    expect(toUpgradedRecords(file, [PROUT])).toEqual(file);
+  });
+
+  it("rend le même fichier quand il n'y a rien à ajouter, de quoi rejouer la conversion", () => {
+    const file = toUpgradedRecords({}, [SITCOM, PROUT]);
+    expect(toUpgradedRecords(file, [])).toBe(file);
+    expect(toUpgradedRecords(file, [PROUT])).toBe(file);
+    expect(toUpgradedRecords({}, [SITCOM])).toEqual({});
   });
 });

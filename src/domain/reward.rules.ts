@@ -1,4 +1,6 @@
+import type { RewardRecord, RewardRecordsFile } from "./reward.schema";
 import type { RewardChange, RewardFields } from "./reward.types";
+import type { LegacySoundFile } from "./sound.schema";
 
 // Twitch écrit les champs d'un reward en snake_case (`global_cooldown_seconds`) : le corps se compose depuis des paires.
 const toRecord = (entries: [string, unknown][]): Record<string, unknown> => Object.fromEntries(entries);
@@ -42,4 +44,26 @@ export function toRewardRefusal(status: number, reason: string): string {
   }
   const detail = reason ? ` : ${reason.slice(0, MAX_REASON_LENGTH)}` : "";
   return `Twitch a refusé (HTTP ${status}${detail}).`;
+}
+
+// Un enregistrement de data/rewards.json existe si le reward a un sound, ou si l'app l'a créé ; sinon il n'a plus de raison d'être.
+export const isRecordKept = ({ sound, isManaged }: RewardRecord): boolean => sound !== null || isManaged;
+
+// Un ancien sound.json et l'identifiant de son dossier : la conversion en tire le reward qu'il portait.
+export type LegacySound = { id: string; file: LegacySoundFile };
+
+// data/rewards.json une fois les sounds d'avant convertis : le reward de chaque ancien sound.json y entre (son titre est celui du
+// sound, `isManaged` vrai quand sound.json ne le disait pas) s'il n'y a pas déjà un enregistrement pour lui. Le même fichier quand
+// il n'y a rien à ajouter.
+export function toUpgradedRecords(
+  file: RewardRecordsFile,
+  sounds: readonly LegacySound[],
+): RewardRecordsFile {
+  const added: RewardRecordsFile = {};
+  for (const { id, file: sound } of sounds) {
+    const rewardId = sound.rewardId ?? null;
+    if (rewardId === null || rewardId in file || rewardId in added) continue;
+    added[rewardId] = { title: sound.title, sound: id, isManaged: sound.isManaged ?? true };
+  }
+  return Object.keys(added).length === 0 ? file : { ...file, ...added };
 }

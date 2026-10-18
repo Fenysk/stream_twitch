@@ -4,6 +4,7 @@ import { toChatChannel } from "../../domain/chat-settings.rules";
 import type { ExpressionRef } from "../../domain/head.types";
 import { toInstant } from "../../domain/instant.rules";
 import type { Settings } from "../../domain/settings.schema";
+import { toClipCounts } from "../../domain/sound.rules";
 import { isFlinchReward, isFoxReward } from "../../domain/thanks.rules";
 import { createChatClient } from "../../infra/chat.client";
 import { createClipChatStore, createClipStore } from "../../infra/clip.repository";
@@ -21,9 +22,10 @@ import {
 } from "../../infra/local-settings.repository";
 import { createObsClient, createObsSocket, type ObsClient } from "../../infra/obs.client";
 import { createRegularsStore } from "../../infra/regulars.repository";
+import { createRewardStore } from "../../infra/reward.repository";
 import { createRewardPhraseStore } from "../../infra/reward-phrase.repository";
 import { getSettings } from "../../infra/settings.repository";
-import { createSoundStore } from "../../infra/sound.repository";
+import { createSoundStore, upgradeSounds } from "../../infra/sound.repository";
 import { createTwitchAuthClient } from "../../infra/twitch-auth.client";
 import { createEventFeed } from "../../infra/twitch-events.client";
 import { createRewardsClient } from "../../infra/twitch-rewards.client";
@@ -56,6 +58,7 @@ import { createFoxTally } from "../../usecase/fox-tally.usecase";
 import { createFoxThanks, type FoxThanks } from "../../usecase/fox-thanks.usecase";
 import { createFoxTunnel } from "../../usecase/fox-tunnel.usecase";
 import { createHeadLoop, type HeadFeed } from "../../usecase/head.usecase";
+import { createRewardLibrary, type RewardLibrary } from "../../usecase/reward.usecase";
 import { createRewardPhraseLibrary, type RewardPhraseLibrary } from "../../usecase/reward-phrase.usecase";
 import { createSettingsStore, type SettingsStore } from "../../usecase/settings.usecase";
 import { createShowVoice } from "../../usecase/show.usecase";
@@ -86,9 +89,12 @@ export type Runtime = {
   review: FoxReview;
   // Le nombre de viewers du live, relu toutes les 60 s.
   viewers: Viewers;
-  // La soundboard : les sons enregistrés (data/sounds/), et leur queue vers la page /sounds d'OBS.
+  // La soundboard : les sounds enregistrés (data/sounds/), et leur queue vers la page /sounds d'OBS.
   sounds: SoundLibrary;
   soundQueue: SoundQueue;
+  // Les rewards de la chaîne et le sound de chacun (data/rewards.json) ; seuls ceux que l'app a créés se modifient, se suppriment, se
+  // mettent en pause et se remboursent.
+  rewards: RewardLibrary;
   // Les phrases de Jean-Renard de chaque récompense de la chaîne (data/reward-phrases.json), et ce qu'il fait d'un rachat.
   rewardPhrases: RewardPhraseLibrary;
   foxReward: FoxReward;
@@ -125,7 +131,7 @@ export function startRuntime(): Runtime {
   // L'arrêt (OBS se ferme, OBS ne revient pas, signal) met d'abord les rewards en pause : hors stream, personne ne les dépense.
   const shutdown = createShutdown({
     pauseRewards: async () => {
-      if (isStreamServer) await sounds.pauseRewards();
+      if (isStreamServer) await rewards.pauseRewards();
     },
     exit: () => process.exit(0),
     schedule,
@@ -433,7 +439,7 @@ export function startRuntime(): Runtime {
   });
   // La connexion d'Alexis : le jeton vit dans data/twitch-token.json (hors de git), les follows et les récompenses arrivent par
   // EventSub et vont aux remerciements comme les évènements du tchat. Une récompense va aussi à la queue des sons et aux
-  // phrases du renard, sur le serveur du stream seulement ; dès que le jeton peut gérer les récompenses, les rewards des sons
+  // phrases du renard, sur le serveur du stream seulement ; dès que le jeton peut gérer les récompenses, celles que l'app a créées
   // sortent de pause et leurs rachats restés UNFULFILLED sont remboursés.
   const twitch = createTwitchConnection({
     app: twitchApp && {
@@ -447,46 +453,72 @@ export function startRuntime(): Runtime {
       thanks.receive(event);
       if (event.kind === "reward" && isStreamServer) foxReward.redeem(event);
     },
-    ...(isStreamServer ? { onReady: () => void sounds.openRewards() } : {}),
+    ...(isStreamServer ? { onReady: () => void rewards.openRewards() } : {}),
     clock: Date.now,
     schedule,
     createState: () => randomBytes(16).toString("hex"),
     log,
   });
-  // La soundboard : les sons vivent dans data/sounds/ (hors de git), chacun avec son reward de points de chaîne ; un seul
-  // son joue à la fois, dans la page /sounds d'OBS. Sans les identifiants de l'application, le client des rewards répond
-  // que Twitch n'est pas prêt.
-  const soundStore = createSoundStore(join(root, "data", "sounds"), log);
-  const rewards = createRewardsClient({
+  // La soundboard : les sounds vivent dans data/sounds/ (hors de git), un seul joue à la fois, dans la page /sounds d'OBS. Les
+  // rewards de points de chaîne vivent sur Twitch ; data/rewards.json garde le sound de chacun et ceux que l'app a créés. Un
+  // sound.json d'avant (reward, coût, pace) y est converti avant la lecture des sounds. Sans les identifiants de l'application,
+  // le client des rewards répond que Twitch n'est pas prêt.
+  const soundsFolder = join(root, "data", "sounds");
+  const rewardStore = createRewardStore(join(root, "data", "rewards.json"), log);
+  upgradeSounds(soundsFolder, rewardStore, log);
+  const soundStore = createSoundStore(soundsFolder, log);
+  const twitchRewards = createRewardsClient({
     clientId: twitchApp?.clientId ?? "",
     broadcasterId: initial.chatChannelId,
     getAccessToken: (isForced) => twitch.getRewardsToken(isForced),
-  });
-  const sounds = createSoundLibrary({
-    store: soundStore,
-    rewards,
-    createId: () => {
-      let id = randomBytes(4).toString("hex");
-      while (soundStore.get(id)) id = randomBytes(4).toString("hex");
-      return id;
-    },
-    onDelete: (id) => soundQueue.forget(id),
-    log,
-  });
-  const soundQueue = createSoundQueue({
-    library: sounds,
-    rewards,
-    createId: () => randomBytes(8).toString("hex"),
-    schedule,
-    log,
   });
   // Les phrases de Jean-Renard pour une récompense : data/reward-phrases.json (hors de git). Les récompenses du renard (clash,
   // wake) gardent leurs phrases de l'onglet Renard.
   const isReserved = (title: string): boolean => isFoxReward(title, settings.getState().effective);
   const rewardPhrases = createRewardPhraseLibrary({
     store: createRewardPhraseStore(join(root, "data", "reward-phrases.json"), log),
-    rewards,
+    rewards: twitchRewards,
     isReserved,
+    log,
+  });
+  const sounds = createSoundLibrary({
+    store: soundStore,
+    createId: () => {
+      let id = randomBytes(4).toString("hex");
+      while (soundStore.get(id)) id = randomBytes(4).toString("hex");
+      return id;
+    },
+    usage: {
+      listRewardTitles: (soundId) => rewards.listTitlesOf(soundId),
+      // Le dossier des clips illisible : le nombre de clips est inconnu, il n'est pas inventé.
+      listClipCounts: () => {
+        const confirmed = clips.listConfirmed();
+        return confirmed.ok ? toClipCounts(confirmed.value) : undefined;
+      },
+    },
+    // La queue rend les points des rachats en attente du sound, puis les rewards qui le désignent le lâchent.
+    onDelete: async (id) => {
+      await soundQueue.forget(id);
+      rewards.detachSound(id);
+    },
+    log,
+  });
+  const rewards = createRewardLibrary({
+    store: rewardStore,
+    twitch: twitchRewards,
+    sounds,
+    onDelete: (rewardId) => soundQueue.forgetReward(rewardId),
+    clearPhrases: async (rewardId) => {
+      await rewardPhrases.update(rewardId, []);
+    },
+    log,
+  });
+  const soundQueue = createSoundQueue({
+    library: sounds,
+    records: rewards,
+    rewards: twitchRewards,
+    createId: () => randomBytes(8).toString("hex"),
+    schedule,
     log,
   });
   const foxReward = createFoxReward({
@@ -597,6 +629,7 @@ export function startRuntime(): Runtime {
     viewers,
     sounds,
     soundQueue,
+    rewards,
     rewardPhrases,
     foxReward,
     clips,

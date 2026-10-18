@@ -9,8 +9,17 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { AUDIO_FORMATS, type AudioFormat, type SoundFile, SoundFileSchema } from "../domain/sound.schema";
+import { type LegacySound, toUpgradedRecords } from "../domain/reward.rules";
+import { hasLegacyFields } from "../domain/sound.rules";
+import {
+  AUDIO_FORMATS,
+  type AudioFormat,
+  LegacySoundFileSchema,
+  type SoundFile,
+  SoundFileSchema,
+} from "../domain/sound.schema";
 import { toIssuesMessage } from "../shared/zod-issues";
+import type { RewardRecordStore } from "../usecase/reward.usecase";
 import type { SoundStore, StoredSound } from "../usecase/sound.usecase";
 import { getJsonFile } from "./json-file.gateway";
 
@@ -26,6 +35,8 @@ const writeAtomic = (path: string, content: string | Uint8Array): void => {
   writeFileSync(temporary, content);
   renameSync(temporary, path);
 };
+
+const toMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 // Les sons enregistrés : `data/sounds/<id>/` (sound.json et audio.mp3|wav|ogg), hors de git. sound.json s'écrit en dernier :
 // tant qu'il manque, le son n'existe pas pour ceux qui listent le dossier.
@@ -44,7 +55,7 @@ export function createSoundStore(directory: string, log: (message: string) => vo
   };
 
   // Les réglages d'un son dont sound.json est valide ; sinon rien, et le journal dit pourquoi. Un son dont le fichier audio
-  // manque reste : son reward existe chez Twitch, ses rachats doivent être rendus ; `getFile` ne rend rien pour lui.
+  // manque reste, pour qu'on puisse le supprimer ; `getFile` ne rend rien pour lui.
   const getSound = (id: string, folder: string): SoundFile | undefined => {
     const parsed = SoundFileSchema.safeParse(getJsonFile(join(folder, SOUND_JSON)));
     if (parsed.success) return parsed.data;
@@ -60,7 +71,7 @@ export function createSoundStore(directory: string, log: (message: string) => vo
       const sound = getSound(id, folder);
       return sound && { id, ...sound, version: toVersion(folder, sound.format) };
     } catch (error) {
-      log(`Son ${id} ignoré : ${error instanceof Error ? error.message : String(error)}`);
+      log(`Son ${id} ignoré : ${toMessage(error)}`);
       return undefined;
     }
   };
@@ -98,4 +109,48 @@ export function createSoundStore(directory: string, log: (message: string) => vo
       rmSync(folderOf(id), { recursive: true, force: true });
     },
   };
+}
+
+// Les sound.json d'avant : leur dossier et ce que sound.json y dit, lu une fois. Un sound.json illisible est sauté, le journal le dit.
+const listLegacy = (directory: string, log: (message: string) => void): LegacySound[] =>
+  readdirSync(directory)
+    .filter((id) => SOUND_ID.test(id) && existsSync(join(directory, id, SOUND_JSON)))
+    .flatMap((id) => {
+      try {
+        const parsed = LegacySoundFileSchema.safeParse(getJsonFile(join(directory, id, SOUND_JSON)));
+        return parsed.success && hasLegacyFields(parsed.data) ? [{ id, file: parsed.data }] : [];
+      } catch (error) {
+        log(`Son ${id} : conversion sautée : ${toMessage(error)}`);
+        return [];
+      }
+    });
+
+// Au démarrage : le reward d'un sound.json d'avant (rewardId, isManaged) entre dans data/rewards.json, puis sound.json ne garde que
+// son titre, son fader et son format. rewards.json d'abord, sound.json ensuite : un arrêt entre les deux se rejoue sans rien perdre.
+// En cas de panne, aucun sound.json n'est réécrit : le prochain démarrage recommence.
+export function upgradeSounds(
+  directory: string,
+  rewards: RewardRecordStore,
+  log: (message: string) => void,
+): void {
+  if (!existsSync(directory)) return;
+  const legacy = listLegacy(directory, log);
+  if (legacy.length === 0) return;
+  try {
+    const before = rewards.get();
+    const after = toUpgradedRecords(before, legacy);
+    if (after !== before) rewards.update(after);
+    for (const { id, file } of legacy) {
+      const { title, fader, format } = file;
+      writeAtomic(join(directory, id, SOUND_JSON), `${JSON.stringify({ title, fader, format }, null, 2)}\n`);
+    }
+    const linked = Object.keys(after).length - Object.keys(before).length;
+    log(
+      `Sons : ${legacy.length} sound.json converti(s) (titre, fader, format) ; ${linked} récompense(s) reliée(s) dans data/rewards.json.`,
+    );
+  } catch (error) {
+    log(
+      `Sons : conversion des sound.json impossible, elle sera refaite au prochain démarrage : ${toMessage(error)}`,
+    );
+  }
 }

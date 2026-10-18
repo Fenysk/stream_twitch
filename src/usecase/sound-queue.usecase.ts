@@ -1,6 +1,8 @@
+import type { RewardRecord } from "../domain/reward.schema";
 import type { RewardEvent, RewardStatus } from "../domain/reward.types";
-import type { SoundEvent, SoundSummary } from "../domain/sound.schema";
-import type { RewardPort } from "./sound.usecase";
+import type { SoundEvent } from "../domain/sound.schema";
+import type { RewardPort } from "./reward.usecase";
+import type { PlayableSound } from "./sound.usecase";
 
 // Un son que la page n'a pas fini au bout de 10 min est tenu pour raté : la queue ne reste pas bloquée derrière lui.
 export const MAX_PLAY_MS = 10 * 60_000;
@@ -14,11 +16,12 @@ export type AfterSound = () => Promise<boolean>;
 
 export type SoundQueueDeps = {
   library: {
-    get(id: string): SoundSummary | undefined;
-    getByReward(rewardId: string): SoundSummary | undefined;
+    get(id: string): PlayableSound | undefined;
     // Le fichier du son ; `undefined` : il a disparu du disque.
     getAudio(id: string): unknown;
   };
+  // Le sound d'un reward et si l'app le gère (data/rewards.json) : ce qu'un rachat doit jouer.
+  records: { getRecord(rewardId: string): Pick<RewardRecord, "sound" | "isManaged"> | undefined };
   rewards: Pick<RewardPort, "settle">;
   createId: () => string;
   // Programme `callback` dans `ms` ; rend de quoi l'annuler.
@@ -31,7 +34,7 @@ export type SoundQueue = {
   subscribe(screen: SoundScreen): () => void;
   // « Jouer dans OBS » : le son rejoint la queue.
   play(soundId: string): PlayResult;
-  // Une redemption : le son de son reward rejoint la queue, et ses points sont gardés (FULFILLED) s'il joue jusqu'au bout,
+  // Une redemption : le sound de son reward rejoint la queue, et ses points sont gardés (FULFILLED) s'il joue jusqu'au bout,
   // rendus (CANCELED) sinon. Avec `afterSound`, la queue le lance dès que le son est passé (fini ou raté, jamais coupé) : le
   // son raté garde alors les points si la phrase est dite. Avec `onPlay`, la queue l'appelle une fois, quand elle envoie le son à
   // la page /sounds : jamais si le son ne joue pas (pas de page, fichier manquant, son supprimé, coupé avant). Rend faux, sans
@@ -43,6 +46,8 @@ export type SoundQueue = {
   finish(playId: string, outcome: "ended" | "failed", reason?: string): void;
   // Le son est supprimé : ses redemptions en attente sont remboursées, et il se tait s'il joue.
   forget(soundId: string): Promise<void>;
+  // Le reward est supprimé : ses redemptions en attente sont remboursées, et son sound se tait s'il joue pour l'une d'elles.
+  forgetReward(rewardId: string): Promise<void>;
 };
 
 // Une demande de lecture : un son, avec la redemption à marquer quand il a joué (aucune pour « Jouer dans OBS ») et `isManaged` :
@@ -67,7 +72,14 @@ type Playing = {
   cancelWatch: () => void;
 };
 
-export function createSoundQueue({ library, rewards, createId, schedule, log }: SoundQueueDeps): SoundQueue {
+export function createSoundQueue({
+  library,
+  records,
+  rewards,
+  createId,
+  schedule,
+  log,
+}: SoundQueueDeps): SoundQueue {
   const screens: SoundScreen[] = [];
   const pending: Request[] = [];
   let playing: Playing | undefined;
@@ -145,6 +157,26 @@ export function createSoundQueue({ library, rewards, createId, schedule, log }: 
     }
   };
 
+  // Le sound du reward d'un rachat et si l'app gère ce reward ; rien s'il n'a pas de sound, ou si son sound a disparu.
+  const getSoundOf = (rewardId: string): { sound: PlayableSound; isManaged: boolean } | undefined => {
+    const record = records.getRecord(rewardId);
+    const sound = record?.sound ? library.get(record.sound) : undefined;
+    return record && sound ? { sound, isManaged: record.isManaged } : undefined;
+  };
+
+  // Les demandes qui répondent à `matches` sont retirées : leurs points sont rendus, et le son en cours se tait.
+  const forgetWhere = async (matches: (request: Request) => boolean, why: string): Promise<void> => {
+    const dropped = pending.filter(matches);
+    pending.splice(0, pending.length, ...pending.filter((request) => !matches(request)));
+    const settled = dropped.map((request) => conclude(request, "cut"));
+    if (playing && matches(playing.request)) {
+      playing.screen({ kind: "stop" });
+      settled.push(end(`coupé (${why})`, "cut"));
+      next();
+    }
+    await Promise.all(settled);
+  };
+
   const closeScreen = (screen: SoundScreen) => {
     const index = screens.indexOf(screen);
     if (index === -1) return;
@@ -176,12 +208,13 @@ export function createSoundQueue({ library, rewards, createId, schedule, log }: 
       return { ok: true };
     },
     redeem(redemption, afterSound, onPlay) {
-      const sound = library.getByReward(redemption.rewardId);
-      if (!sound) return false;
+      const found = getSoundOf(redemption.rewardId);
+      if (!found) return false;
+      const { sound, isManaged } = found;
       const request: Request = {
         soundId: sound.id,
         redemption,
-        isManaged: sound.isManaged,
+        isManaged,
         ...(afterSound ? { afterSound } : {}),
         ...(onPlay ? { onPlay } : {}),
       };
@@ -213,17 +246,8 @@ export function createSoundQueue({ library, rewards, createId, schedule, log }: 
       else void end(`raté (${reason ?? "raison inconnue"})`, "failed");
       next();
     },
-    async forget(soundId) {
-      const dropped = pending.filter((request) => request.soundId === soundId);
-      const kept = pending.filter((request) => request.soundId !== soundId);
-      pending.splice(0, pending.length, ...kept);
-      const settled = dropped.map((request) => conclude(request, "cut"));
-      if (playing?.request.soundId === soundId) {
-        playing.screen({ kind: "stop" });
-        settled.push(end("coupé (son supprimé)", "cut"));
-        next();
-      }
-      await Promise.all(settled);
-    },
+    forget: (soundId) => forgetWhere((request) => request.soundId === soundId, "son supprimé"),
+    forgetReward: (rewardId) =>
+      forgetWhere((request) => request.redemption?.rewardId === rewardId, "récompense supprimée"),
   };
 }

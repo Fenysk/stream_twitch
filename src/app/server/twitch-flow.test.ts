@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { toInsultList } from "../../domain/chat-insults.rules";
 import type { SoundEvent } from "../../domain/sound.schema";
 import { isFoxReward } from "../../domain/thanks.rules";
+import { createRewardStore } from "../../infra/reward.repository";
 import { createRewardPhraseStore } from "../../infra/reward-phrase.repository";
 import { createSoundStore } from "../../infra/sound.repository";
 import { createTwitchAuthClient } from "../../infra/twitch-auth.client";
@@ -13,6 +14,7 @@ import { createRewardsClient } from "../../infra/twitch-rewards.client";
 import { createTwitchTokenStore } from "../../infra/twitch-token.repository";
 import type { QueueItem } from "../../usecase/fox-queue.usecase";
 import { createFoxReward } from "../../usecase/fox-reward.usecase";
+import { createRewardLibrary } from "../../usecase/reward.usecase";
 import { createRewardPhraseLibrary } from "../../usecase/reward-phrase.usecase";
 import { createSoundLibrary } from "../../usecase/sound.usecase";
 import { createSoundQueue } from "../../usecase/sound-queue.usecase";
@@ -71,7 +73,8 @@ const startStack = () => {
       timer.isCancelled = true;
     };
   };
-  // La soundboard câblée comme runtime.ts le fait : les sons sur disque, leurs rewards chez Twitch, la queue vers la page /sounds.
+  // La soundboard câblée comme runtime.ts le fait : les sounds sur disque, les rewards chez Twitch et leur sound dans
+  // data/rewards.json, la queue vers la page /sounds.
   const twitchRewards = createRewardsClient({
     clientId: FAKE_CLIENT_ID,
     broadcasterId: "68710381",
@@ -82,17 +85,34 @@ const startStack = () => {
   let soundIds = 0;
   const library = createSoundLibrary({
     store: soundStore,
-    rewards: twitchRewards,
     createId: () => {
       soundIds += 1;
       return `sound00${soundIds}`;
     },
-    onDelete: (id) => queue.forget(id),
+    usage: {
+      listRewardTitles: (soundId) => rewardLibrary.listTitlesOf(soundId),
+      listClipCounts: () => new Map(),
+    },
+    onDelete: async (id) => {
+      await queue.forget(id);
+      rewardLibrary.detachSound(id);
+    },
+    log: (line) => logs.push(line),
+  });
+  const rewardLibrary = createRewardLibrary({
+    store: createRewardStore(join(directory, "data", "rewards.json"), (line) => logs.push(line)),
+    twitch: twitchRewards,
+    sounds: library,
+    onDelete: (rewardId) => queue.forgetReward(rewardId),
+    clearPhrases: async (rewardId) => {
+      await phrases.update(rewardId, []);
+    },
     log: (line) => logs.push(line),
   });
   let playIds = 0;
   const queue = createSoundQueue({
     library,
+    records: rewardLibrary,
     rewards: twitchRewards,
     createId: () => {
       playIds += 1;
@@ -156,7 +176,7 @@ const startStack = () => {
       }
       if (event.kind === "prediction") predictions.push({ losers: event.losers, outcome: event.outcome });
     },
-    onReady: () => void library.openRewards(),
+    onReady: () => void rewardLibrary.openRewards(),
     clock: () => sim.now,
     schedule,
     createState: () => {
@@ -206,6 +226,8 @@ const startStack = () => {
     breakSockets,
     login,
     library,
+    rewardLibrary,
+    twitchRewards,
     queue,
     connectPage,
     phrases,
@@ -538,30 +560,28 @@ const countOf = (type: string): number =>
 const ascii = (text: string): number[] => Array.from(text).map((character) => character.charCodeAt(0));
 const wav = (): Uint8Array =>
   Uint8Array.from([...ascii("RIFF"), 0, 0, 0, 0, ...ascii("WAVE"), ...new Array(40).fill(3)]);
-const fieldsOf = (title: string, overrides: { cost?: number; pace?: number; fader?: number } = {}) => ({
+const draft = (title: string, overrides: { fader?: number } = {}) => ({
   title,
-  cost: 100,
-  pace: 30,
   fader: 80,
+  file: wav(),
   ...overrides,
 });
-const draft = (
+const rewardFields = (
   title: string,
-  overrides: { cost?: number; pace?: number; fader?: number; rewardId?: string } = {},
-) => ({
-  ...fieldsOf(title, overrides),
-  ...(overrides.rewardId === undefined ? {} : { rewardId: overrides.rewardId }),
-  file: wav(),
-});
+  overrides: { cost?: number; pace?: number; sound?: string | null } = {},
+) => ({ title, cost: 100, pace: 30, sound: null, ...overrides });
 
-// Connecté, avec un son qui a son reward chez Twitch et une page /sounds ouverte : le point de départ de chaque rachat.
+// Connecté, avec un sound « Rire » joué par le reward « Rire » que l'app a créé, et une page /sounds ouverte : le point de départ
+// de chaque rachat.
 const startSoundboard = async () => {
   const stack = startStack();
   await stack.connection.start();
   await stack.login();
   await waitFor(() => countOf(REWARD_TYPE) === 1, "l'abonnement aux redemptions");
-  const created = await stack.library.create(draft("Rire"));
-  if (!created.ok) throw new Error("le son n'a pas été créé");
+  const sound = stack.library.create(draft("Rire"));
+  if (!sound.ok) throw new Error("le sound n'a pas été créé");
+  const created = await stack.rewardLibrary.create(rewardFields("Rire", { sound: sound.value.id }));
+  if (!created.ok) throw new Error("le reward n'a pas été créé");
   const [reward] = fake.rewards();
   if (!reward) throw new Error("le reward n'existe pas chez Twitch");
   return { ...stack, reward, page: stack.connectPage() };
@@ -570,7 +590,7 @@ const startSoundboard = async () => {
 const getStatusOf = (id: string): string | undefined =>
   fake.redemptions().find((item) => item.id === id)?.status;
 
-describe("les points de chaîne contre le faux Twitch : les rewards des sons", () => {
+describe("les points de chaîne contre le faux Twitch : les rewards que l'app crée", () => {
   it("s'abonne aux redemptions sur la même session que les follows", async () => {
     const { connection, login } = startStack();
     await connection.start();
@@ -588,8 +608,8 @@ describe("les points de chaîne contre le faux Twitch : les rewards des sons", (
     connection.stop();
   });
 
-  it("crée le reward d'un son sur Twitch : titre, coût, cooldown global, sans sauter la file", async () => {
-    const { reward, library, connection } = await startSoundboard();
+  it("crée le reward sur Twitch : titre, coût, cooldown global, sans sauter la file, avec son enregistrement géré", async () => {
+    const { reward, rewardLibrary, connection } = await startSoundboard();
     expect(reward).toMatchObject({
       title: "Rire",
       cost: 100,
@@ -597,13 +617,19 @@ describe("les points de chaîne contre le faux Twitch : les rewards des sons", (
       isPaused: false,
       isSkippingQueue: false,
     });
-    expect(library.list()).toMatchObject([{ title: "Rire", hasReward: true }]);
+    expect(await rewardLibrary.list()).toMatchObject({
+      ok: true,
+      value: [{ id: reward.id, title: "Rire", isManaged: true, isMissing: false, sound: "sound001" }],
+    });
+    expect(JSON.parse(readFileSync(join(directory, "data", "rewards.json"), "utf8"))).toEqual({
+      [reward.id]: { title: "Rire", sound: "sound001", isManaged: true },
+    });
     connection.stop();
   });
 
   it("n'allume pas de cooldown pour une pace de 0", async () => {
-    const { library, connection } = await startSoundboard();
-    await library.create(draft("Bravo", { pace: 0, cost: 250 }));
+    const { rewardLibrary, connection } = await startSoundboard();
+    await rewardLibrary.create(rewardFields("Bravo", { pace: 0, cost: 250 }));
     expect(fake.rewards().find(({ title }) => title === "Bravo")).toMatchObject({
       cost: 250,
       cooldownSeconds: undefined,
@@ -611,12 +637,16 @@ describe("les points de chaîne contre le faux Twitch : les rewards des sons", (
     connection.stop();
   });
 
-  it("modifie le reward quand le titre, le coût ou la pace changent, et pas quand seul le volume change", async () => {
-    const { library, connection, reward } = await startSoundboard();
+  it("modifie le reward quand on change son titre, son coût ou sa pace, et pas quand seul le sound change", async () => {
+    const { rewardLibrary, library, connection, reward } = await startSoundboard();
     const before = fake.requests.length;
-    await library.update("sound001", fieldsOf("Rire", { fader: 10 }));
+    expect(library.update("sound001", draft("Rire", { fader: 10 })).ok).toBe(true);
+    expect(library.update("sound001", draft("Fou rire")).ok).toBe(true);
     expect(fake.requests.length).toBe(before);
-    await library.update("sound001", fieldsOf("Fou rire", { cost: 500, pace: 0 }));
+    expect(await rewardLibrary.update(reward.id, { title: "Fou rire", cost: 500, pace: 0 })).toMatchObject({
+      ok: true,
+      value: { title: "Fou rire", cost: 500, pace: 0, sound: "sound001" },
+    });
     expect(fake.rewards().find(({ id }) => id === reward.id)).toMatchObject({
       title: "Fou rire",
       cost: 500,
@@ -625,30 +655,35 @@ describe("les points de chaîne contre le faux Twitch : les rewards des sons", (
     connection.stop();
   });
 
-  it("supprime le reward avec le son", async () => {
-    const { library, connection, reward } = await startSoundboard();
-    expect((await library.delete("sound001")).ok).toBe(true);
+  it("supprime le reward sur Twitch et son enregistrement, et laisse son sound", async () => {
+    const { rewardLibrary, library, connection, reward } = await startSoundboard();
+    expect((await rewardLibrary.delete(reward.id)).ok).toBe(true);
     expect(fake.rewards().some(({ id }) => id === reward.id)).toBe(false);
-    expect(library.list()).toEqual([]);
+    expect(JSON.parse(readFileSync(join(directory, "data", "rewards.json"), "utf8"))).toEqual({});
+    expect(library.list()).toMatchObject([{ id: "sound001", rewardTitles: [] }]);
     connection.stop();
   });
 
-  it("recrée le reward qu'Alexis a supprimé à la main sur Twitch", async () => {
-    const { library, connection, reward } = await startSoundboard();
+  it("ne recrée pas le reward qu'Alexis a supprimé à la main sur Twitch : il est montré comme n'existant plus", async () => {
+    const { rewardLibrary, connection, reward } = await startSoundboard();
+    const before = fake.requests.length;
     fake.removeReward(reward.id);
-    expect((await library.update("sound001", draft("Rire", { cost: 300 }))).ok).toBe(true);
-    expect(fake.rewards()).toHaveLength(1);
-    expect(fake.rewards()[0]).toMatchObject({ title: "Rire", cost: 300 });
-    expect(fake.rewards()[0]?.id).not.toBe(reward.id);
+    const listed = await rewardLibrary.list();
+    expect(listed).toMatchObject({
+      ok: true,
+      value: [{ id: reward.id, title: "Rire", isMissing: true, isManaged: true, sound: "sound001" }],
+    });
+    expect(fake.rewards()).toEqual([]);
+    expect(fake.requests.slice(before).some(({ method }) => method === "POST")).toBe(false);
     connection.stop();
   });
 
-  it("dit en clair une chaîne non affiliée, et ne garde aucun son", async () => {
+  it("dit en clair une chaîne non affiliée, et ne garde aucun enregistrement", async () => {
     const stack = startStack();
     await stack.connection.start();
     await stack.login();
     fake.setAffiliate(false);
-    const result = await stack.library.create(draft("Rire"));
+    const result = await stack.rewardLibrary.create(rewardFields("Rire"));
     expect(result).toEqual({
       ok: false,
       status: 422,
@@ -660,22 +695,23 @@ describe("les points de chaîne contre le faux Twitch : les rewards des sons", (
         },
       ],
     });
-    expect(stack.library.list()).toEqual([]);
+    expect(stack.rewardLibrary.getRecord("reward-1")).toBeUndefined();
+    expect(existsSync(join(directory, "data", "rewards.json"))).toBe(false);
     stack.connection.stop();
   });
 
-  it("dit en clair un titre déjà pris sur la chaîne, et ne garde aucun son", async () => {
+  it("dit en clair un titre déjà pris sur la chaîne, et ne garde aucun enregistrement", async () => {
     const stack = startStack();
     await stack.connection.start();
     await stack.login();
     fake.addForeignReward("Rire");
-    const result = await stack.library.create(draft("Rire"));
+    const result = await stack.rewardLibrary.create(rewardFields("Rire"));
     expect(result).toMatchObject({
       ok: false,
       status: 422,
       issues: [{ message: "Twitch refuse ce titre : une récompense de la chaîne le porte déjà." }],
     });
-    expect(stack.library.list()).toEqual([]);
+    expect(existsSync(join(directory, "data", "rewards.json"))).toBe(false);
     stack.connection.stop();
   });
 
@@ -685,7 +721,7 @@ describe("les points de chaîne contre le faux Twitch : les rewards des sons", (
     await stack.login();
     fake.addForeignReward("Déjà là");
     fake.setMaxRewards(1);
-    const result = await stack.library.create(draft("Rire"));
+    const result = await stack.rewardLibrary.create(rewardFields("Rire"));
     expect(result).toMatchObject({
       ok: false,
       issues: [{ message: "Twitch refuse : la chaîne a déjà 50 récompenses, le maximum. Supprime-en une." }],
@@ -693,10 +729,10 @@ describe("les points de chaîne contre le faux Twitch : les rewards des sons", (
     stack.connection.stop();
   });
 
-  it("refuse d'ajouter un son quand Twitch n'est pas connecté", async () => {
+  it("refuse de créer un reward quand Twitch n'est pas connecté", async () => {
     const stack = startStack();
     await stack.connection.start();
-    expect(await stack.library.create(draft("Rire"))).toEqual({
+    expect(await stack.rewardLibrary.create(rewardFields("Rire"))).toEqual({
       ok: false,
       status: 422,
       issues: [
@@ -730,7 +766,7 @@ describe("les points de chaîne contre le faux Twitch : les rewards des sons", (
     await waitFor(() => second.follows.length === 1, "le follow de Dora");
     // Le seul abonnement aux redemptions est celui du premier serveur : le jeton d'avant les récompenses n'en fait pas.
     expect(countOf(REWARD_TYPE)).toBe(1);
-    expect(await second.library.create(draft("Rire"))).toMatchObject({ ok: false, status: 422 });
+    expect(await second.rewardLibrary.create(rewardFields("Rire"))).toMatchObject({ ok: false, status: 422 });
     expect(fake.requestsTo("/helix/channel_points/custom_rewards")).toEqual([]);
     second.connection.stop();
   });
@@ -817,21 +853,22 @@ describe("les points de chaîne contre le faux Twitch : un rachat joue le son", 
   });
 
   it("ne touche jamais à la récompense qu'Alexis a faite pour le renard : le renard la reçoit, mais aucun statut, aucune pause, aucun remboursement", async () => {
-    const { page, library, rewards, connection } = await startSoundboard();
+    const { page, library, rewardLibrary, rewards, connection, reward } = await startSoundboard();
     const foxReward = fake.addForeignReward("Clasher Fenysk");
     const before = fake.requests.length;
     const id = fake.sendRedemption({ rewardId: foxReward, user: "Alice", input: "un texte" });
     await waitFor(() => rewards.length === 1, "la récompense reçue par le renard");
     expect(rewards).toEqual([{ user: "Alice", title: "Clasher Fenysk" }]);
-    // Le son de l'app part et revient, les récompenses des sons s'ouvrent et se mettent en pause : la sienne n'est jamais visée.
-    await library.pauseRewards();
-    await library.openRewards();
-    await library.update("sound001", fieldsOf("Rire", { cost: 400 }));
+    // Les rewards de l'app s'ouvrent, se mettent en pause, se modifient et se suppriment, les sounds aussi : la sienne n'est jamais visée.
+    await rewardLibrary.pauseRewards();
+    await rewardLibrary.openRewards();
+    await rewardLibrary.update(reward.id, { title: "Rire", cost: 400, pace: 30 });
+    expect((await rewardLibrary.delete(reward.id)).ok).toBe(true);
     expect((await library.delete("sound001")).ok).toBe(true);
     const touched = fake.requests.slice(before).filter(({ query }) => query.includes(foxReward));
     expect(touched).toEqual([]);
     expect(getStatusOf(id)).toBe("UNFULFILLED");
-    expect(fake.rewards().find((reward) => reward.id === foxReward)).toMatchObject({
+    expect(fake.rewards().find((candidate) => candidate.id === foxReward)).toMatchObject({
       title: "Clasher Fenysk",
       isPaused: false,
     });
@@ -839,16 +876,54 @@ describe("les points de chaîne contre le faux Twitch : un rachat joue le son", 
     connection.stop();
   });
 
-  it("rend les points en attente d'un son qu'on supprime, au lieu de les laisser à Twitch qui les marquerait FULFILLED", async () => {
+  it("rend les points en attente d'un sound qu'on supprime, au lieu de les laisser à Twitch qui les marquerait FULFILLED, et laisse le reward sur Twitch", async () => {
     const { reward, page, library, connection } = await startSoundboard();
     const first = fake.sendRedemption({ rewardId: reward.id, user: "Alice" });
     const second = fake.sendRedemption({ rewardId: reward.id, user: "Bob" });
     await waitFor(() => page.events.length === 1, "le premier son");
     await sleep(50);
+    const before = fake.requests.length;
     expect((await library.delete("sound001")).ok).toBe(true);
     expect(getStatusOf(first)).toBe("CANCELED");
     expect(getStatusOf(second)).toBe("CANCELED");
+    expect(fake.rewards().map(({ id }) => id)).toEqual([reward.id]);
+    expect(fake.requests.slice(before).some(({ method }) => method === "DELETE")).toBe(false);
+    connection.stop();
+  });
+
+  it("rend les points en attente d'un reward qu'on supprime, puis le retire de Twitch, de rewards.json et de ses phrases", async () => {
+    const { reward, page, rewardLibrary, library, phrases, connection } = await startSoundboard();
+    expect((await phrases.update(reward.id, ["Haha {user} !"])).ok).toBe(true);
+    const first = fake.sendRedemption({ rewardId: reward.id, user: "Alice" });
+    const second = fake.sendRedemption({ rewardId: reward.id, user: "Bob" });
+    await waitFor(() => page.events.length === 1, "le premier son");
+    await sleep(50);
+    expect((await rewardLibrary.delete(reward.id)).ok).toBe(true);
+    expect(getStatusOf(first)).toBe("CANCELED");
+    expect(getStatusOf(second)).toBe("CANCELED");
     expect(fake.rewards()).toEqual([]);
+    expect(JSON.parse(readFileSync(join(directory, "data", "rewards.json"), "utf8"))).toEqual({});
+    expect(phrases.get(reward.id)).toEqual([]);
+    expect(library.list()).toMatchObject([{ id: "sound001", rewardTitles: [] }]);
+    connection.stop();
+  });
+
+  it("joue le même sound pour deux rewards qui le désignent, et marque le rachat de celui que l'app gère", async () => {
+    const { reward, page, queue, rewardLibrary, connection } = await startSoundboard();
+    const other = fake.addForeignReward("Pas fait par l'app");
+    expect(await rewardLibrary.updateSound(other, "sound001")).toEqual({ ok: true, value: "sound001" });
+    const mine = fake.sendRedemption({ rewardId: reward.id, user: "Alice" });
+    const theirs = fake.sendRedemption({ rewardId: other, user: "Bob" });
+    await waitFor(() => page.events.length === 1, "le premier son");
+    queue.finish("play1", "ended");
+    await waitFor(() => page.events.length === 2, "le second son");
+    queue.finish("play2", "ended");
+    await waitFor(() => getStatusOf(mine) === "FULFILLED", "le rachat de l'app marqué");
+    expect(page.events.map((event) => (event.kind === "play" ? event.soundId : "stop"))).toEqual([
+      "sound001",
+      "sound001",
+    ]);
+    expect(getStatusOf(theirs)).toBe("UNFULFILLED");
     connection.stop();
   });
 });
@@ -856,7 +931,7 @@ describe("les points de chaîne contre le faux Twitch : un rachat joue le son", 
 describe("les points de chaîne contre le faux Twitch : le stream commence et finit", () => {
   it("au démarrage : sort les rewards de pause et rembourse les rachats restés UNFULFILLED", async () => {
     const first = await startSoundboard();
-    await first.library.pauseRewards();
+    await first.rewardLibrary.pauseRewards();
     expect(fake.rewards()[0]?.isPaused).toBe(true);
     first.connection.stop();
     await waitFor(() => fake.sockets() === 0, "la fermeture");
@@ -872,9 +947,9 @@ describe("les points de chaîne contre le faux Twitch : le stream commence et fi
   });
 
   it("à l'arrêt : met les rewards en pause", async () => {
-    const { library, connection } = await startSoundboard();
+    const { rewardLibrary, connection } = await startSoundboard();
     expect(fake.rewards()[0]?.isPaused).toBe(false);
-    await library.pauseRewards();
+    await rewardLibrary.pauseRewards();
     expect(fake.rewards()[0]?.isPaused).toBe(true);
     connection.stop();
   });
@@ -891,6 +966,32 @@ describe("les points de chaîne contre le faux Twitch : le stream commence et fi
     }
     connection.stop();
   });
+
+  it("met en pause et rembourse les rewards que l'app a créés, avec ou sans sound, et jamais les autres rewards que Twitch dit gérables", async () => {
+    const { rewardLibrary, twitchRewards, reward, connection } = await startSoundboard();
+    const silent = await rewardLibrary.create(rewardFields("Sans sound"));
+    if (!silent.ok) throw new Error("le reward sans sound n'a pas été créé");
+    // Un reward créé avec le même client id par une autre application (LivePlace) : Twitch le dit gérable, l'app ne l'a pas créé.
+    const other = await twitchRewards.create({ title: "Reward de LivePlace", cost: 10, pace: 0 });
+    if (!other.ok) throw new Error("le reward de l'autre application n'a pas été créé");
+    const forgotten = fake.sendRedemption({ rewardId: other.value, user: "Alice" });
+    const waiting = fake.sendRedemption({ rewardId: silent.value.id, user: "Bob" });
+    await rewardLibrary.pauseRewards();
+    expect(fake.rewards().map(({ id, isPaused }) => [id, isPaused])).toEqual([
+      [reward.id, true],
+      [silent.value.id, true],
+      [other.value, false],
+    ]);
+    await rewardLibrary.openRewards();
+    expect(fake.rewards().map(({ id, isPaused }) => [id, isPaused])).toEqual([
+      [reward.id, false],
+      [silent.value.id, false],
+      [other.value, false],
+    ]);
+    expect(getStatusOf(waiting)).toBe("CANCELED");
+    expect(getStatusOf(forgotten)).toBe("UNFULFILLED");
+    connection.stop();
+  });
 });
 
 // Les appels qui changent un statut, une pause, un reward : tout ce que Twitch refuse (403) pour une récompense qu'Alexis a faite.
@@ -900,35 +1001,50 @@ const getWrites = (before: number) =>
     .filter(({ method, path }) => method !== "GET" && path.startsWith("/helix/channel_points"));
 
 describe("les points de chaîne contre le faux Twitch : une récompense déjà faite sur Twitch reçoit un son", () => {
-  // Connecté, une récompense faite à la main par Alexis, reliée à un son, et une page /sounds ouverte.
+  // Connecté, une récompense faite à la main par Alexis, reliée à un sound, et une page /sounds ouverte.
   const startLinked = async () => {
     const stack = startStack();
     await stack.connection.start();
     await stack.login();
     await waitFor(() => countOf(REWARD_TYPE) === 1, "l'abonnement aux récompenses");
     const clash = fake.addForeignReward("Clasher Fenysk", { cost: 500, cooldownSeconds: 60 });
-    const created = await stack.library.create(draft("Pas ce titre", { rewardId: clash }));
-    if (!created.ok) throw new Error("le son n'a pas été relié");
+    const created = stack.library.create(draft("Pas ce titre"));
+    if (!created.ok) throw new Error("le sound n'a pas été créé");
+    const linked = await stack.rewardLibrary.updateSound(clash, created.value.id);
+    if (!linked.ok) throw new Error("le reward n'a pas été relié");
     return { ...stack, clash, sound: created.value, page: stack.connectPage() };
   };
 
-  it("liste les récompenses de la chaîne sans son, avec leur titre, leur coût et leur cooldown, et demande lesquelles l'app gère", async () => {
+  it("liste les récompenses de la chaîne avec leur titre, leur coût et leur cooldown, et demande lesquelles l'app gère", async () => {
     const stack = startStack();
     await stack.connection.start();
     await stack.login();
     fake.addForeignReward("Clasher Fenysk", { cost: 500, cooldownSeconds: 60 });
     fake.addForeignReward("Hydrate-toi");
     const before = fake.requests.length;
-    const result = await stack.library.listRewards();
+    const result = await stack.rewardLibrary.list();
     expect(result).toEqual({
       ok: true,
-      value: {
-        choices: [
-          { id: "reward-1", title: "Clasher Fenysk", cost: 500, pace: 60, isManageable: false },
-          { id: "reward-2", title: "Hydrate-toi", cost: 50, pace: 0, isManageable: false },
-        ],
-        missing: [],
-      },
+      value: [
+        {
+          id: "reward-1",
+          title: "Clasher Fenysk",
+          cost: 500,
+          pace: 60,
+          isManaged: false,
+          isMissing: false,
+          sound: null,
+        },
+        {
+          id: "reward-2",
+          title: "Hydrate-toi",
+          cost: 50,
+          pace: 0,
+          isManaged: false,
+          isMissing: false,
+          sound: null,
+        },
+      ],
     });
     const lists = fake.requests
       .slice(before)
@@ -940,34 +1056,35 @@ describe("les points de chaîne contre le faux Twitch : une récompense déjà f
     stack.connection.stop();
   });
 
-  it("n'y met pas une récompense déjà reliée à un son, et signale le son dont la récompense a disparu de Twitch", async () => {
-    const { library, clash, connection } = await startLinked();
+  it("montre le sound de la récompense reliée, et signale celle qui a disparu de Twitch", async () => {
+    const { rewardLibrary, clash, connection } = await startLinked();
     const other = fake.addForeignReward("Hydrate-toi");
-    expect(await library.listRewards()).toMatchObject({
+    expect(await rewardLibrary.list()).toMatchObject({
       ok: true,
-      value: { choices: [{ id: other }], missing: [] },
+      value: [
+        { id: clash, sound: "sound001", isMissing: false },
+        { id: other, sound: null, isMissing: false },
+      ],
     });
     fake.removeReward(clash);
-    expect(await library.listRewards()).toMatchObject({ ok: true, value: { missing: ["sound001"] } });
-    expect(library.list()).toMatchObject([{ id: "sound001", hasReward: true }]);
+    expect(await rewardLibrary.list()).toMatchObject({
+      ok: true,
+      value: [{ id: other }, { id: clash, title: "Clasher Fenysk", sound: "sound001", isMissing: true }],
+    });
     connection.stop();
   });
 
-  it("relie le son avec le titre, le coût et la cooldown de Twitch, en lecture seule : l'app ne la gère pas", async () => {
-    const { library, sound, clash, connection } = await startLinked();
-    expect(sound).toMatchObject({
+  it("relie le sound sans rien changer chez Twitch, et ne la modifie ni ne la supprime : l'app ne la gère pas", async () => {
+    const { rewardLibrary, clash, connection } = await startLinked();
+    expect(rewardLibrary.getRecord(clash)).toEqual({
       title: "Clasher Fenysk",
-      cost: 500,
-      pace: 60,
+      sound: "sound001",
       isManaged: false,
-      hasReward: true,
     });
     const before = fake.requests.length;
-    const updated = await library.update(sound.id, draft("Autre titre", { cost: 1, pace: 0, fader: 20 }));
-    expect(updated).toMatchObject({
-      ok: true,
-      value: { title: "Clasher Fenysk", cost: 500, pace: 60, fader: 20 },
-    });
+    const updated = await rewardLibrary.update(clash, { title: "Autre titre", cost: 1, pace: 0 });
+    expect(updated).toMatchObject({ ok: false, status: 422 });
+    expect(await rewardLibrary.delete(clash)).toMatchObject({ ok: false, status: 422 });
     expect(getWrites(before)).toEqual([]);
     expect(fake.rewards().find(({ id }) => id === clash)).toMatchObject({
       title: "Clasher Fenysk",
@@ -1009,36 +1126,37 @@ describe("les points de chaîne contre le faux Twitch : une récompense déjà f
   });
 
   it("ne la remet pas en route, ne la met pas en pause et ne rembourse rien au démarrage ni à l'arrêt", async () => {
-    const { library, clash, connection } = await startLinked();
+    const { rewardLibrary, clash, connection } = await startLinked();
     const id = fake.sendRedemption({ rewardId: clash, user: "Alice" });
     await sleep(50);
     const before = fake.requests.length;
-    await library.pauseRewards();
-    await library.openRewards();
+    await rewardLibrary.pauseRewards();
+    await rewardLibrary.openRewards();
     expect(fake.requests.slice(before).filter(({ query }) => query.includes(clash))).toEqual([]);
     expect(fake.rewards().find((reward) => reward.id === clash)?.isPaused).toBe(false);
     expect(getStatusOf(id)).toBe("UNFULFILLED");
     connection.stop();
   });
 
-  it("supprime le son sans supprimer la récompense sur Twitch : aucun DELETE", async () => {
-    const { library, sound, clash, connection } = await startLinked();
+  it("supprime le sound sans supprimer la récompense sur Twitch : aucun DELETE, et son enregistrement part", async () => {
+    const { library, rewardLibrary, sound, clash, connection } = await startLinked();
     const before = fake.requests.length;
     expect((await library.delete(sound.id)).ok).toBe(true);
     expect(fake.requests.slice(before).some(({ method }) => method === "DELETE")).toBe(false);
     expect(getWrites(before)).toEqual([]);
     expect(fake.rewards().some(({ id }) => id === clash)).toBe(true);
     expect(library.list()).toEqual([]);
+    expect(rewardLibrary.getRecord(clash)).toBeUndefined();
     connection.stop();
   });
 
   it("garde à côté la récompense que l'app a créée : elle est marquée, l'autre jamais", async () => {
-    const { library, clash, page, queue, connection } = await startLinked();
-    const created = await library.create(draft("Rire"));
-    if (!created.ok) throw new Error("le son n'a pas été créé");
-    const own = fake.rewards().find(({ title }) => title === "Rire");
-    if (!own) throw new Error("le reward de l'app n'existe pas");
-    const ownId = fake.sendRedemption({ rewardId: own.id, user: "Alice" });
+    const { library, rewardLibrary, clash, page, queue, connection } = await startLinked();
+    const own = library.create(draft("Rire"));
+    if (!own.ok) throw new Error("le sound n'a pas été créé");
+    const created = await rewardLibrary.create(rewardFields("Rire", { sound: own.value.id }));
+    if (!created.ok) throw new Error("le reward n'a pas été créé");
+    const ownId = fake.sendRedemption({ rewardId: created.value.id, user: "Alice" });
     const foreignId = fake.sendRedemption({ rewardId: clash, user: "Bob" });
     await waitFor(() => page.events.length === 1, "le premier son");
     queue.finish("play1", "ended");
@@ -1151,7 +1269,7 @@ describe("les points de chaîne contre le faux Twitch : Jean-Renard dit une phra
 });
 
 describe("les points de chaîne contre le faux Twitch : le son, puis la phrase de Jean-Renard", () => {
-  // Connecté, avec un son géré par l'app (« Rire ») qui a une phrase, et une page /sounds ouverte.
+  // Connecté, avec un sound géré par l'app (« Rire ») qui a une phrase, et une page /sounds ouverte.
   const startSoundAndPhrase = async () => {
     const stack = await startSoundboard();
     const saved = await stack.phrases.update(stack.reward.id, ["Haha {user} !"]);
@@ -1238,7 +1356,9 @@ describe("les points de chaîne contre le faux Twitch : le son, puis la phrase d
     await stack.login();
     await waitFor(() => countOf(REWARD_TYPE) === 1, "l'abonnement aux récompenses");
     const drink = fake.addForeignReward("À boire !");
-    expect((await stack.library.create(draft("Pas ce titre", { rewardId: drink }))).ok).toBe(true);
+    const sound = stack.library.create(draft("Pas ce titre"));
+    if (!sound.ok) throw new Error("le sound n'a pas été créé");
+    expect((await stack.rewardLibrary.updateSound(drink, sound.value.id)).ok).toBe(true);
     expect((await stack.phrases.update(drink, ["Santé {user} !"])).ok).toBe(true);
     const page = stack.connectPage();
     const before = fake.requests.length;

@@ -47,12 +47,10 @@ describe("l'éditeur d'un clip brut", () => {
       {
         id: "aaaa0001",
         title: "Rire gras",
-        cost: 100,
-        pace: 30,
         fader: 80,
         version: "1-1",
-        hasReward: true,
-        isManaged: true,
+        rewardTitles: [],
+        clipCount: 0,
       },
     ]);
     expect(html).not.toContain("timeline");

@@ -2,8 +2,6 @@
 // exception (même mécanique que les expressions). Les refus du serveur sont déjà en français, on les affiche tels quels.
 
 import {
-  type RewardChoices,
-  RewardChoicesSchema,
   type SoundInput,
   SoundListSchema,
   type SoundSummary,
@@ -28,13 +26,6 @@ export const listSounds = (): Promise<Answer<SoundSummary[]>> =>
   ask("/api/sounds", { method: "GET" }, (body) => {
     const list = SoundListSchema.safeParse(body);
     return list.success ? list.data.sounds : undefined;
-  });
-
-// Les récompenses de la chaîne qui n'ont pas de son, et les sons dont la récompense a disparu de Twitch.
-export const listRewardChoices = (): Promise<Answer<RewardChoices>> =>
-  ask("/api/rewards", { method: "GET" }, (body) => {
-    const choices = RewardChoicesSchema.safeParse(body);
-    return choices.success ? choices.data : undefined;
   });
 
 export const createSound = (input: SoundInput): Promise<Answer<SoundSummary>> =>

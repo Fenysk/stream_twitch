@@ -7,7 +7,7 @@ export const toTwitchHint = (status: TwitchStatus | null): string | null => {
     case "unavailable":
       return "Twitch est indisponible : TWITCH_CLIENT_ID et TWITCH_CLIENT_SECRET manquent dans .env.";
     case "disconnected":
-      return "Twitch n'est pas connecté : connecte-le dans l'onglet Twitch pour créer les récompenses des sons.";
+      return "Twitch n'est pas connecté : connecte-le dans l'onglet Twitch pour gérer les récompenses.";
     case "connected":
       return status.missing.includes("reward")
         ? "Il manque le droit de gérer les récompenses à la connexion Twitch : reconnecte-toi dans l'onglet Twitch."

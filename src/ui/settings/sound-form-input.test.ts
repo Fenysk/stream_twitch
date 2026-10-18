@@ -1,94 +1,66 @@
 import { describe, expect, it } from "vitest";
-import type { RewardChoice, SoundSummary } from "../../domain/sound.schema";
+import type { SoundSummary } from "../../domain/sound.schema";
 import { type Draft, isReady, toDraft, toInput } from "./sound-form-input";
-
-const choices: RewardChoice[] = [
-  { id: "clash", title: "Clasher Fenysk", cost: 500, pace: 60, isManageable: false },
-  { id: "wake", title: "Réveiller Jean-Renard", cost: 100, pace: 0, isManageable: false },
-];
 
 const sound: SoundSummary = {
   id: "rire0001",
   title: "Rire",
-  cost: 250,
-  pace: 45,
   fader: 35,
   version: "1.10",
-  hasReward: true,
-  isManaged: true,
+  rewardTitles: ["Prout."],
+  clipCount: 2,
 };
 
 const draft = (overrides: Partial<Draft> = {}): Draft => ({ ...toDraft(null), ...overrides });
 const file = { name: "rire.wav", base64: "AAAA" };
 
 describe("toDraft : le départ du formulaire", () => {
-  it("propose 100 points, 30 s et 80 % pour un son neuf, avec une récompense neuve", () => {
-    expect(toDraft(null)).toEqual({
-      source: "new",
-      rewardId: null,
-      title: "",
-      cost: 100,
-      pace: 30,
-      fader: 80,
-      file: null,
-    });
+  it("propose un titre vide et 80 % pour un sound neuf, sans fichier, sans coût ni cooldown", () => {
+    expect(toDraft(null)).toEqual({ title: "", fader: 80, file: null });
+    expect(Object.keys(toDraft(null))).toEqual(["title", "fader", "file"]);
   });
 
-  it("reprend les réglages du son qu'on modifie, sans fichier : on garde l'ancien", () => {
-    expect(toDraft(sound)).toMatchObject({ title: "Rire", cost: 250, pace: 45, fader: 35, file: null });
+  it("reprend les réglages du sound qu'on modifie, sans fichier : on garde l'ancien", () => {
+    expect(toDraft(sound)).toEqual({ title: "Rire", fader: 35, file: null });
   });
 });
 
 describe("toInput : ce que le formulaire envoie", () => {
-  it("envoie les réglages saisis d'une récompense neuve, avec le fichier s'il y en a un", () => {
-    expect(toInput(draft({ title: "Rire", file }), null)).toEqual({
-      ok: true,
-      input: { title: "Rire", cost: 100, pace: 30, fader: 80, file: "AAAA" },
-    });
-    expect(toInput(draft({ title: "Rire" }), null)).toEqual({
-      ok: true,
-      input: { title: "Rire", cost: 100, pace: 30, fader: 80 },
-    });
+  it("envoie le titre et le volume saisis, avec le fichier s'il y en a un", () => {
+    expect(toInput(draft({ title: "Rire", file }))).toEqual({ title: "Rire", fader: 80, file: "AAAA" });
+    expect(toInput(draft({ title: "Rire" }))).toEqual({ title: "Rire", fader: 80 });
   });
 
-  it("refuse un coût ou un cooldown vidé", () => {
-    expect(toInput(draft({ cost: null }), null)).toEqual({
-      ok: false,
-      message: "le coût et le cooldown doivent être des nombres",
-    });
-    expect(toInput(draft({ pace: null }), null)).toMatchObject({ ok: false });
+  it("coupe les blancs autour du titre, comme le serveur le fera", () => {
+    expect(toInput(draft({ title: "  Rire  " })).title).toBe("Rire");
   });
 
-  it("envoie, pour une récompense existante, le titre, le coût et le cooldown de Twitch avec son identifiant", () => {
-    expect(
-      toInput(draft({ source: "existing", rewardId: "clash", title: "Ignoré", file, fader: 60 }), choices),
-    ).toEqual({
-      ok: true,
-      input: { title: "Clasher Fenysk", cost: 500, pace: 60, fader: 60, rewardId: "clash", file: "AAAA" },
-    });
+  it("n'envoie jamais de coût, de cooldown ni de récompense : ce sont ceux d'une récompense", () => {
+    expect(Object.keys(toInput(draft({ title: "Rire", file })))).toEqual(["title", "fader", "file"]);
   });
 
-  it("demande de choisir une récompense quand aucune n'est choisie, ou que Twitch ne l'a plus dans sa liste", () => {
-    expect(toInput(draft({ source: "existing" }), choices)).toEqual({
-      ok: false,
-      message: "choisis une récompense de Twitch",
-    });
-    expect(toInput(draft({ source: "existing", rewardId: "disparu" }), choices)).toMatchObject({ ok: false });
-    expect(toInput(draft({ source: "existing", rewardId: "clash" }), null)).toMatchObject({ ok: false });
+  it("envoie le volume réglé au curseur, de 0 à 100 %", () => {
+    expect(toInput(draft({ title: "Rire", fader: 0 })).fader).toBe(0);
+    expect(toInput(draft({ title: "Rire", fader: 100 })).fader).toBe(100);
+    expect(toInput(draft({ title: "Rire", fader: 35 }))).toEqual({ title: "Rire", fader: 35 });
+  });
+
+  it("envoie le fichier choisi en base64, et rien quand on garde l'ancien", () => {
+    expect(toInput(draft({ title: "Rire", file })).file).toBe("AAAA");
+    expect("file" in toInput(draft({ title: "Rire" }))).toBe(false);
+    expect(toInput(toDraft(sound))).toEqual({ title: "Rire", fader: 35 });
   });
 });
 
 describe("isReady : le formulaire peut partir", () => {
-  it("veut un titre et un fichier pour une récompense neuve, le fichier seulement à la création", () => {
+  it("veut un titre et un fichier à la création", () => {
     expect(isReady(draft({ title: "Rire", file }), null)).toBe(true);
     expect(isReady(draft({ title: "Rire" }), null)).toBe(false);
     expect(isReady(draft({ title: "  ", file }), null)).toBe(false);
-    expect(isReady(draft({ title: "Rire" }), sound)).toBe(true);
   });
 
-  it("veut une récompense choisie et un fichier pour une récompense existante, sans titre à saisir", () => {
-    expect(isReady(draft({ source: "existing", rewardId: "clash", file }), null)).toBe(true);
-    expect(isReady(draft({ source: "existing", rewardId: "clash" }), null)).toBe(false);
-    expect(isReady(draft({ source: "existing", file }), null)).toBe(false);
+  it("veut un titre à la modification, sans nouveau fichier : on garde l'ancien", () => {
+    expect(isReady(draft({ title: "Rire" }), sound)).toBe(true);
+    expect(isReady(draft({ title: "" }), sound)).toBe(false);
   });
 });

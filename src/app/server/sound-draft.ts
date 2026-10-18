@@ -10,7 +10,7 @@ const MAX_BODY_BYTES = 8 * 1024 * 1024;
 // Un fichier illisible (pas du base64) reste vide : la bibliothèque le refuse comme « pas un mp3, un wav ou un ogg ».
 const NOT_AUDIO = new Uint8Array(0);
 
-// Lit la demande de création ou de modification : le son à enregistrer, ou la réponse qui la refuse.
+// Lit la demande de création ou de modification : le sound à enregistrer, ou la réponse qui la refuse.
 export async function getSoundDraft(request: Request): Promise<SoundDraft | Response> {
   if (!isJson(request)) return refuse(415, "le corps doit être du JSON (content-type: application/json)");
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
@@ -18,10 +18,6 @@ export async function getSoundDraft(request: Request): Promise<SoundDraft | Resp
   }
   const parsed = SoundInputSchema.safeParse(await getBodyJson(request));
   if (!parsed.success) return refuse(400, toIssuesMessage(parsed.error));
-  const { file, rewardId, ...fields } = parsed.data;
-  return {
-    ...fields,
-    ...(file === undefined ? {} : { file: fromBase64(file) ?? NOT_AUDIO }),
-    ...(rewardId === undefined ? {} : { rewardId }),
-  };
+  const { file, ...fields } = parsed.data;
+  return { ...fields, ...(file === undefined ? {} : { file: fromBase64(file) ?? NOT_AUDIO }) };
 }

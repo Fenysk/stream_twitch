@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { AUDIO_MIME, isTitleTaken, toAudioFile, toAudioFormat } from "./sound.rules";
+import {
+  AUDIO_MIME,
+  hasLegacyFields,
+  isTitleTaken,
+  toAudioFile,
+  toAudioFormat,
+  toClipCounts,
+} from "./sound.rules";
 import { SOUND_LIMITS } from "./sound.schema";
 
 const ascii = (text: string): number[] => Array.from(text).map((character) => character.charCodeAt(0));
@@ -62,7 +69,7 @@ describe("toAudioFile : un fichier importé tient dans 5 Mo et est un mp3, un wa
   });
 });
 
-describe("isTitleTaken : Twitch refuse deux récompenses de même titre", () => {
+describe("isTitleTaken : deux sounds ne portent pas le même titre", () => {
   it("compare sans tenir compte des majuscules, des accents de casse ni des blancs de bord", () => {
     expect(isTitleTaken("  Applaudissements ", ["applaudissements"])).toBe(true);
     expect(isTitleTaken("ÉCLAT", ["éclat"])).toBe(true);
@@ -71,5 +78,37 @@ describe("isTitleTaken : Twitch refuse deux récompenses de même titre", () => 
   it("laisse passer un titre différent, ou une liste vide", () => {
     expect(isTitleTaken("Rire", ["Rires"])).toBe(false);
     expect(isTitleTaken("Rire", [])).toBe(false);
+  });
+});
+
+describe("hasLegacyFields : un sound.json d'avant porte encore des champs de reward", () => {
+  const sound = { title: "Rire", fader: 80, format: "mp3" } as const;
+
+  it("reconnaît chacun des quatre champs qui ont quitté le sound, même quand il vaut null", () => {
+    expect(hasLegacyFields({ ...sound, cost: 100 })).toBe(true);
+    expect(hasLegacyFields({ ...sound, pace: 0 })).toBe(true);
+    expect(hasLegacyFields({ ...sound, rewardId: null })).toBe(true);
+    expect(hasLegacyFields({ ...sound, isManaged: false })).toBe(true);
+  });
+
+  it("ne reconnaît pas un sound.json déjà converti", () => {
+    expect(hasLegacyFields(sound)).toBe(false);
+  });
+});
+
+describe("toClipCounts : combien de clips confirmés ont un rire de chaque sound", () => {
+  it("compte les clips, pas les rires : un clip qui répète un rire ne compte qu'une fois", () => {
+    const counts = toClipCounts([
+      { laughs: [{ sound: "rire0001" }, { sound: "rire0001" }, { sound: "bravo002" }] },
+      { laughs: [{ sound: "rire0001" }] },
+    ]);
+    expect(counts.get("rire0001")).toBe(2);
+    expect(counts.get("bravo002")).toBe(1);
+    expect(counts.get("inconnu")).toBeUndefined();
+  });
+
+  it("ne compte rien pour un clip sans rire, ni pour aucun clip", () => {
+    expect(toClipCounts([{}, { laughs: [] }, { laughs: undefined }]).size).toBe(0);
+    expect(toClipCounts([]).size).toBe(0);
   });
 });

@@ -9,12 +9,10 @@ import type { ClipLaughs } from "./use-clip-laughs";
 const sound: SoundSummary = {
   id: "aaaa0001",
   title: "Applaudissements",
-  cost: 100,
-  pace: 30,
   fader: 80,
   version: "1-1",
-  hasReward: true,
-  isManaged: true,
+  rewardTitles: [],
+  clipCount: 0,
 };
 
 const NO_LAUGHS: ClipLaughs = {
@@ -104,11 +102,9 @@ describe("« Rire ici » et la soundboard", () => {
   });
 
   it("dit pourquoi quand la soundboard est vide, et seulement alors", () => {
-    expect(NO_SOUND_TEXT).toBe(
-      "Aucun sound dans la soundboard : ajoute-en un dans l'onglet Points de chaîne.",
-    );
+    expect(NO_SOUND_TEXT).toBe("Aucun sound dans la soundboard : ajoute-en un dans l'onglet Sons.");
     expect(render({ canCreate: false, isSoundboardEmpty: true })).toContain(
-      "Aucun sound dans la soundboard : ajoute-en un dans l&#x27;onglet Points de chaîne.",
+      "Aucun sound dans la soundboard : ajoute-en un dans l&#x27;onglet Sons.",
     );
     expect(render({ canCreate: false })).not.toContain("Aucun sound dans la soundboard");
     expect(render()).not.toContain("Aucun sound dans la soundboard");

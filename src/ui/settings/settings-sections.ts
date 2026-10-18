@@ -3,6 +3,7 @@
 // (WindowNav) : un nouveau groupe peut attendre son premier onglet.
 
 import {
+  AudioLines,
   CalendarDays,
   Clapperboard,
   Coins,
@@ -29,6 +30,7 @@ export const SECTION_GROUPS = [
       { id: "cut", label: "Découpe", icon: Scissors, path: "/settings/cut" },
       { id: "chat", label: "Tchat", icon: MessageSquare, path: "/settings/chat" },
       { id: "fox", label: "Renard", icon: PawPrint, path: "/settings/fox" },
+      { id: "sounds", label: "Sons", icon: AudioLines, path: "/settings/sounds" },
       { id: "rewards", label: "Points de chaîne", icon: Coins, path: "/settings/rewards" },
       { id: "show", label: "Émission", icon: Film, path: "/settings/show" },
     ],

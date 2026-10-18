@@ -13,3 +13,7 @@ export type RewardFields = { title: string; cost: number; pace: number };
 
 // Ce qu'on change sur un reward : des champs, ou sa pause (hors stream, les viewers ne peuvent plus le dépenser).
 export type RewardChange = Partial<RewardFields> & { isPaused?: boolean };
+
+// Un reward de la chaîne que Twitch connaît : son identifiant, son titre, son coût, sa pace (le cooldown global en secondes, 0 =
+// aucun) et si l'app peut le gérer (elle l'a créé).
+export type RewardChoice = RewardFields & { id: string; isManageable: boolean };
