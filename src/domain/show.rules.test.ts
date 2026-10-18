@@ -7,6 +7,7 @@ import {
   CLOSING_BANNER,
   END_AFTER_SPEECH_MS,
   ESTIMATED_SPEECH,
+  isShowLowered,
   LAUGH_PHRASE,
   LINE_AFTER_SPEECH_MS,
   LINE_MIN_MS,
@@ -495,6 +496,33 @@ describe("toShowFader", () => {
 
   it("laisse le son entier quand Fenysk n'a rien dit depuis le démarrage", () => {
     expect(toShowFader(Number.POSITIVE_INFINITY, 250)).toBe(100);
+  });
+});
+
+describe("isShowLowered", () => {
+  it("Quand le fader est celui de la voix de Fenysk (15), le système doit dire le son baissé", () => {
+    expect(isShowLowered(TALK_SHOW_FADER)).toBe(true);
+  });
+
+  it("Quand le son est entier (100), le système ne doit pas le dire baissé", () => {
+    expect(isShowLowered(100)).toBe(false);
+  });
+
+  it("dit baissé tout fader sous 100, même le silence complet", () => {
+    expect(isShowLowered(0)).toBe(true);
+    expect(isShowLowered(99)).toBe(true);
+  });
+
+  it("Quand Fenysk se tait, la tête reste levée jusqu'à l'instant où le son remonte : delay + 2 s, pas une ms de plus", () => {
+    for (const delay of [250, 500, 1000]) {
+      expect(isShowLowered(toShowFader(0, delay))).toBe(true);
+      expect(isShowLowered(toShowFader(delay + TALK_HOLD_MS - 1, delay))).toBe(true);
+      expect(isShowLowered(toShowFader(delay + TALK_HOLD_MS, delay))).toBe(false);
+    }
+  });
+
+  it("ne lève pas la tête quand Fenysk n'a rien dit depuis le démarrage", () => {
+    expect(isShowLowered(toShowFader(Number.POSITIVE_INFINITY, 250))).toBe(false);
   });
 });
 

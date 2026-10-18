@@ -1,6 +1,8 @@
 // L'émission côté page : ce que la page `/show` demande au serveur. Chaque demande rend une réponse ou le refus, jamais une exception.
 
+import type { HeadView } from "../domain/head.types";
 import {
+  SHOW_HEAD_EVENT,
   type ShowCues,
   ShowCuesSchema,
   type ShowProgress,
@@ -10,17 +12,24 @@ import {
   ShowStateSchema,
 } from "../domain/show.schema";
 import { type Answer, ask } from "./expressions-api";
+import { toHeadListener } from "./head-listener";
 
 // L'état de l'émission, tel que le serveur le dit : tout de suite à la connexion, puis à chaque changement (EventSource se reconnecte
-// seul). `isPage` : la page `/show`, que le serveur compte (sans page, l'émission s'arrête) ; sans, l'onglet Émission. Rend de quoi
-// fermer le flux.
-export const watchShowState = (isPage: boolean, onState: (state: ShowState) => void): (() => void) => {
+// seul). `isPage` : la page `/show`, que le serveur compte (sans page, l'émission s'arrête) ; sans, l'onglet Émission. `onHead` : la vue
+// de la tête de Fenysk, que le serveur envoie à la page `/show` dans ce même flux (évènement `head`) : la page n'a pas de connexion de plus ;
+// sans `onHead`, rien ne l'écoute. Rend de quoi fermer le flux.
+export const watchShowState = (
+  isPage: boolean,
+  onState: (state: ShowState) => void,
+  onHead?: (view: HeadView) => void,
+): (() => void) => {
   const source = new EventSource(isPage ? "/api/show/events?place=page" : "/api/show/events");
   source.onmessage = (message: MessageEvent<string>) => {
     const parsed = ShowStateSchema.safeParse(JSON.parse(message.data));
     if (parsed.success) onState(parsed.data);
     else console.error("État de l'émission illisible :", parsed.error.message);
   };
+  if (onHead) source.addEventListener(SHOW_HEAD_EVENT, toHeadListener(onHead));
   return () => source.close();
 };
 

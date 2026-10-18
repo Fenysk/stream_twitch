@@ -4,6 +4,10 @@
 .show-stage {
   --show-fade: 0.8s; /* le même temps que FADE_MS (show-run.ts) */
   --show-slide: 0.6s;
+  --head-slide: 0.15s; /* la tête de Fenysk surgit et redescend en 150 ms */
+  /* Jean-Renard pendant le clip et la tête de Fenysk, en miroir : même largeur, même débord sous le bord bas de l'écran */
+  --corner-width: 16.5vw;
+  --corner-bottom: -6vw;
   position: fixed;
   inset: 0;
   overflow: hidden;
@@ -163,9 +167,27 @@
 }
 
 .show-fox.is-corner {
-  --fox-width: 16.5vw;
+  --fox-width: var(--corner-width);
   --fox-right: 1.5vw;
-  --fox-bottom: -6vw;
+  --fox-bottom: var(--corner-bottom);
+}
+
+/* La tête de Fenysk : en miroir de Jean-Renard pendant le clip (même largeur, même débord sous le bord bas : le bas du corps hors de l'écran),
+   mais collée au bord gauche, devant le tchat d'origine (elle vient après lui dans la page). Baissée, elle est sous le bord bas ; elle
+   surgit par le bas dès que Fenysk parle (ease-out) et y redescend aussi vite (ease-in), au même instant que le son. */
+.show-head {
+  position: absolute;
+  left: 0;
+  bottom: var(--corner-bottom);
+  width: var(--corner-width);
+  pointer-events: none;
+  transform: translateY(100%);
+  transition: transform var(--head-slide) ease-in;
+}
+
+.show-head.is-visible {
+  transform: none;
+  transition-timing-function: ease-out;
 }
 
 /* Hors émission, la page ne montre rien : OBS voit la scène à travers */

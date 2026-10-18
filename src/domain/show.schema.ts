@@ -78,6 +78,10 @@ export const IDLE_SHOW: ShowState = {
   showFader: 100,
 };
 
+// Le nom de l'évènement SSE qui porte la vue de la tête (`HeadView`) dans le flux de l'émission, pour la page `/show` seule : les messages
+// sans nom restent l'état (`ShowState`), et la page n'ouvre pas de connexion de plus.
+export const SHOW_HEAD_EVENT = "head";
+
 // Ce que la page dit au serveur : elle passe à ce temps (et à ce clip), ou l'émission est finie (`ended`).
 export const ShowProgressSchema = z.object({
   runId: z.string().min(1),

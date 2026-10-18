@@ -2,7 +2,8 @@
 // l'ouverture et la clôture (un bandeau aux couleurs du design system qui glisse depuis la gauche, Jean-Renard grand à droite), le
 // carton de chaque clip (même bandeau avec le jour et le titre du clip, sur le début du clip flou et assombri), puis le clip en plein
 // écran avec son titre dans un coin, le tchat d'origine du clip en bas à gauche et Jean-Renard petit dans l'autre coin. Deux <video>
-// superposés (celui qui joue, celui qui charge le suivant). Un seul Jean-Renard : sa voix et sa bouche sont ceux de cette page.
+// superposés (celui qui joue, celui qui charge le suivant). Un seul Jean-Renard : sa voix et sa bouche sont ceux de cette page. La tête
+// de Fenysk, par-dessus tout (le tchat compris), surgit par le bas à gauche tant qu'il parle.
 
 import type { Ref } from "react";
 import { ChatColumn } from "../chat/chat-column";
@@ -10,8 +11,17 @@ import { useChatView } from "../chat/use-chat-view";
 import { classNames } from "../design/class-names";
 import { useShownWhileClosing } from "../design/window";
 import { Fox } from "../Fox";
+import { Head } from "../Head";
 import { useFox } from "../use-fox";
-import { type Banner, type ShowView, type Slot, toBanner, toFoxSpot, toShownSlot } from "./show-view";
+import {
+  type Banner,
+  isHeadShown,
+  type ShowView,
+  type Slot,
+  toBanner,
+  toFoxSpot,
+  toShownSlot,
+} from "./show-view";
 import { useShow } from "./use-show";
 
 type ShowVideoProps = { videoRef: Ref<HTMLVideoElement>; slot: Slot; view: ShowView };
@@ -47,9 +57,10 @@ const ShowBanner = ({ banner, isVisible }: ShowBannerProps) => (
 
 export const ShowStage = () => {
   const fox = useFox("show");
-  const { videos, view, chat } = useShow(fox.updateMode, fox.updateFader);
+  const { videos, view, chat, head, fader } = useShow(fox.updateMode, fox.updateFader);
   const { look } = useChatView();
   const banner = toBanner(view, Date.now());
+  const isHeadVisible = isHeadShown(view, fader);
   // Le titre du coin reste écrit pendant qu'il s'efface.
   const cornerTitle = useShownWhileClosing(view.kind === "clip" ? view.title : null);
   const shownBanner = useShownWhileClosing(banner);
@@ -77,6 +88,9 @@ export const ShowStage = () => {
       )}
       <div className={classNames("show-fox", `is-${toFoxSpot(view)}`)}>
         {fox.image && <Fox image={fox.image} bodyRef={fox.bodyRef} layout="box" />}
+      </div>
+      <div className={classNames("show-head", isHeadVisible && "is-visible")} aria-hidden={!isHeadVisible}>
+        {head && <Head view={head.view} images={head.images} layout="box" />}
       </div>
     </main>
   );

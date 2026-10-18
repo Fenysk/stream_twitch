@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-18 — La tête de Fenysk paraît dans `/show` tant qu'il parle : sa vue passe par le flux de l'émission, en évènement SSE nommé `head`
+
+**Contexte.** Alexis veut sa tête (expression, bouche) à gauche de `/show` quand il parle ; `/show` ouvre déjà 3 EventSource, et les 6 connexions de `127.0.0.1:4747` (OBS) ne laissent pas de 4e flux.
+**Décision.** `GET /api/show/events?place=page` envoie en plus, à chaque changement de la tête, sa `HeadView` sous le nom `head` (`SHOW_HEAD_EVENT`) : les messages sans nom, l'état de l'émission, restent ceux de l'onglet Émission et de `/countdown`, qui ne se connectent pas avec `place=page`. `watchShowState(isPage, onState, onHead)` ; la page passe la vue par le portail d'expression de `/head` (`createHeadGate`). La tête paraît tant que `isShowLowered(showFader)` : le signal et le délai du son (`TALK_HOLD_MS`), aucun champ d'état de plus. `lexique.json` et `architecture.json` ne bougent pas.
+**Renoncement.** Un 4e EventSource vers `/api/head/events` : la 7e requête de la page attendrait sans fin, l'émission se figerait. La vue de la tête dans `ShowState` : tout l'état (clips, rires) repartirait à chaque pas de la bouche, vers l'onglet et `/countdown` aussi. Un `isTalking` dans `ShowState` : deux champs pour un seul instant, qui finiraient par diverger.
+
 ## 2026-10-18 — Chaque clip a sa phrase de fin (`endPhrase`) : la phrase des rires n'est plus liée aux sounds
 
 **Contexte.** Jean-Renard disait « Les rires sont enregistrés. Personne n'a ri. » après tout clip dont un rire avait joué, quel que soit le sound posé : Alexis veut, par clip, une phrase de début (`phrase`, sur le carton) et une phrase de fin.

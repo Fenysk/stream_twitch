@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { CLOSING_BANNER, OPENING_BANNER } from "../../domain/show.rules";
-import { NO_VIEW, toBanner, toFoxSpot, toShownSlot, toSlot } from "./show-view";
+import { isHeadShown, NO_VIEW, type ShowView, toBanner, toFoxSpot, toShownSlot, toSlot } from "./show-view";
 
 const NOW = Date.UTC(2026, 9, 20, 12);
+
+// Un exemplaire de chaque temps de l'émission.
+const ON_AIR_VIEWS: ShowView[] = [
+  { kind: "opening" },
+  { kind: "card", slot: 0, title: "A", day: "2026-10-16" },
+  { kind: "clip", slot: 1, title: "A" },
+  { kind: "closing" },
+];
 
 describe("toFoxSpot", () => {
   it("met Jean-Renard grand à droite pour l'ouverture, le carton, la clôture et hors émission", () => {
@@ -48,5 +56,20 @@ describe("toShownSlot", () => {
 describe("toSlot", () => {
   it("alterne les deux emplacements d'un clip à l'autre", () => {
     expect([0, 1, 2, 3, 4].map(toSlot)).toEqual([0, 1, 0, 1, 0]);
+  });
+});
+
+describe("isHeadShown", () => {
+  it("Tant que le son est baissé, la tête doit paraître à l'ouverture, au carton, pendant le clip (et ses rires) et à la clôture", () => {
+    for (const view of ON_AIR_VIEWS) expect(isHeadShown(view, 15)).toBe(true);
+  });
+
+  it("Quand le son est entier, la tête ne doit paraître à aucun temps de l'émission", () => {
+    for (const view of ON_AIR_VIEWS) expect(isHeadShown(view, 100)).toBe(false);
+  });
+
+  it("Quand la page est transparente, la tête ne doit jamais paraître, même si Fenysk parle", () => {
+    expect(isHeadShown(NO_VIEW, 15)).toBe(false);
+    expect(isHeadShown(NO_VIEW, 100)).toBe(false);
   });
 });

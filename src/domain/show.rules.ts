@@ -204,11 +204,16 @@ export const toLaughSchedule = (laughs: readonly ClipLaugh[], trim: Trim): Sched
 export const TALK_SHOW_FADER = 15;
 export const TALK_FADE_MS = 300;
 export const TALK_HOLD_MS = 2000;
+const FULL_FADER = 100;
 
 // Le fader voulu pour tout le son de l'émission, d'après depuis combien de ms (`silentFor`) Fenysk ne dit plus rien ; `delay` : celui de
 // la détection de la tête.
 export const toShowFader = (silentFor: number, delay: number): number =>
-  silentFor < delay + TALK_HOLD_MS ? TALK_SHOW_FADER : 100;
+  silentFor < delay + TALK_HOLD_MS ? TALK_SHOW_FADER : FULL_FADER;
+
+// Le son de l'émission est baissé : Fenysk parle, ou s'est tu depuis moins de `TALK_HOLD_MS` (delay compris). Sa tête paraît dans `/show`
+// tant qu'il l'est, au même instant que le fader : un seul signal, un seul délai.
+export const isShowLowered = (fader: number): boolean => fader < FULL_FADER;
 
 // Le fader atteint `elapsed` ms après le début d'un fondu de `from` vers `to` : une rampe linéaire sur `TALK_FADE_MS`, bornée.
 export const toFadingFader = (from: number, to: number, elapsed: number): number =>
