@@ -28,8 +28,8 @@ const running: ShowState = {
   status: "running",
   runId: "run1",
   lineup: [
-    { name: "a.mp4", title: "A", version: "1-1", day: "2026-10-16", laughs: [] },
-    { name: "b.mp4", title: "B", version: "1-1", day: "2026-10-16", laughs: [] },
+    { name: "a.mp4", title: "A", version: "1-1", day: "2026-10-16", durationMs: 10_000, laughs: [] },
+    { name: "b.mp4", title: "B", version: "1-1", day: "2026-10-16", durationMs: 10_000, laughs: [] },
   ],
   phase: "clip",
   index: 1,

@@ -14,6 +14,8 @@ export type UseShow = {
   view: ShowView;
   // Les messages du tchat du clip qui joue, tels qu'ils sont apparus : la colonne du tchat les affiche comme ceux du direct.
   chat: ChatMessage[];
+  // L'instant estimé (ms de l'horloge du PC) où Fenysk revient ; `null` hors émission.
+  returnAt: number | null;
 };
 
 // `setFoxMode` : ce que Jean-Renard montre en plus de sa bouche (il sursaute avec le son du clip) ; la page `/show` le lui donne seule.
@@ -22,6 +24,7 @@ export const useShow = (setFoxMode: (mode: FoxMode) => void): UseShow => {
   const second = useRef<HTMLVideoElement>(null);
   const [view, setView] = useState<ShowView>(NO_VIEW);
   const [chat, setChat] = useState<ChatMessage[]>([]);
+  const [returnAt, setReturnAt] = useState<number | null>(null);
   // La dernière version de `setFoxMode`, que l'effet lit sans se relancer quand elle change.
   const foxMode = useRef(setFoxMode);
   foxMode.current = setFoxMode;
@@ -30,6 +33,7 @@ export const useShow = (setFoxMode: (mode: FoxMode) => void): UseShow => {
     const page = {
       videoOf: (slot: Slot) => (slot === 0 ? first : second).current,
       setView,
+      setReturnAt,
       // Un message paraît au moment où le clip y arrive : il compte comme reçu maintenant, de quoi lui donner sa durée d'affichage.
       addChat: (messages: ChatMessage[]) => {
         if (messages.length === 0) return;
@@ -44,6 +48,7 @@ export const useShow = (setFoxMode: (mode: FoxMode) => void): UseShow => {
       run?.stop();
       run = undefined;
       setView(NO_VIEW);
+      setReturnAt(null);
     };
     // Le serveur dit l'état à la connexion puis à chaque changement ; une émission nouvelle (un autre `runId`) remplace la courante,
     // un état sans émission en cours (arrêtée, finie) coupe tout. Les rapports de la page elle-même reviennent avec le même `runId` :
@@ -66,5 +71,5 @@ export const useShow = (setFoxMode: (mode: FoxMode) => void): UseShow => {
     };
   }, []);
 
-  return { videos: [first, second], view, chat };
+  return { videos: [first, second], view, chat, returnAt };
 };

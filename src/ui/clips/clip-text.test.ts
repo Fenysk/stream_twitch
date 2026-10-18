@@ -80,6 +80,7 @@ describe("toShowStatusText", () => {
     title: `Clip ${number}`,
     version: "1-1",
     day: "2026-10-16",
+    durationMs: 10_000,
     laughs: [],
   }));
   const running = (phase: ShowState["phase"], index: number): ShowState => ({

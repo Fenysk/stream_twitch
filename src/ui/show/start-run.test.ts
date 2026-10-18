@@ -43,7 +43,7 @@ afterEach(() => {
 const state: ShowState = {
   status: "running",
   runId: "run1",
-  lineup: [{ name: "a.mp4", title: "A", version: "1-1", day: "2026-10-16", laughs: [] }],
+  lineup: [{ name: "a.mp4", title: "A", version: "1-1", day: "2026-10-16", durationMs: 10_000, laughs: [] }],
   phase: "opening",
   index: 0,
   startsAt: 0,
@@ -54,14 +54,16 @@ const state: ShowState = {
 const setup = (shown: ShowState = state) => {
   const views: ShowView[] = [];
   const modes: FoxMode[] = [];
+  const returnAts: number[] = [];
   const run = startRun(shown, {
     videoOf: () => null,
     setView: (view) => views.push(view),
+    setReturnAt: (at) => returnAts.push(at),
     addChat: () => undefined,
     clearChat: () => undefined,
     setFoxMode: (mode) => modes.push(mode),
   });
-  return { run, views, modes };
+  return { run, views, modes, returnAts };
 };
 
 const reported = () => vi.mocked(reportShowProgress).mock.calls.map(([progress]) => progress);
@@ -89,6 +91,19 @@ describe("startRun", () => {
     expect(views.map(({ kind }) => kind)).toEqual(["opening"]);
     expect(reported().map(({ phase }) => phase)).toEqual(["opening"]);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("donne à la page l'instant estimé du retour de Fenysk à chaque temps, et rien de plus une fois arrêtée", async () => {
+    const startedAt = Date.now();
+    const { run, returnAts } = setup();
+    await vi.advanceTimersByTimeAsync(0);
+    // Ouverture 6200 + le clip (carton 6000 + 10 000, sans rire) + clôture 6200 : le clip ne se lit pas, la clôture le recalcule.
+    expect(returnAts).toEqual([startedAt + 28_400]);
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(returnAts).toEqual([startedAt + 28_400, startedAt + 2500 + 6200]);
+    run.stop();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(returnAts).toHaveLength(2);
   });
 
   it("calme Jean-Renard quand l'émission s'arrête", () => {
@@ -171,7 +186,16 @@ describe("startRun : un clip qui joue", () => {
   const SECOND: ShowLaugh = { id: "rires002", version: "2", fader: 60, at: 3000 };
   const laughing: ShowState = {
     ...state,
-    lineup: [{ name: "a.mp4", title: "A", version: "1-1", day: "2026-10-16", laughs: [FIRST, SECOND] }],
+    lineup: [
+      {
+        name: "a.mp4",
+        title: "A",
+        version: "1-1",
+        day: "2026-10-16",
+        durationMs: 10_000,
+        laughs: [FIRST, SECOND],
+      },
+    ],
   };
 
   // Une page avec une vidéo qui se lit : ce que le clip joue se règle par `play`, qui reçoit le pas du clip.
@@ -184,6 +208,7 @@ describe("startRun : un clip qui joue", () => {
     const run = startRun(laughing, {
       videoOf: () => video,
       setView: (view) => events.push(`vue ${view.kind}`),
+      setReturnAt: () => undefined,
       addChat: (messages) => {
         if (messages.length > 0) events.push(`tchat ${messages.map(({ id }) => id).join(",")}`);
       },
@@ -315,6 +340,7 @@ describe("startRun : le fader du son des vidéos", () => {
       {
         videoOf: (slot) => videos[slot] ?? null,
         setView: () => undefined,
+        setReturnAt: () => undefined,
         addChat: () => undefined,
         clearChat: () => undefined,
         setFoxMode: () => undefined,

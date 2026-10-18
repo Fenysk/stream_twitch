@@ -5,6 +5,7 @@ import {
   CARD_AFTER_SPEECH_MS,
   CARD_MIN_MS,
   CLOSING_BANNER,
+  ESTIMATED_SPEECH,
   LAUGH_AFTER_SPEECH_MS,
   LAUGH_PHRASE,
   LINE_AFTER_SPEECH_MS,
@@ -13,6 +14,7 @@ import {
   toCardMs,
   toChatSchedule,
   toClipFader,
+  toCountdownText,
   toDue,
   toFadingFader,
   toLaughMs,
@@ -20,6 +22,7 @@ import {
   toLineMs,
   toLineup,
   toRecordedDay,
+  toRemainingMs,
 } from "./show.rules";
 
 describe("toLineup", () => {
@@ -125,6 +128,86 @@ describe("les rires enregistrés", () => {
     expect(LAUGH_AFTER_SPEECH_MS).toBe(500);
     expect(toLaughMs({ repliedAt: 1200, durationMs: 3000 })).toBe(4700);
     expect(toLaughMs(null)).toBe(0);
+  });
+});
+
+describe("le retour de Fenysk", () => {
+  // La phrase estimée donne : carton 6000 ms, phrase des rires 6000 ms, ouverture et clôture 6200 ms chacune.
+  const CARD = 6000;
+  const LAUGHS = 6000;
+  const LINE = 6200;
+  const LAUGH = { id: "rires001", version: "1", fader: 80, at: 2000 };
+  // Un clip de 20 s avec un rire (6000 + 20 000 + 6000 = 32 000), puis un de 30 s sans rire (6000 + 30 000 = 36 000).
+  const lineup = [
+    { durationMs: 20_000, laughs: [LAUGH] },
+    { durationMs: 30_000, laughs: [] },
+  ];
+
+  describe("ESTIMATED_SPEECH", () => {
+    it("Quand le système estime une phrase de Jean-Renard, il doit compter 1,5 s de synthèse puis 4 s de phrase", () => {
+      expect(ESTIMATED_SPEECH).toEqual({ repliedAt: 1500, durationMs: 4000 });
+      expect(toCardMs(ESTIMATED_SPEECH)).toBe(CARD);
+      expect(toLaughMs(ESTIMATED_SPEECH)).toBe(LAUGHS);
+      expect(toLineMs(ESTIMATED_SPEECH)).toBe(LINE);
+    });
+  });
+
+  describe("toRemainingMs", () => {
+    it("Quand la page ouvre l'émission, le système doit compter l'ouverture, tous les clips et la clôture", () => {
+      expect(toRemainingMs(lineup, { phase: "opening" })).toBe(LINE + 32_000 + 36_000 + LINE);
+    });
+
+    it("Quand la page montre le carton d'un clip, le système doit compter les clips à partir de celui-ci et la clôture", () => {
+      expect(toRemainingMs(lineup, { phase: "card", index: 0 })).toBe(32_000 + 36_000 + LINE);
+      expect(toRemainingMs(lineup, { phase: "card", index: 1 })).toBe(36_000 + LINE);
+    });
+
+    it("Quand la page joue un clip qui a des rires, le système doit compter sa durée, la phrase des rires, les clips suivants et la clôture", () => {
+      expect(toRemainingMs(lineup, { phase: "clip", index: 0 })).toBe(20_000 + LAUGHS + 36_000 + LINE);
+    });
+
+    it("Quand la page joue un clip sans rire, le système doit compter sa durée sans phrase des rires", () => {
+      expect(toRemainingMs(lineup, { phase: "clip", index: 1 })).toBe(30_000 + LINE);
+      const quiet = [
+        { durationMs: 10_000, laughs: [] },
+        { durationMs: 30_000, laughs: [] },
+      ];
+      expect(toRemainingMs(quiet, { phase: "clip", index: 0 })).toBe(10_000 + CARD + 30_000 + LINE);
+      expect(toRemainingMs(quiet, { phase: "opening" })).toBe(LINE + CARD + 10_000 + CARD + 30_000 + LINE);
+    });
+
+    it("Quand la page dit la phrase des rires, le système doit compter cette phrase, les clips suivants et la clôture", () => {
+      expect(toRemainingMs(lineup, { phase: "laugh", index: 0 })).toBe(LAUGHS + 36_000 + LINE);
+    });
+
+    it("Quand la page ferme l'émission, le système doit compter la clôture seule", () => {
+      expect(toRemainingMs(lineup, { phase: "closing" })).toBe(LINE);
+    });
+
+    it("Quand l'index n'est pas dans l'émission, le système doit ne compter que les clips qui existent", () => {
+      expect(toRemainingMs(lineup, { phase: "card", index: 2 })).toBe(LINE);
+      expect(toRemainingMs(lineup, { phase: "clip", index: 5 })).toBe(LINE);
+      expect(toRemainingMs(lineup, { phase: "laugh", index: 1 })).toBe(LAUGHS + LINE);
+    });
+
+    it("Quand l'émission n'a aucun clip, le système doit compter l'ouverture et la clôture", () => {
+      expect(toRemainingMs([], { phase: "opening" })).toBe(LINE + LINE);
+    });
+  });
+
+  describe("toCountdownText", () => {
+    it("Quand il reste plus d'une minute, le système doit dire le nombre de minutes, arrondi à la minute supérieure", () => {
+      expect(toCountdownText(181_000)).toBe("Retour de Fenysk dans 4 min");
+      expect(toCountdownText(240_000)).toBe("Retour de Fenysk dans 4 min");
+      expect(toCountdownText(60_001)).toBe("Retour de Fenysk dans 2 min");
+    });
+
+    it("Quand il reste une minute ou moins, ou que l'heure est passée, le système doit dire moins d'une minute", () => {
+      expect(toCountdownText(60_000)).toBe("Retour de Fenysk dans moins d'une minute");
+      expect(toCountdownText(1)).toBe("Retour de Fenysk dans moins d'une minute");
+      expect(toCountdownText(0)).toBe("Retour de Fenysk dans moins d'une minute");
+      expect(toCountdownText(-5000)).toBe("Retour de Fenysk dans moins d'une minute");
+    });
   });
 });
 

@@ -4,12 +4,14 @@
 // coin) ; clôture (comme l'ouverture) ; la page redevient transparente. Le clip suivant se charge dans l'autre <video> pendant que
 // celui-ci joue, et c'est sa première image qui sert de fond au carton.
 
-import { toCardMs, toLaughMs, toLineMs } from "../../domain/show.rules";
+import { type CountdownStep, toCardMs, toLaughMs, toLineMs, toRemainingMs } from "../../domain/show.rules";
 import type { ShowClip, ShowCues, ShowLaugh, ShowProgress } from "../../domain/show.schema";
 import { type ShowView, type Slot, toSlot } from "./show-view";
 
 export type ShowScreen = {
   setView(view: ShowView): void;
+  // L'instant estimé du retour de Fenysk (ms de `deps.now()`), recalculé au début de chaque temps.
+  setReturnAt(at: number): void;
   // Charge le clip dans l'emplacement, prêt à jouer ; `false` quand le fichier ne se lit pas.
   load(slot: Slot, clip: ShowClip): Promise<boolean>;
   // Joue le clip de l'emplacement depuis le début, son tchat et ses sursauts au rythme de la vidéo (`cues`, rien quand le serveur ne
@@ -88,22 +90,32 @@ export async function runEpisode(deps: EpisodeDeps, lineup: readonly ShowClip[])
     return loading;
   };
 
+  // Le retour de Fenysk, estimé à partir de ce qui reste depuis ce temps.
+  const estimateReturn = (step: CountdownStep) =>
+    screen.setReturnAt(deps.now() + toRemainingMs(lineup, step));
+
   // Le carton du clip, puis le clip et ses rires jusqu'à leur fin, puis la phrase des rires (une seule) si au moins un a joué.
   const showClip = async (index: number, clip: ShowClip, loading: Loading): Promise<void> => {
     deps.report({ phase: "card", index });
     screen.setView({ kind: "card", slot: toSlot(index), title: clip.title, day: clip.day });
+    estimateReturn({ phase: "card", index });
     await holdSpeech(deps, { kind: "clip", index }, toCardMs);
     if (deps.isStopped()) return;
     deps.report({ phase: "clip", index });
     screen.setView({ kind: "clip", slot: toSlot(index), title: clip.title });
+    estimateReturn({ phase: "clip", index });
     const playing = screen.play(toSlot(index), await loading.cues, clip.laughs);
     void preload(index + 1);
     const hasLaughed = await playing;
-    if (hasLaughed && !deps.isStopped()) await holdSpeech(deps, { kind: "laugh" }, toLaughMs);
+    if (hasLaughed && !deps.isStopped()) {
+      estimateReturn({ phase: "laugh", index });
+      await holdSpeech(deps, { kind: "laugh" }, toLaughMs);
+    }
   };
 
   deps.report({ phase: "opening", index: 0 });
   screen.setView({ kind: "opening" });
+  estimateReturn({ phase: "opening" });
   void preload(0);
   await holdSpeech(deps, { kind: "opening" }, toLineMs);
   for (const [index, clip] of lineup.entries()) {
@@ -115,6 +127,7 @@ export async function runEpisode(deps: EpisodeDeps, lineup: readonly ShowClip[])
   if (deps.isStopped()) return;
   deps.report({ phase: "closing", index: 0 });
   screen.setView({ kind: "closing" });
+  estimateReturn({ phase: "closing" });
   await holdSpeech(deps, { kind: "closing" }, toLineMs);
   if (deps.isStopped()) return;
   deps.report({ phase: "ended", index: 0 });

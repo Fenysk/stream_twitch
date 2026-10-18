@@ -2,14 +2,17 @@
 // l'ouverture et la clôture (un bandeau aux couleurs du design system qui glisse depuis la gauche, Jean-Renard grand à droite), le
 // carton de chaque clip (même bandeau avec le jour et le titre du clip, sur le début du clip flou et assombri), puis le clip en plein
 // écran avec son titre dans un coin, le tchat d'origine du clip en bas à gauche et Jean-Renard petit dans l'autre coin. Deux <video>
-// superposés (celui qui joue, celui qui charge le suivant). Un seul Jean-Renard : sa voix et sa bouche sont ceux de cette page.
+// superposés (celui qui joue, celui qui charge le suivant). Un seul Jean-Renard : sa voix et sa bouche sont ceux de cette page. Pendant
+// toute l'émission, une pill en haut à droite dit dans combien de temps Fenysk revient.
 
 import type { Ref } from "react";
+import { toCountdownText } from "../../domain/show.rules";
 import { ChatColumn } from "../chat/chat-column";
 import { useChatView } from "../chat/use-chat-view";
 import { classNames } from "../design/class-names";
 import { useShownWhileClosing } from "../design/window";
 import { Fox } from "../Fox";
+import { useNow } from "../settings/use-now";
 import { useFox } from "../use-fox";
 import { type Banner, type ShowView, type Slot, toBanner, toFoxSpot, toShownSlot } from "./show-view";
 import { useShow } from "./use-show";
@@ -45,9 +48,26 @@ const ShowBanner = ({ banner, isVisible }: ShowBannerProps) => (
   </section>
 );
 
+type ShowCountdownProps = { returnAt: number | null };
+
+// Dans combien de temps Fenysk revient, en haut à droite. Le seul à se redessiner chaque seconde ; son texte reste écrit pendant qu'il
+// s'efface.
+const ShowCountdown = ({ returnAt }: ShowCountdownProps) => {
+  const now = useNow(1000);
+  const text = useShownWhileClosing(returnAt === null ? null : toCountdownText(returnAt - now));
+  const isVisible = returnAt !== null;
+  return (
+    <div className={classNames("show-countdown", isVisible && "is-visible")} aria-hidden={!isVisible}>
+      <div className="lp-pill show-countdown-pill">
+        <p className="show-countdown-text">{text}</p>
+      </div>
+    </div>
+  );
+};
+
 export const ShowStage = () => {
   const fox = useFox("show");
-  const { videos, view, chat } = useShow(fox.updateMode);
+  const { videos, view, chat, returnAt } = useShow(fox.updateMode);
   const { look } = useChatView();
   const banner = toBanner(view, Date.now());
   // Le titre du coin reste écrit pendant qu'il s'efface.
@@ -67,6 +87,7 @@ export const ShowStage = () => {
           <p className="show-title-text">{cornerTitle}</p>
         </div>
       </div>
+      <ShowCountdown returnAt={view.kind === "none" ? null : returnAt} />
       {look && (
         <div
           className={classNames("show-chat", view.kind === "clip" && "is-visible")}

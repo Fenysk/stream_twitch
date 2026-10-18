@@ -179,8 +179,22 @@ describe("createShowDirector : le démarrage", () => {
       status: "running",
       runId: "run1",
       lineup: [
-        { name: "a.mp4", title: "Titre de a.mp4", version: "1-100", day: "2026-10-16", laughs: [] },
-        { name: "b.mp4", title: "Titre de b.mp4", version: "1-100", day: "2026-10-16", laughs: [] },
+        {
+          name: "a.mp4",
+          title: "Titre de a.mp4",
+          version: "1-100",
+          day: "2026-10-16",
+          durationMs: 10_000,
+          laughs: [],
+        },
+        {
+          name: "b.mp4",
+          title: "Titre de b.mp4",
+          version: "1-100",
+          day: "2026-10-16",
+          durationMs: 10_000,
+          laughs: [],
+        },
       ],
       phase: "opening",
       index: 0,
@@ -207,6 +221,15 @@ describe("createShowDirector : le démarrage", () => {
     });
     send(true);
     expect(director.getState().lineup.map(({ day }) => day)).toEqual(["2026-10-15"]);
+  });
+
+  it("donne à chaque clip la durée de sa partie gardée en ms, de quoi estimer le retour de Fenysk", () => {
+    const { director, send } = setup({
+      // (0,9 - 0,3) × 1000 donne 600,0000000000001 : la durée est arrondie à la ms.
+      clips: [{ ...confirmed("a.mp4"), start: 0.3, end: 0.9 }, confirmed("b.mp4")],
+    });
+    send(true);
+    expect(director.getState().lineup.map(({ durationMs }) => durationMs)).toEqual([600, 10_000]);
   });
 
   it("donne à chaque clip ses rires : le sound de la soundboard avec sa version et son fader, à son instant en ms, rien sans rires", () => {

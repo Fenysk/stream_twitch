@@ -227,6 +227,7 @@ export function createShowDirector({
       title: clip.title,
       version: clip.version,
       day: toRecordedDay(clip),
+      durationMs: Math.round((clip.end - clip.start) * 1000),
       laughs: toLaughs(clip),
     }));
     publish({

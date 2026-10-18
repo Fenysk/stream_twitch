@@ -12,13 +12,14 @@ export const ShowLaughSchema = z.object({
 export type ShowLaugh = z.infer<typeof ShowLaughSchema>;
 
 // Ce que la page `/show` reçoit d'un clip de l'émission : le nom de sa vidéo, son titre, sa version, le jour où il a été enregistré
-// (AAAA-MM-JJ, écrit en petit au-dessus du titre du carton) et ses rires, dans l'ordre de leur instant (vide : aucun, ou leurs sounds
-// ont été supprimés depuis). La phrase reste sur le serveur.
+// (AAAA-MM-JJ, écrit en petit au-dessus du titre du carton), la durée de sa partie gardée (ms, de quoi estimer le retour de Fenysk) et
+// ses rires, dans l'ordre de leur instant (vide : aucun, ou leurs sounds ont été supprimés depuis). La phrase reste sur le serveur.
 export const ShowClipSchema = z.object({
   name: z.string().min(1),
   title: z.string(),
   version: z.string().min(1),
   day: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/),
+  durationMs: z.number().int().min(0),
   laughs: z.array(ShowLaughSchema),
 });
 export type ShowClip = z.infer<typeof ShowClipSchema>;

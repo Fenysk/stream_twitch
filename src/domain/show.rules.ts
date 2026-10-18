@@ -2,7 +2,7 @@
 
 import type { ClipChat, ClipLaugh } from "./clip.schema";
 import { isLaughKept } from "./laugh.rules";
-import type { ShowChatEntry } from "./show.schema";
+import type { ShowChatEntry, ShowClip } from "./show.schema";
 import type { Trim } from "./trim.rules";
 
 // Combien de clips une émission passe quand les réglages ne le disent pas (`showClipCount`).
@@ -76,6 +76,53 @@ export const LAUGH_AFTER_SPEECH_MS = 500;
 
 export const toLaughMs = (speech: SpeechTiming | null): number =>
   toSpeechMs(speech, 0, LAUGH_AFTER_SPEECH_MS);
+
+// Une phrase de Jean-Renard estimée pour compter ce qui reste : la synthèse ~1,5 s, puis ~4 s de phrase.
+export const ESTIMATED_SPEECH: SpeechTiming = { repliedAt: 1500, durationMs: 4000 };
+
+export type CountdownStep =
+  | { phase: "opening" }
+  | { phase: "card" | "clip" | "laugh"; index: number }
+  | { phase: "closing" };
+
+type CountdownClip = Pick<ShowClip, "durationMs" | "laughs">;
+
+// Sans rire dans le clip, pas de phrase des rires.
+const toClipLaughMs = ({ laughs }: CountdownClip): number =>
+  laughs.length > 0 ? toLaughMs(ESTIMATED_SPEECH) : 0;
+
+// Un clip en entier : son carton, sa partie gardée, sa phrase des rires.
+const toClipMs = (clip: CountdownClip): number =>
+  toCardMs(ESTIMATED_SPEECH) + clip.durationMs + toClipLaughMs(clip);
+
+// Les ms entre le début de ce temps de l'émission et la fin de la clôture, phrases estimées.
+export const toRemainingMs = (lineup: readonly CountdownClip[], step: CountdownStep): number => {
+  const clipsFrom = (index: number): number =>
+    lineup.slice(index).reduce((total, clip) => total + toClipMs(clip), 0);
+  const closingMs = toLineMs(ESTIMATED_SPEECH);
+  switch (step.phase) {
+    case "opening":
+      return toLineMs(ESTIMATED_SPEECH) + clipsFrom(0) + closingMs;
+    case "card":
+      return clipsFrom(step.index) + closingMs;
+    case "clip": {
+      const clip = lineup[step.index];
+      return (clip ? clip.durationMs + toClipLaughMs(clip) : 0) + clipsFrom(step.index + 1) + closingMs;
+    }
+    case "laugh":
+      return toLaughMs(ESTIMATED_SPEECH) + clipsFrom(step.index + 1) + closingMs;
+    case "closing":
+      return closingMs;
+  }
+};
+
+const MINUTE_MS = 60_000;
+
+// « Retour de Fenysk dans 4 min » (minute supérieure), puis « dans moins d'une minute » à 60 s ou moins.
+export const toCountdownText = (remainingMs: number): string =>
+  remainingMs > MINUTE_MS
+    ? `Retour de Fenysk dans ${Math.ceil(remainingMs / MINUTE_MS)} min`
+    : "Retour de Fenysk dans moins d'une minute";
 
 // Le tchat réagit à ce qu'il voit : ses messages paraissent 4 s plus tôt que sur le direct (`showChatLead`, en ms).
 export const DEFAULT_CHAT_LEAD_MS = 4000;

@@ -14,8 +14,22 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const A: ShowClip = { name: "a.mp4", title: "Titre A", version: "1-1", day: "2026-10-16", laughs: [] };
-const B: ShowClip = { name: "b.mp4", title: "Titre B", version: "1-1", day: "2026-10-16", laughs: [] };
+const A: ShowClip = {
+  name: "a.mp4",
+  title: "Titre A",
+  version: "1-1",
+  day: "2026-10-16",
+  durationMs: 20_000,
+  laughs: [],
+};
+const B: ShowClip = {
+  name: "b.mp4",
+  title: "Titre B",
+  version: "1-1",
+  day: "2026-10-16",
+  durationMs: 30_000,
+  laughs: [],
+};
 
 // Une page de test : chaque appel de l'écran, de la voix et du rapport se note avec l'heure (ms depuis le début), et la fin d'un clip
 // se donne à la main.
@@ -31,6 +45,8 @@ const setup = (
   } = {},
 ) => {
   const events: string[] = [];
+  // Les instants du retour de Fenysk reçus, à part des évènements : ils ne changent pas l'ordre qu'on y vérifie.
+  const returnAts: number[] = [];
   const cuesAsked: string[] = [];
   const playedWith: (ShowCues | null)[] = [];
   const playedLaughs: (readonly ShowLaugh[])[] = [];
@@ -46,6 +62,7 @@ const setup = (
   const deps: EpisodeDeps = {
     screen: {
       setView: (view) => events.push(`${at()} vue ${describeView(view)}`),
+      setReturnAt: (instant) => returnAts.push(instant),
       async load(slot, { name }) {
         const isLoaded = options.isLoaded?.(name) ?? true;
         events.push(`${at()} charge ${name} dans ${slot}${isLoaded ? "" : " (échec)"}`);
@@ -79,6 +96,7 @@ const setup = (
   };
   return {
     events,
+    returnAts,
     cuesAsked,
     playedWith,
     playedLaughs,
@@ -212,8 +230,15 @@ describe("les clips", () => {
   it("saute un clip qui ne se lit pas et le dit dans le journal", async () => {
     const { events, run } = setup(
       [
-        { name: "cassé.mp4", title: "Cassé", version: "1-1", day: "2026-10-16", laughs: [] },
-        { name: "bon.mp4", title: "Bon", version: "1-1", day: "2026-10-16", laughs: [] },
+        {
+          name: "cassé.mp4",
+          title: "Cassé",
+          version: "1-1",
+          day: "2026-10-16",
+          durationMs: 5000,
+          laughs: [],
+        },
+        { name: "bon.mp4", title: "Bon", version: "1-1", day: "2026-10-16", durationMs: 30_000, laughs: [] },
       ],
       { isLoaded: (name) => name !== "cassé.mp4" },
     );
@@ -391,5 +416,68 @@ describe("la clôture et la fin", () => {
     await done;
     expect(events.filter((event) => event.includes("carton"))).toHaveLength(1);
     expect(events.some((event) => event.includes("closing") || event.includes("ended"))).toBe(false);
+  });
+});
+
+describe("l'instant du retour de Fenysk", () => {
+  const FIRST: ShowLaugh = { id: "rires001", version: "1", fader: 80, at: 2000 };
+  const laughing: ShowClip = { ...A, laughs: [FIRST] };
+  // La phrase estimée donne : carton 6000 ms, phrase des rires 6000 ms, ouverture et clôture 6200 ms. Le clip A (20 s, un rire) pèse
+  // 32 000 ms en tout, le clip B (30 s, sans rire) 36 000 ms.
+
+  it("le donne à chaque temps, à partir de ce qui reste : ouverture, carton, clip, rires, carton suivant, clip suivant, clôture", async () => {
+    // Seule la phrase des rires dure (2 s) : l'ouverture dure 2,5 s, un carton 3 s, la phrase des rires 2,5 s.
+    const { returnAts, run, finish } = setup([laughing, B], {
+      speak: async (speech) => (speech.kind === "laugh" ? 2000 : 0),
+    });
+    void run();
+    await advance(0);
+    expect(returnAts).toEqual([6200 + 32_000 + 36_000 + 6200]);
+    await advance(2500);
+    expect(returnAts.at(-1)).toBe(2500 + 32_000 + 36_000 + 6200);
+    await advance(3000);
+    expect(returnAts.at(-1)).toBe(5500 + 20_000 + 6000 + 36_000 + 6200);
+    await advance(19_500);
+    finish(0, true);
+    await advance(0);
+    expect(returnAts.at(-1)).toBe(25_000 + 6000 + 36_000 + 6200);
+    await advance(2500);
+    expect(returnAts.at(-1)).toBe(27_500 + 36_000 + 6200);
+    await advance(3000);
+    expect(returnAts.at(-1)).toBe(30_500 + 30_000 + 6200);
+    await advance(30_000);
+    finish(1);
+    await advance(0);
+    expect(returnAts).toEqual([80_400, 76_700, 73_700, 73_200, 69_700, 66_700, 66_700]);
+  });
+
+  it("ne le donne pas aux rires quand aucun n'a joué : le carton suivant le recalcule", async () => {
+    const { returnAts, run, finish } = setup([laughing, B]);
+    void run();
+    await advance(5500);
+    finish(0, false);
+    await advance(0);
+    expect(returnAts).toEqual([80_400, 76_700, 73_700, 5500 + 36_000 + 6200]);
+  });
+
+  it("ne le donne pas pour un clip qui ne se lit pas : le carton suivant le recalcule", async () => {
+    const { returnAts, run } = setup(
+      [
+        {
+          name: "cassé.mp4",
+          title: "Cassé",
+          version: "1-1",
+          day: "2026-10-16",
+          durationMs: 5000,
+          laughs: [],
+        },
+        B,
+      ],
+      { isLoaded: (name) => name !== "cassé.mp4" },
+    );
+    void run();
+    await advance(5500);
+    // Ouverture : 6200 + (6000 + 5000) + 36 000 + 6200 ; carton de B à 2500 ms ; B à 5500 ms.
+    expect(returnAts).toEqual([59_400, 2500 + 36_000 + 6200, 5500 + 30_000 + 6200]);
   });
 });

@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-18 — `/show` affiche dans combien de temps Fenysk revient : chaque `ShowClip` porte sa durée gardée (`durationMs`)
+
+**Contexte.** Pendant l'émission, les viewers ne savent pas quand Fenysk revient, et `/show` ne connaît pas la durée gardée des clips.
+**Décision.** Le serveur met dans chaque `ShowClip` sa durée gardée en ms (`durationMs`, `end - start`). À chaque temps (ouverture, carton, clip, rires, clôture), `/show` estime le reste avec `toRemainingMs` (`show.rules.ts`) : les clips restants, plus les temps parlés comptés par `toCardMs`, `toLineMs` et `toLaughMs` sur une phrase estimée (`ESTIMATED_SPEECH`). Un bandeau en haut à droite dit « Retour de Fenysk dans 4 min » (minute supérieure), puis « dans moins d'une minute ».
+**Renoncement.** Une heure de retour : les viewers n'ont pas tous le même fuseau. La durée lue dans chaque `<video>` : seul le clip suivant est chargé. Un temps « rires » dans `SHOW_PHASES` : le serveur n'en a pas besoin, la page le sait seule.
+
 ## 2026-10-18 — Le son des clips baisse quand Fenysk parle : le serveur dit le fader, la page ne fait que fondre
 
 **Contexte.** La voix de Fenysk couvrait le clip dans l'émission ; OBS n'accepte que 6 connexions vers `localhost:4747` pour toutes ses sources.

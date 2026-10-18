@@ -19,6 +19,8 @@ import type { ShowView, Slot } from "./show-view";
 export type ShowPage = {
   videoOf(slot: Slot): HTMLVideoElement | null;
   setView(view: ShowView): void;
+  // L'instant estimé (ms de l'horloge du PC) où Fenysk revient.
+  setReturnAt(at: number): void;
   addChat(messages: ChatMessage[]): void;
   clearChat(): void;
   setFoxMode(mode: FoxMode): void;
@@ -64,6 +66,9 @@ export const startRun = ({ runId, lineup, startsAt, clipFader }: ShowState, page
             page.setView(view);
             // Le tchat du clip qui finit s'efface une fois le fondu fini : le clip suivant n'en montre rien, même pas un message qui part.
             if (view.kind === "card") void sleep(CHAT_CLEAR_MS).then(() => page.clearChat());
+          },
+          setReturnAt: (at) => {
+            if (!isStopped) page.setReturnAt(at);
           },
           // Les fichiers de rire du clip se téléchargent pendant que sa vidéo se charge, avant qu'il joue.
           load: async (slot, clip) => {
