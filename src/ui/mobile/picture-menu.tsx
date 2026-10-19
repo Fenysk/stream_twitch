@@ -10,13 +10,13 @@ type PictureMenuProps = {
   onToast: (tone: ToastTone, text: string) => void;
 };
 
-// Le menu de l'image, ouvert par la pastille « Image : … » : les membres de la place caméra d'OBS (PC, chaque caméra, Tête), celui qui est à
-// l'image clair. Un toucher sur un autre le met seul à l'image et lui donne le micro du live (celui de la caméra choisie, sinon celui du PC) ;
-// une caméra dont le téléphone ne filme pas vers OBS est grisée.
+// Le menu Plan, ouvert par la pastille « Plan : … » : les membres de la place caméra d'OBS (PC, chaque caméra, Tête), celui qui occupe le
+// plan clair. Un toucher sur un autre le met seul au plan et lui donne le micro (celui de la caméra choisie, sinon celui du PC) ; une caméra
+// dont le téléphone ne filme pas vers OBS est grisée.
 export const PictureMenu = ({ state, isOpen, onClose, onToast }: PictureMenuProps) => (
   <KeyMenu
-    title="Qui est à l'image"
-    closeLabel="Fermer le menu de l'image"
+    title="Plan"
+    closeLabel="Fermer le menu du plan"
     keys={toPictureKeys(state)}
     emptyText={toPictureEmptyText(state)}
     isOpen={isOpen}

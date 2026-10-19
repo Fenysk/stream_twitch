@@ -18,22 +18,16 @@ describe("toStatusView", () => {
     expect(toStatusView("connecting", false)).toEqual({ text: "Connexion à OBS…", tone: "plain" });
   });
 
-  it("Quand la caméra est envoyée, le système doit dire « À l'antenne » en rouge ou « Hors antenne » en sourdine", () => {
+  it("Quand la caméra est envoyée, le système doit dire « À l'antenne » en rouge ou « Prête » en sourdine", () => {
     expect(toStatusView("connected", true)).toEqual({ text: "À l'antenne", tone: "air" });
-    expect(toStatusView("connected", false)).toEqual({ text: "Hors antenne", tone: "quiet" });
+    expect(toStatusView("connected", false)).toEqual({ text: "Prête", tone: "quiet" });
   });
 });
 
 describe("CameraBadge", () => {
   const badge = (status: "waiting" | "connecting" | "connected", isOnAir: boolean) =>
     renderToStaticMarkup(
-      <CameraBadge
-        number={1}
-        status={status}
-        isOnAir={isOnAir}
-        onUpdateNumber={asyncNoop}
-        onTakePicture={noop}
-      />,
+      <CameraBadge number={1} status={status} isOnAir={isOnAir} onUpdateNumber={asyncNoop} />,
     );
 
   it("montre « À l'antenne » avec un point rouge quand la caméra y est", () => {
@@ -41,12 +35,12 @@ describe("CameraBadge", () => {
     expect(html).toContain("À l&#x27;antenne");
     expect(html).toContain("control-live-dot");
     expect(html).toContain('data-tone="air"');
-    expect(html).not.toContain("Hors antenne");
+    expect(html).not.toContain("Prête");
   });
 
-  it("montre « Hors antenne » en sourdine, sans point rouge, quand la caméra envoyée n'y est pas", () => {
+  it("montre « Prête » en sourdine, sans point rouge, quand la caméra envoyée n'est pas à l'antenne", () => {
     const html = badge("connected", false);
-    expect(html).toContain("Hors antenne");
+    expect(html).toContain("Prête");
     expect(html).toContain('data-tone="quiet"');
     expect(html).not.toContain("control-live-dot");
   });
@@ -58,13 +52,13 @@ describe("CameraBadge", () => {
     expect(html).not.toContain("control-live-dot");
   });
 
-  it("fait de « Hors antenne » un bouton qui met cette caméra à l'image, et d'elle seule", () => {
+  it("ne fait pas de « Prête » un bouton : se montrer passe par « Montrer », un seul endroit pour ce geste", () => {
     const quiet = badge("connected", false);
-    expect(quiet).toMatch(/<button[^>]*title="Mettre cette caméra à l&#x27;image"[^>]*>/);
-    expect(quiet).toMatch(/<span class="camera-status" data-tone="quiet"><button/);
-    expect(badge("connected", true)).not.toContain("Mettre cette caméra à l&#x27;image");
-    expect(badge("connecting", false)).not.toContain("Mettre cette caméra à l&#x27;image");
-    expect(badge("waiting", false)).not.toContain("Mettre cette caméra à l&#x27;image");
+    expect(quiet).toMatch(/data-tone="quiet"><span class="lp-badge[^"]*">Prête<\/span>/);
+    expect(quiet).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*Prête/);
+    expect(quiet).not.toContain("Mettre cette caméra");
+    expect(badge("connecting", false)).not.toContain("Prête");
+    expect(badge("waiting", false)).not.toContain("Prête");
   });
 });
 
@@ -108,38 +102,43 @@ describe("CameraControls : l'écran noir", () => {
   });
 });
 
-describe("CutCameraButton : couper ou montrer la caméra", () => {
+describe("CutCameraButton : cacher ou montrer la caméra", () => {
   const STANDING: PictureStanding = { hasPlace: true, isCurrent: false, shown: "Tête" };
   const button = (standing: PictureStanding, isDisabled = false) =>
     renderToStaticMarkup(<CutCameraButton standing={standing} isDisabled={isDisabled} onPress={noop} />);
 
-  it("est allumé, en bouton ordinaire, quand ce téléphone est à l'image, et dit que le toucher le coupe en gardant le micro", () => {
+  it("dit « Cacher » avec l'œil barré, en bouton neutre, quand ce téléphone a le plan, et que le toucher le rend à la tête en gardant le micro", () => {
     const html = button({ hasPlace: true, isCurrent: true, shown: "Caméra 1" });
-    expect(html).toContain("Couper la caméra : la tête prend l&#x27;image, le micro reste à ce téléphone");
+    expect(html).toContain(">Cacher<");
+    expect(html).toContain("lucide-eye-off");
+    expect(html).toContain("Cacher la caméra : la tête reprend le plan, le micro reste à ce téléphone");
     expect(html).not.toContain("lp-btn--danger");
     expect(html).not.toContain("disabled");
   });
 
-  it("est barré et rouge quand le téléphone n'est pas à l'image, et dit que le toucher le montre", () => {
+  it("dit « Montrer » avec l'œil, en bouton neutre et non rouge, quand le téléphone n'a pas le plan, et que le toucher le montre", () => {
     const html = button(STANDING);
-    expect(html).toContain("Montrer la caméra de ce téléphone à l&#x27;image");
-    expect(html).toContain("lp-btn--danger");
+    expect(html).toContain(">Montrer<");
+    expect(html).toContain("lucide-eye");
+    expect(html).not.toContain("lucide-eye-off");
+    expect(html).toContain("Montrer la caméra de ce téléphone au plan");
+    expect(html).not.toContain("lp-btn--danger");
     expect(html).not.toContain("disabled");
   });
 
-  it("est grisé sans place caméra, ou quand la caméra ne tourne pas, mais pas pour quitter l'image", () => {
+  it("est grisé sans place caméra, ou quand la caméra ne tourne pas, mais pas pour quitter le plan", () => {
     expect(button({ hasPlace: false, isCurrent: false, shown: null })).toContain("disabled");
     expect(button(STANDING, true)).toContain("disabled");
     expect(button({ hasPlace: false, isCurrent: true, shown: "Caméra 1" })).not.toContain("disabled");
   });
 });
 
-describe("CutNotice : l'avis discret de la caméra coupée", () => {
+describe("CutNotice : l'avis discret de la caméra cachée", () => {
   const notice = (standing: PictureStanding) => renderToStaticMarkup(<CutNotice standing={standing} />);
 
-  it("dit « Caméra coupée · Tête à l'image » quand la tête est à l'image et que ce téléphone ne l'est pas", () => {
+  it("dit « Caméra cachée · Tête au plan » quand la tête a le plan et que ce téléphone ne l'a pas", () => {
     const html = notice({ hasPlace: true, isCurrent: false, shown: "Tête" });
-    expect(html).toContain("Caméra coupée · Tête à l&#x27;image");
+    expect(html).toContain("Caméra cachée · Tête au plan");
     expect(html).toContain('role="status"');
   });
 
@@ -150,7 +149,7 @@ describe("CutNotice : l'avis discret de la caméra coupée", () => {
   });
 });
 
-describe("CameraControls : le bouton qui coupe la caméra", () => {
+describe("CameraControls : le bouton qui cache la caméra", () => {
   const controls = (hasCut: boolean) =>
     renderToStaticMarkup(
       <CameraControls
@@ -172,23 +171,23 @@ describe("CameraControls : le bouton qui coupe la caméra", () => {
 
   it("met le bouton juste avant le changement de caméra, dans la même barre", () => {
     const html = controls(true);
-    expect(html.indexOf("Couper la caméra")).toBeGreaterThan(0);
-    expect(html.indexOf("Couper la caméra")).toBeLessThan(html.indexOf("Changer de caméra"));
+    expect(html.indexOf("Cacher")).toBeGreaterThan(0);
+    expect(html.indexOf("Cacher")).toBeLessThan(html.indexOf("Changer de caméra"));
     expect(html.match(/<button/g)).toHaveLength(2);
   });
 
   it("n'en met pas quand le rôle ne le donne pas", () => {
-    expect(controls(false)).not.toContain("Couper la caméra");
+    expect(controls(false)).not.toContain("Cacher");
     expect(controls(false).match(/<button/g)).toHaveLength(1);
   });
 });
 
-describe("le bouton qui coupe la caméra dans les rôles", () => {
-  it("est dans la barre du rôle Caméra et sous l'aperçu du Selfie, grisé tant qu'OBS n'a pas donné de place, sans avis de caméra coupée", () => {
+describe("le bouton qui cache la caméra dans les rôles", () => {
+  it("est dans la barre du rôle Caméra et sous l'aperçu du Selfie, grisé tant qu'OBS n'a pas donné de place, sans avis de caméra cachée", () => {
     for (const role of ["camera", "selfie"] as const) {
       const html = renderToStaticMarkup(<MobilePage urlRole={role} onLeaveUrlRole={noop} />);
-      expect(html, role).toContain("Montrer la caméra de ce téléphone à l&#x27;image");
-      expect(html, role).not.toContain("Caméra coupée");
+      expect(html, role).toContain("Montrer la caméra de ce téléphone au plan");
+      expect(html, role).not.toContain("Caméra cachée");
       const buttonHtml = html.slice(html.indexOf("Montrer la caméra de ce téléphone"));
       expect(buttonHtml.indexOf("disabled"), role).toBeGreaterThanOrEqual(0);
       expect(html.indexOf("Montrer la caméra de ce téléphone"), role).toBeLessThan(

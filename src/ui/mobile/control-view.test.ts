@@ -3,9 +3,11 @@ import { IDLE_CONTROL } from "../../domain/control.schema";
 import {
   CHAT_VIEWERS_NOTE,
   hasPicture,
+  isMicMuted,
   toChatViewersCountText,
   toLiveText,
   toMarkText,
+  toMicName,
   toMicText,
   toPictureText,
   toSceneText,
@@ -63,15 +65,15 @@ describe("toPictureText", () => {
     },
   });
 
-  it("écrit « Image : PC », « Image : Caméra 1 » ou « Image : Tête » d'après le membre à l'image", () => {
-    expect(toPictureText(state("pc"))).toBe("Image : PC");
-    expect(toPictureText(state("camera-1"))).toBe("Image : Caméra 1");
-    expect(toPictureText(state("head"))).toBe("Image : Tête");
+  it("écrit « Plan : PC », « Plan : Caméra 1 » ou « Plan : Tête » d'après le membre qui occupe le plan", () => {
+    expect(toPictureText(state("pc"))).toBe("Plan : PC");
+    expect(toPictureText(state("camera-1"))).toBe("Plan : Caméra 1");
+    expect(toPictureText(state("head"))).toBe("Plan : Tête");
   });
 
-  it("met un tiret quand aucun membre n'est à l'image, ou que le membre à l'image n'est plus dans la place", () => {
-    expect(toPictureText(state(null))).toBe("Image : –");
-    expect(toPictureText(state("camera-9"))).toBe("Image : –");
+  it("met un tiret quand aucun membre n'occupe le plan, ou que le membre du plan n'est plus dans la place", () => {
+    expect(toPictureText(state(null))).toBe("Plan : –");
+    expect(toPictureText(state("camera-9"))).toBe("Plan : –");
   });
 
   it("n'a une pastille que si OBS a une place caméra", () => {
@@ -100,8 +102,29 @@ describe("toMicText", () => {
     expect(toMicText(state("camera-2"))).toBe("Micro : Caméra 2");
   });
 
-  it("dit « Micro : coupé » quand OBS n'a aucun micro ouvert", () => {
-    expect(toMicText(state(null))).toBe("Micro : coupé");
+  it("dit « Micro : Muet » quand OBS n'a aucun micro ouvert", () => {
+    expect(toMicText(state(null))).toBe("Micro : Muet");
+  });
+
+  it("dit « Micro : ce tél. » quand le micro ouvert est la caméra de ce téléphone, et le nom de la caméra sinon", () => {
+    expect(toMicText(state("camera-1"), 1)).toBe("Micro : ce tél.");
+    expect(toMicText(state("camera-1"), 2)).toBe("Micro : Caméra 1");
+    expect(toMicText(state("camera-1"), null)).toBe("Micro : Caméra 1");
+    expect(toMicText(state("pc"), 1)).toBe("Micro : PC");
+    expect(toMicText(state(null), 1)).toBe("Micro : Muet");
+  });
+
+  it("n'est Muet que si OBS est joint, connaît des micros et n'en a aucun d'ouvert", () => {
+    expect(isMicMuted(state(null))).toBe(true);
+    expect(isMicMuted(state("pc"))).toBe(false);
+    expect(isMicMuted({ ...state(null), isLinked: false })).toBe(false);
+    expect(isMicMuted({ ...IDLE_CONTROL, isLinked: true })).toBe(false);
+    expect(isMicMuted(IDLE_CONTROL)).toBe(false);
+  });
+
+  it("nomme le micro du PC « PC » et celui d'une caméra par son nom", () => {
+    expect(toMicName({ id: "pc", label: "Micro du PC" })).toBe("PC");
+    expect(toMicName({ id: "camera-2", label: "Caméra 2" })).toBe("Caméra 2");
   });
 
   it("met un tiret quand OBS n'est pas joint ou que la régie n'a rien donné, au lieu de dire coupé", () => {

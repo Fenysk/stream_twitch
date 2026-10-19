@@ -15,12 +15,11 @@ import { useCutCamera } from "./use-cut-camera";
 import { useLiveMic } from "./use-live-mic";
 import { usePhoneLink } from "./use-phone-link";
 import { usePortrait } from "./use-portrait";
-import { useTakePicture } from "./use-take-picture";
 import { useToast } from "./use-toast";
 import { useWakeLock } from "./use-wake-lock";
 
-// Le rôle Caméra : l'aperçu plein écran, la pastille « Caméra 1 » en haut à gauche, la barre du bas (mic du live, caméra arrière ou avant,
-// écran noir), et l'image et le son partent vers la page OBS du numéro. Un cadre rouge autour de l'aperçu dit que la caméra est à
+// Le rôle Caméra : l'aperçu plein écran, la pastille « Caméra 1 » en haut à gauche, la barre du bas (micro, cacher ou montrer la caméra,
+// caméra arrière ou avant, écran noir), et l'image et le son partent vers la page OBS du numéro. Un cadre rouge autour de l'aperçu dit que la caméra est à
 // l'antenne. Sans tchat : le téléphone est sur un trépied ; un refus du mic s'annonce par un toast.
 export const CameraRole = ({ onUpdateRole }: { onUpdateRole: () => void }) => {
   useWakeLock();
@@ -30,7 +29,6 @@ export const CameraRole = ({ onUpdateRole }: { onUpdateRole: () => void }) => {
   const [isBlack, setIsBlack] = useState(false);
   const toast = useToast();
   const toggleMic = useLiveMic(link, toast.show);
-  const takePicture = useTakePicture(link, toast.show);
   const cutCamera = useCutCamera(link, toast.show);
 
   // Une caméra qui s'arrête rallume l'écran : son message (« Touche pour relancer ») a besoin d'être vu.
@@ -47,7 +45,6 @@ export const CameraRole = ({ onUpdateRole }: { onUpdateRole: () => void }) => {
           status={link.status}
           isOnAir={link.isOnAir}
           onUpdateNumber={link.updateNumber}
-          onTakePicture={takePicture}
         />
         <RoleCorner onPress={onUpdateRole} />
       </div>

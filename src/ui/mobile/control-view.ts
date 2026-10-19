@@ -2,8 +2,8 @@
 // navigateur.
 
 import type { PhoneChatMark } from "../../domain/chat-phone.rules";
-import { PC_MIC_ID, toDurationText, toLiveMic } from "../../domain/control.rules";
-import type { ControlState } from "../../domain/control.schema";
+import { isLiveMicOf, PC_MIC_ID, toDurationText, toLiveMic } from "../../domain/control.rules";
+import type { ControlMic, ControlState } from "../../domain/control.schema";
 import type { ViewersState } from "../../domain/viewers.types";
 
 const NO_VALUE = "–";
@@ -27,19 +27,30 @@ export const toSceneText = ({ isLinked, scene }: ControlState): string => {
   return scene ?? NO_VALUE;
 };
 
-// Le micro du live : « Micro : PC », « Micro : Caméra 1 »… ; aucun micro ouvert, « Micro : coupé » ; OBS non joint ou rien de connu, un tiret.
-export const toMicText = ({ isLinked, mics }: ControlState): string => {
-  const live = toLiveMic(mics);
-  if (live) return `Micro : ${live.id === PC_MIC_ID ? "PC" : live.label}`;
-  return isLinked && mics.some(({ isAvailable }) => isAvailable) ? "Micro : coupé" : `Micro : ${NO_VALUE}`;
+export const MUTE_TEXT = "Muet";
+
+// Le nom d'un micro à l'écran : « PC » ou « Caméra 1 ».
+export const toMicName = ({ id, label }: Pick<ControlMic, "id" | "label">): string =>
+  id === PC_MIC_ID ? "PC" : label;
+
+// Muet : OBS est joint, il connaît des micros, et aucun n'est ouvert. OBS non joint ou rien de connu n'est pas Muet : on ne sait pas.
+export const isMicMuted = ({ isLinked, mics }: ControlState): boolean =>
+  isLinked && mics.some(({ isAvailable }) => isAvailable) && toLiveMic(mics) === null;
+
+// Le bouton Micro de la barre du bas : « Micro : PC », « Micro : Caméra 1 »… ; « Micro : ce tél. » quand c'est la caméra de ce téléphone
+// (`ownNumber`, son numéro s'il filme) ; « Micro : Muet » quand aucun micro n'est ouvert ; OBS non joint ou rien de connu, un tiret.
+export const toMicText = (state: ControlState, ownNumber: number | null = null): string => {
+  const live = toLiveMic(state.mics);
+  if (live) return `Micro : ${isLiveMicOf(state.mics, ownNumber) ? "ce tél." : toMicName(live)}`;
+  return `Micro : ${isMicMuted(state) ? MUTE_TEXT : NO_VALUE}`;
 };
 
-// L'image : « Image : PC », « Image : Caméra 1 », « Image : Tête » ; aucun membre à l'image, un tiret. Sans place caméra, la pastille n'est pas
+// Le plan : « Plan : PC », « Plan : Caméra 1 », « Plan : Tête » ; aucun membre au plan, un tiret. Sans place caméra, la pastille n'est pas
 // montrée (voir `hasPicture`).
 export const toPictureText = ({ picture }: ControlState): string =>
-  `Image : ${picture.members.find(({ id }) => id === picture.currentId)?.label ?? NO_VALUE}`;
+  `Plan : ${picture.members.find(({ id }) => id === picture.currentId)?.label ?? NO_VALUE}`;
 
-// OBS a une place caméra à montrer : la pastille de l'image n'existe que dans ce cas.
+// OBS a une place caméra à montrer : la pastille du plan n'existe que dans ce cas.
 export const hasPicture = ({ picture }: ControlState): boolean => picture.members.length > 0;
 
 // Le nombre de personnes de la liste des viewers : « 0 personne », « 1 personne », « 12 personnes ».

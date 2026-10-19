@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MUTE_MIC_ID } from "./control.rules";
 import {
   CHAT_TEXT_MAX,
   ChatSendRequestSchema,
@@ -97,6 +98,8 @@ describe("les demandes de la régie", () => {
     expect(SceneRequestSchema.safeParse({ name: "" }).success).toBe(false);
     expect(MicRequestSchema.safeParse({ id: "camera-2" }).success).toBe(true);
     expect(MicRequestSchema.safeParse({}).success).toBe(false);
+    expect(MicRequestSchema.parse({ id: MUTE_MIC_ID })).toEqual({ id: "mute" });
+    expect(MicRequestSchema.safeParse({ id: "" }).success).toBe(false);
     expect(PictureRequestSchema.safeParse({ id: "head" }).success).toBe(true);
     expect(PictureRequestSchema.safeParse({ id: "" }).success).toBe(false);
     expect(PictureRequestSchema.safeParse({}).success).toBe(false);

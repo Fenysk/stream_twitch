@@ -5,8 +5,8 @@ import type { ToastTone } from "../design/toast-announcement";
 import { toSentence } from "./control-keys";
 import type { PhoneLink } from "./use-phone-link";
 
-// Le bouton micro d'un téléphone qui filme : le geste du menu des micros, pour ce téléphone. Allumé (il est le micro du live), un toucher rend
-// le live au micro du PC ; éteint, il le prend : OBS ouvre l'entrée de sa source et coupe les autres. La piste audio du téléphone n'est
+// Le bouton micro du rôle Caméra : le geste de la feuille Micro, pour ce téléphone. Il est le micro entendu : un toucher rend le micro au
+// PC ; sinon, il le prend : OBS ouvre l'entrée de sa source et coupe les autres. La piste audio du téléphone n'est
 // jamais coupée ici : elle part toujours vers OBS, c'est la coupure d'OBS qui décide. Un refus (source OBS introuvable, OBS non joint)
 // s'annonce par le toast de la page ; sinon rien : le serveur redit l'état (`PhoneLink.isLiveMic`) quand OBS l'a changé.
 export const useLiveMic = (

@@ -1,4 +1,4 @@
-import { Mic, MicOff } from "lucide-react";
+import { Mic } from "lucide-react";
 import { Button } from "../design/button";
 
 type LiveMicButtonProps = {
@@ -8,18 +8,14 @@ type LiveMicButtonProps = {
   onPress: () => void;
 };
 
-// Le bouton micro d'un téléphone qui filme : allumé, ce téléphone est le micro du live ; barré et rouge, c'en est un autre. Un toucher
-// prend le micro, ou le rend au micro du PC s'il l'est déjà (`useLiveMic`). Dans la barre du rôle Caméra, en bas à côté de « Touches » pour le
-// Selfie, à portée du pouce.
+// Le bouton micro du rôle Caméra (pas de feuille Micro sur un trépied) : son libellé dit l'état, « Micro ici » (ce téléphone est le micro
+// entendu) ou « Micro : ailleurs » ; son titre dit ce que fait le toucher : rendre le micro au PC, ou le prendre (`useLiveMic`). Neutre dans
+// les deux cas, et jamais l'icône du micro barré : le toucher ne rend pas muet.
 export const LiveMicButton = ({ isLiveMic, isDisabled, onPress }: LiveMicButtonProps) => (
   <Button
-    icon={isLiveMic ? Mic : MicOff}
-    title={
-      isLiveMic
-        ? "Ce téléphone est le micro du live : revenir au micro du PC"
-        : "Prendre le micro de ce téléphone pour le live"
-    }
-    {...(isLiveMic ? {} : { variant: "danger" as const })}
+    icon={Mic}
+    label={isLiveMic ? "Micro ici" : "Micro : ailleurs"}
+    title={isLiveMic ? "Rendre le micro au PC" : "Prendre le micro"}
     isDisabled={isDisabled}
     onPress={onPress}
   />

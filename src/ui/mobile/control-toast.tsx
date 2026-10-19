@@ -9,7 +9,7 @@ export const ControlToast = ({ message }: { message: ToastMessage | null }) => (
     {message && (
       <div className="lp-pill control-toast" aria-hidden="true">
         <div className="lp-pill-content">
-          <span className={classNames("lp-type-body", message.tone === "error" && "lp-danger")}>
+          <span className={classNames("lp-type-body", message.tone === "error" && "lp-warning")}>
             {message.text}
           </span>
         </div>

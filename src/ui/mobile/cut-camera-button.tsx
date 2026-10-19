@@ -1,27 +1,27 @@
-import { Video, VideoOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { canCutCamera } from "../../domain/picture.rules";
 import type { PictureStanding } from "../../domain/picture.schema";
 import { Button } from "../design/button";
 
 type CutCameraButtonProps = {
-  // Où en est l'image pour ce téléphone (l'état que le serveur donne, voir `PhoneLink.standing`).
+  // Où en est le plan pour ce téléphone (l'état que le serveur donne, voir `PhoneLink.standing`).
   standing: PictureStanding;
   isDisabled: boolean;
   onPress: () => void;
 };
 
-// Le bouton qui coupe ou montre la caméra d'un téléphone : allumé (une caméra), ce téléphone est à l'image ; barré et rouge, c'en est un
-// autre. Un toucher le met à l'image avec son micro, ou, s'il y est déjà, passe l'image à la tête en gardant le micro (`useCutCamera`).
+// Le bouton qui cache ou montre la caméra d'un téléphone, neutre, au libellé visible : « Cacher » quand ce téléphone a le plan, « Montrer »
+// sinon. Un toucher le met au plan avec son micro, ou, s'il y est déjà, rend le plan à la tête en gardant le micro (`useCutCamera`).
 // Grisé tant qu'OBS n'a pas de place caméra à montrer.
 export const CutCameraButton = ({ standing, isDisabled, onPress }: CutCameraButtonProps) => (
   <Button
-    icon={standing.isCurrent ? Video : VideoOff}
+    icon={standing.isCurrent ? EyeOff : Eye}
+    label={standing.isCurrent ? "Cacher" : "Montrer"}
     title={
       standing.isCurrent
-        ? "Couper la caméra : la tête prend l'image, le micro reste à ce téléphone"
-        : "Montrer la caméra de ce téléphone à l'image"
+        ? "Cacher la caméra : la tête reprend le plan, le micro reste à ce téléphone"
+        : "Montrer la caméra de ce téléphone au plan"
     }
-    {...(standing.isCurrent ? {} : { variant: "danger" as const })}
     isDisabled={isDisabled || !canCutCamera(standing)}
     onPress={onPress}
   />

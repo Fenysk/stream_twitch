@@ -52,7 +52,7 @@ export const CameraNumberPicker = ({ number, onUpdateNumber, onDone }: CameraNum
         />
       </div>
       {refusal && (
-        <p role="alert" className="lp-type-caption lp-danger">
+        <p role="alert" className="lp-type-caption lp-warning">
           {refusal}
         </p>
       )}

@@ -5,18 +5,20 @@ import { KeyMenu } from "./key-menu";
 
 type MicMenuProps = {
   state: ControlState;
+  // Le numéro de la caméra de ce téléphone quand il filme : sa touche dit « · ce téléphone ».
+  ownNumber: number | null;
   isOpen: boolean;
   onClose: () => void;
   onToast: (tone: ToastTone, text: string) => void;
 };
 
-// Le menu des micros, ouvert par la pastille « Micro : … » : le micro du PC et celui de chaque caméra connectée, celui du live clair. Un
-// toucher sur un autre l'ouvre dans OBS et coupe tous les autres : un seul micro ouvert, et la tête et Jean-Renard écoutent celui-là.
-export const MicMenu = ({ state, isOpen, onClose, onToast }: MicMenuProps) => (
+// La feuille Micro, ouverte par « Micro : … » de la barre du bas : PC, chaque caméra connectée, puis Muet, le micro entendu clair. Un toucher
+// sur un micro l'ouvre dans OBS et coupe tous les autres : un seul micro ouvert, et la tête et Jean-Renard écoutent celui-là. Muet les coupe tous.
+export const MicMenu = ({ state, ownNumber, isOpen, onClose, onToast }: MicMenuProps) => (
   <KeyMenu
-    title="Micro du live"
+    title="Micro"
     closeLabel="Fermer le menu des micros"
-    keys={toMicKeys(state)}
+    keys={toMicKeys(state, ownNumber)}
     emptyText={toMicsEmptyText()}
     isOpen={isOpen}
     onClose={onClose}

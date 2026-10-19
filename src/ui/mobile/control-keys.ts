@@ -1,10 +1,11 @@
 // Les touches de la grille de la régie, générées toutes seules de l'état d'OBS et de la soundboard : aucun réglage. Le texte et l'état
 // de chaque touche se calculent ici ; son geste (`KeyAction`) est exécuté ailleurs (use-control-actions.ts).
 
-import { toLiveMic, toProgramScenes } from "../../domain/control.rules";
+import { MUTE_MIC_ID, toCameraMicId, toLiveMic, toProgramScenes } from "../../domain/control.rules";
 import type { ControlPage, ControlState } from "../../domain/control.schema";
 import { END_STEP_MINUTES, type EndDirection, toEndClock } from "../../domain/hours.rules";
 import type { SoundSummary } from "../../domain/sound.schema";
+import { isMicMuted, MUTE_TEXT, toMicName } from "./control-view";
 
 export type KeyAction =
   | { kind: "scene"; name: string }
@@ -14,7 +15,7 @@ export type KeyAction =
   | { kind: "review" }
   | { kind: "end"; direction: EndDirection };
 
-// Une touche active est claire (la scène à l'antenne, le micro du live), les autres sont neutres.
+// Une touche active est claire (la scène à l'antenne, le micro choisi, le plan), les autres sont neutres.
 export type KeyState = "active" | "idle";
 
 export type ControlKey = {
@@ -48,22 +49,36 @@ const toSoundKeys = (sounds: readonly SoundSummary[] | null): ControlKey[] =>
     action: { kind: "sound", id },
   }));
 
-// Les touches du menu des micros (pas une page de la grille) : le micro du PC puis celui de chaque caméra connectée. Le micro du live est
-// clair, les autres neutres ; celui dont la source OBS manque est grisé, avec ce qui lui manque.
-export const toMicKeys = ({ mics }: ControlState): ControlKey[] => {
+// Les touches du menu Micro (pas une page de la grille) : PC, chaque caméra connectée (« · ce téléphone » pour celle de ce téléphone,
+// `ownNumber`), puis Muet. Le micro choisi est clair, Muet quand aucun n'est ouvert, les autres neutres ; celui dont la source OBS manque est
+// grisé, avec ce qui lui manque. Sans micro connu (le serveur n'a rien dit), aucune touche : pas même Muet.
+export const toMicKeys = (state: ControlState, ownNumber: number | null = null): ControlKey[] => {
+  const { mics } = state;
+  if (mics.length === 0) return [];
   const live = toLiveMic(mics);
-  return mics.map(({ id, label, isAvailable }) => ({
-    id: `mic:${id}`,
-    label,
-    ...(isAvailable ? {} : { note: "Source OBS introuvable" }),
-    state: id === live?.id ? "active" : "idle",
-    isDisabled: !isAvailable,
-    action: { kind: "mic", id },
+  const ownMicId = ownNumber === null ? null : toCameraMicId(ownNumber);
+  const keys: ControlKey[] = mics.map((mic) => ({
+    id: `mic:${mic.id}`,
+    label: mic.id === ownMicId ? `${toMicName(mic)} · ce téléphone` : toMicName(mic),
+    ...(mic.isAvailable ? {} : { note: "Source OBS introuvable" }),
+    state: mic.id === live?.id ? "active" : "idle",
+    isDisabled: !mic.isAvailable,
+    action: { kind: "mic", id: mic.id },
   }));
+  return [
+    ...keys,
+    {
+      id: `mic:${MUTE_MIC_ID}`,
+      label: MUTE_TEXT,
+      state: isMicMuted(state) ? "active" : "idle",
+      isDisabled: false,
+      action: { kind: "mic", id: MUTE_MIC_ID },
+    },
+  ];
 };
 
-// Les touches du menu de l'image (pas une page de la grille) : PC, chaque caméra, puis Tête, dans l'ordre de la place. Le membre à l'image
-// est clair, les autres neutres ; une caméra dont le téléphone ne filme pas vers OBS est grisée, avec ce qui lui manque.
+// Les touches du menu Plan (pas une page de la grille) : PC, chaque caméra, puis Tête, dans l'ordre de la place. Le membre au plan est
+// clair, les autres neutres ; une caméra dont le téléphone ne filme pas vers OBS est grisée, avec ce qui lui manque.
 export const toPictureKeys = ({ picture }: ControlState): ControlKey[] =>
   picture.members.map(({ id, label, isAvailable }) => ({
     id: `picture:${id}`,

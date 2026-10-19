@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MUTE_MIC_ID } from "../../domain/control.rules";
 import { type ControlState, IDLE_CONTROL } from "../../domain/control.schema";
 import type { SoundSummary } from "../../domain/sound.schema";
 import {
@@ -108,25 +109,47 @@ describe("les touches des sons", () => {
   });
 });
 
-describe("les touches du menu des micros", () => {
-  it("met le micro du live en clair et les autres en neutre, le micro du PC avant les caméras", () => {
+describe("les touches du menu Micro", () => {
+  it("met le micro entendu en clair et les autres en neutre, PC avant les caméras, et Muet en dernier", () => {
     const keys = toMicKeys(STATE);
     expect(keys.map(({ label, state }) => [label, state])).toEqual([
-      ["Micro du PC", "idle"],
+      ["PC", "idle"],
       ["Caméra 1", "active"],
       ["Caméra 2", "idle"],
+      ["Muet", "idle"],
     ]);
     expect(keys[1]?.action).toEqual({ kind: "mic", id: "camera-1" });
+    expect(keys[3]?.action).toEqual({ kind: "mic", id: MUTE_MIC_ID });
   });
 
-  it("met en clair le micro du PC quand c'est lui qui parle au live, et personne quand aucun micro n'est ouvert", () => {
+  it("met en clair PC quand c'est lui qui est entendu, et Muet quand aucun micro n'est ouvert", () => {
     const pcOpen = toMicKeys({
       ...STATE,
       mics: STATE.mics.map((mic) => ({ ...mic, isOpen: mic.id === "pc" })),
     });
-    expect(pcOpen.map(({ state }) => state)).toEqual(["active", "idle", "idle"]);
+    expect(pcOpen.map(({ state }) => state)).toEqual(["active", "idle", "idle", "idle"]);
     const noneOpen = toMicKeys({ ...STATE, mics: STATE.mics.map((mic) => ({ ...mic, isOpen: false })) });
-    expect(noneOpen.map(({ state }) => state)).toEqual(["idle", "idle", "idle"]);
+    expect(noneOpen.map(({ state }) => state)).toEqual(["idle", "idle", "idle", "active"]);
+  });
+
+  it("écrit « · ce téléphone » après la caméra de ce téléphone, et rien après les autres", () => {
+    expect(toMicKeys(STATE, 1).map(({ label }) => label)).toEqual([
+      "PC",
+      "Caméra 1 · ce téléphone",
+      "Caméra 2",
+      "Muet",
+    ]);
+    expect(toMicKeys(STATE, 3).map(({ label }) => label)).toEqual(["PC", "Caméra 1", "Caméra 2", "Muet"]);
+    expect(toMicKeys(STATE, null).map(({ label }) => label)).toEqual(["PC", "Caméra 1", "Caméra 2", "Muet"]);
+  });
+
+  it("ne met pas Muet en clair quand OBS n'est pas joint : on ne sait pas qu'aucun micro n'est ouvert", () => {
+    const offline = toMicKeys({
+      ...STATE,
+      isLinked: false,
+      mics: STATE.mics.map((mic) => ({ ...mic, isOpen: false })),
+    });
+    expect(offline.at(-1)).toMatchObject({ label: "Muet", state: "idle", isDisabled: false });
   });
 
   it("grise le micro d'une caméra dont la source OBS n'existe pas, et dit ce qui manque", () => {
@@ -137,7 +160,7 @@ describe("les touches du menu des micros", () => {
     expect(pc?.isDisabled).toBe(false);
   });
 
-  it("n'a aucun micro avant le premier état du serveur, qui donne toujours celui du PC, et le dit", () => {
+  it("n'a aucune touche, pas même Muet, avant le premier état du serveur, qui donne toujours celui du PC, et le dit", () => {
     expect(toMicKeys(IDLE_CONTROL)).toEqual([]);
     expect(toMicsEmptyText()).toBe("En attente du serveur…");
   });

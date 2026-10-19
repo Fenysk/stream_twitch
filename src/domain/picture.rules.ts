@@ -161,8 +161,8 @@ export const toFallbackPictureId = ({ members }: PictureState): string | null =>
   members.find(({ id }) => id === PC_PICTURE_ID)?.id ??
   null;
 
-// Le membre que prend le toucher sur « Hors antenne » d'un téléphone qui filme : sa propre caméra. `null` quand le serveur ne lui a pas
-// encore donné de numéro.
+// Le membre d'un téléphone qui filme : sa propre caméra, que « Montrer » met au plan. `null` quand le serveur ne lui a pas encore donné
+// de numéro.
 export const toPhonePictureId = (number: number | null): string | null =>
   number === null ? null : toCameraMicId(number);
 
@@ -182,19 +182,18 @@ export const toPictureStanding = (
 export type CutRequest = { id: string; isMicKept: boolean };
 
 export const toCutRequest = (standing: PictureStanding, number: number | null): CutRequest | null => {
-  if (number === null) return null;
-  return standing.isCurrent
-    ? { id: HEAD_PICTURE_ID, isMicKept: true }
-    : { id: toCameraMicId(number), isMicKept: false };
+  const own = toPhonePictureId(number);
+  if (own === null) return null;
+  return standing.isCurrent ? { id: HEAD_PICTURE_ID, isMicKept: true } : { id: own, isMicKept: false };
 };
 
 // Le bouton est-il touchable ? Il faut une place caméra, ou être déjà à l'image (de quoi la quitter).
 export const canCutCamera = ({ hasPlace, isCurrent }: PictureStanding): boolean => hasPlace || isCurrent;
 
-// Ce que l'aperçu d'un téléphone dit discrètement quand il n'est pas à l'image : « Caméra coupée · Tête à l'image ». `null` : rien à dire (il
-// est à l'image, pas de place caméra, ou personne n'y est).
+// Ce que l'aperçu d'un téléphone dit discrètement quand il n'a pas le plan : « Caméra cachée · Tête au plan ». `null` : rien à dire (il a
+// le plan, pas de place caméra, ou personne ne l'occupe).
 export const toCutNotice = ({ hasPlace, isCurrent, shown }: PictureStanding): string | null =>
-  hasPlace && !isCurrent && shown !== null ? `Caméra coupée · ${shown} à l'image` : null;
+  hasPlace && !isCurrent && shown !== null ? `Caméra cachée · ${shown} au plan` : null;
 
 // Le micro du live quand c'est celui d'une caméra, même si son téléphone vient de se déconnecter (il sort alors de la liste des micros). Un
 // micro ouvert est celui du live : celui d'une caméra, ou `null` pour le PC. Aucun ouvert : la caméra qui l'était (`previous`) le reste tant

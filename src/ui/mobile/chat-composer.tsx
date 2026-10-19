@@ -58,7 +58,7 @@ export const ChatComposer = ({ onClose }: { onClose: () => void }) => {
         <Button icon={X} title="Fermer le champ" variant="ghost" isDisabled={isBusy} onPress={onClose} />
       </div>
       {refusal && (
-        <p role="alert" className="lp-type-caption lp-danger">
+        <p role="alert" className="lp-type-caption lp-warning">
           {refusal}
         </p>
       )}

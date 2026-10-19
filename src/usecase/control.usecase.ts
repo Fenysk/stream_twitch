@@ -111,7 +111,8 @@ export type Control = {
   // Les réglages changent : le nom du mic du PC, la fin prévue.
   update(settings: ControlSettings): void;
   updateScene(name: string): Promise<ControlResult>;
-  // Ouvre ce micro et coupe tous les autres : un seul est ouvert à la fois, et la tête et Jean-Renard écoutent celui-là.
+  // Ouvre ce micro et coupe tous les autres : un seul est ouvert à la fois, et la tête et Jean-Renard écoutent celui-là. `mute` (Muet) les
+  // coupe tous. Refusé : 404 micro inconnu, 409 source introuvable, OBS non joint, ou OBS refuse.
   updateMic(id: string): Promise<ControlResult>;
   // Un cran sur la fin prévue du live, comme les touches « Fin du live » du Stream Deck.
   updateEnd(direction: EndDirection): ControlResult;
@@ -143,6 +144,9 @@ const toUnavailableText = (id: string, label: string, pcName: string): string =>
 
 const toOpenedLine = (label: string, muted: number): string =>
   `Régie : micro « ${label} » ouvert, ${muted} entrée${muted > 1 ? "s" : ""} coupée${muted > 1 ? "s" : ""}.`;
+
+const toMutedLine = (muted: number): string =>
+  `Régie : Muet, ${muted} entrée${muted > 1 ? "s" : ""} coupée${muted > 1 ? "s" : ""}.`;
 
 export function createControl({
   obs,
@@ -241,24 +245,42 @@ export function createControl({
     publish();
   };
 
-  // Couper puis ouvrir : le premier refus d'OBS arrête tout, le micro demandé reste coupé plutôt que de passer en double.
-  const open = async (input: string, toMute: readonly string[]): Promise<ControlResult> => {
+  // Couper les entrées : le premier refus d'OBS est rendu.
+  const mute = async (toMute: readonly string[]): Promise<ControlResult> => {
     const muted = await Promise.all(toMute.map((other) => obs.updateInputMute(other, true)));
     const refused = muted.find((result) => !result.ok);
-    if (refused && !refused.ok) return refuse(409, refused.reason);
+    return refused && !refused.ok ? refuse(409, refused.reason) : { ok: true };
+  };
+
+  // Couper puis ouvrir : le premier refus d'OBS arrête tout, le micro demandé reste coupé plutôt que de passer en double.
+  const open = async (input: string, toMute: readonly string[]): Promise<ControlResult> => {
+    const muted = await mute(toMute);
+    if (!muted.ok) return muted;
     const opened = await obs.updateInputMute(input, false);
     return opened.ok ? { ok: true } : refuse(409, opened.reason);
+  };
+
+  // Une caméra dont le téléphone est parti n'est plus dans la liste des micros, mais sa source reste ouverte dans OBS : elle se coupe aussi.
+  const toOrphans = (known: readonly string[]): string[] =>
+    obsState.cameras
+      .filter(({ input, isMuted }) => !isMuted && !known.includes(input))
+      .map(({ input }) => input);
+
+  const updateMute = async (toMute: readonly string[]): Promise<ControlResult> => {
+    // Rien à couper ne prouve rien sans OBS : le refus dit qu'OBS n'est pas joint.
+    if (!obsState.isLinked) return refuse(409, "OBS n'est pas connecté");
+    const all = [...toMute, ...toOrphans(toMute)];
+    const result = await mute(all);
+    log(result.ok ? toMutedLine(all.length) : `Régie : les micros ne sont pas coupés (${result.message}).`);
+    return result;
   };
 
   const updateMic = async (id: string): Promise<ControlResult> => {
     const plan = toMicPlan(getSources(), id);
     if (plan.kind === "unknown") return refuse(404, "micro inconnu");
     if (plan.kind === "unavailable") return refuse(409, toUnavailableText(id, plan.label, settings.micName));
-    // Une caméra dont le téléphone est parti n'est plus dans la liste des micros, mais sa source reste ouverte dans OBS : elle se coupe aussi.
-    const orphans = obsState.cameras
-      .filter(({ input, isMuted }) => !isMuted && input !== plan.input && !plan.toMute.includes(input))
-      .map(({ input }) => input);
-    const toMute = [...plan.toMute, ...orphans];
+    if (plan.kind === "mute") return updateMute(plan.toMute);
+    const toMute = [...plan.toMute, ...toOrphans([plan.input, ...plan.toMute])];
     const result = await open(plan.input, toMute);
     log(
       result.ok

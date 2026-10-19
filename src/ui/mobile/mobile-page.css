@@ -90,9 +90,8 @@ body {
   pointer-events: none;
 }
 
-/* La pastille d'état : « Hors antenne » se met en sourdine, « À l'antenne » garde le texte et ajoute son point rouge */
-.camera-status[data-tone="quiet"] .lp-badge,
-.camera-status[data-tone="quiet"] .lp-btn {
+/* La pastille d'état : « Prête » se met en sourdine, « À l'antenne » garde le texte et ajoute son point rouge */
+.camera-status[data-tone="quiet"] .lp-badge {
   color: var(--muted);
 }
 
@@ -167,7 +166,7 @@ body {
   pointer-events: auto;
 }
 
-/* La caméra n'est pas à l'image : un mot discret au-dessus de la barre, que le doigt traverse. Le téléphone envoie toujours son image. */
+/* La caméra n'a pas le plan : un mot discret au-dessus de la barre, que le doigt traverse. Le téléphone envoie toujours son image. */
 .camera-cut-notice {
   position: absolute;
   left: var(--space-4);

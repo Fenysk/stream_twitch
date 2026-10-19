@@ -16,7 +16,7 @@ describe("MonitorThumbnail", () => {
   it("est un bouton qui ouvre l'image en grand et montre l'image reçue, sans attribut style", () => {
     const html = thumbnail(URL_OF_IMAGE);
     expect(html).toContain('<button type="button" class="monitor-thumbnail"');
-    expect(html).toContain('aria-label="Voir le retour antenne en grand"');
+    expect(html).toContain('aria-label="Voir l&#x27;antenne en grand"');
     expect(html).toContain(`<img class="monitor-image" src="${URL_OF_IMAGE}" alt=""`);
     expect(html).not.toContain("style=");
   });
@@ -55,12 +55,12 @@ describe("MonitorSheet", () => {
   const sheet = (isOpen: boolean, url: string | null = URL_OF_IMAGE, isLinked = true) =>
     renderToStaticMarkup(<MonitorSheet url={url} isLinked={isLinked} isOpen={isOpen} onClose={noop} />);
 
-  it("est une feuille « Retour antenne » avec de quoi la fermer, ouverte ou non", () => {
+  it("est une feuille « Antenne » avec de quoi la fermer, ouverte ou non", () => {
     const html = sheet(false);
     expect(html).toContain('data-open="false"');
     expect(html).toContain("lp-grabber");
-    expect(html).toContain("Retour antenne");
-    expect(html).toContain("Fermer le retour antenne");
+    expect(html).toContain(">Antenne<");
+    expect(html).toContain("Fermer l&#x27;antenne");
     expect(sheet(true)).toContain('data-open="true"');
   });
 

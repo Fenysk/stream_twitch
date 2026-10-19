@@ -399,9 +399,9 @@ describe("le bouton qui coupe ou montre la caméra d'un téléphone", () => {
     expect(canCutCamera(standing({ hasPlace: false, isCurrent: true }))).toBe(true);
   });
 
-  it("dit discrètement « Caméra coupée · … à l'image » quand le téléphone n'y est pas, et rien sinon", () => {
-    expect(toCutNotice(standing({ shown: "Tête" }))).toBe("Caméra coupée · Tête à l'image");
-    expect(toCutNotice(standing({ shown: "Caméra 2" }))).toBe("Caméra coupée · Caméra 2 à l'image");
+  it("dit discrètement « Caméra cachée · … au plan » quand le téléphone n'a pas le plan, et rien sinon", () => {
+    expect(toCutNotice(standing({ shown: "Tête" }))).toBe("Caméra cachée · Tête au plan");
+    expect(toCutNotice(standing({ shown: "Caméra 2" }))).toBe("Caméra cachée · Caméra 2 au plan");
     expect(toCutNotice(standing({ isCurrent: true, shown: "Caméra 1" }))).toBeNull();
     expect(toCutNotice(standing({ shown: null }))).toBeNull();
     expect(toCutNotice(standing({ hasPlace: false, shown: null }))).toBeNull();

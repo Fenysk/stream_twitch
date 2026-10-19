@@ -15,6 +15,10 @@ export type MicSource = { id: string; label: string; input: string | null; isMut
 export const PC_MIC_ID = "pc";
 const PC_MIC_LABEL = "Micro du PC";
 
+// « Muet » : le choix qui ferme tous les micros. Un identifiant réservé, dans la même demande que le choix d'un micro (`POST /api/obs/mic`) ;
+// ni le PC (`pc`) ni une caméra (`camera-3`) ne le portent.
+export const MUTE_MIC_ID = "mute";
+
 export const toCameraMicId = (number: number): string => `camera-${number}`;
 
 // Les micros de la régie : celui du PC, puis celui de chaque caméra connectée, du plus petit numéro au plus grand.
@@ -69,14 +73,21 @@ export const isLiveMicOf = (mics: readonly ControlMic[], number: number | null):
 export const toListenedInput = (sources: readonly MicSource[], pcName: string): string =>
   sources.find(({ input, isMuted }) => input !== null && !isMuted)?.input ?? pcName;
 
-// Ouvrir un micro : inconnu de la régie, sans entrée dans OBS (`unavailable`, avec son nom), ou à ouvrir en coupant les autres
-// entrées encore ouvertes.
+// Choisir un micro : inconnu de la régie, sans entrée dans OBS (`unavailable`, avec son nom), à ouvrir en coupant les autres entrées
+// encore ouvertes, ou Muet (`mute`) : toutes les entrées ouvertes se coupent, aucune ne s'ouvre.
 export type MicPlan =
   | { kind: "unknown" }
   | { kind: "unavailable"; label: string }
-  | { kind: "open"; label: string; input: string; toMute: string[] };
+  | { kind: "open"; label: string; input: string; toMute: string[] }
+  | { kind: "mute"; toMute: string[] };
 
 export const toMicPlan = (sources: readonly MicSource[], id: string): MicPlan => {
+  if (id === MUTE_MIC_ID) {
+    return {
+      kind: "mute",
+      toMute: sources.flatMap(({ input, isMuted }) => (input !== null && !isMuted ? [input] : [])),
+    };
+  }
   const target = sources.find((source) => source.id === id);
   if (!target) return { kind: "unknown" };
   if (target.input === null) return { kind: "unavailable", label: target.label };

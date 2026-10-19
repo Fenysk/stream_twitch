@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ControlState, IDLE_CONTROL } from "../../domain/control.schema";
@@ -79,7 +78,7 @@ describe("ControlRole", () => {
     const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
     expect(html).toContain("Fermer le menu des scènes");
     expect(html).toContain("Fermer le menu des micros");
-    expect(html).toContain("Fermer le menu de l&#x27;image");
+    expect(html).toContain("Fermer le menu du plan");
     expect(html).toContain('data-open="false"');
     expect(html.indexOf("control-grid")).toBeLessThan(html.indexOf("Fermer le menu des scènes"));
     expect(html).not.toContain('data-open="true"');
@@ -92,18 +91,18 @@ describe("ControlRole", () => {
     expect(html).toContain("OBS n&#x27;est pas connecté.");
   });
 
-  it("met la vignette du retour antenne en tête du bandeau, avant « Hors ligne », avec « OBS non joint » avant le premier état", () => {
+  it("met la vignette de l'antenne en tête du bandeau, avant « Hors ligne », avec « OBS non joint » avant le premier état", () => {
     const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
     const banner = html.slice(html.indexOf("control-banner"), html.indexOf("control-chat"));
     expect(banner).toContain("monitor-thumbnail");
     expect(banner.indexOf("monitor-thumbnail")).toBeLessThan(banner.indexOf("Hors ligne"));
-    expect(banner).toContain("Voir le retour antenne en grand");
+    expect(banner).toContain("Voir l&#x27;antenne en grand");
     expect(html).toMatch(/class="monitor-thumbnail"[^>]*>(?:(?!<\/button>)[\s\S])*OBS non joint/);
   });
 
-  it("garde la feuille du retour antenne fermée au départ, avec la vignette qui dit qu'elle l'est", () => {
+  it("garde la feuille de l'antenne fermée au départ, avec la vignette qui dit qu'elle l'est", () => {
     const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
-    expect(html).toContain("Fermer le retour antenne");
+    expect(html).toContain("Fermer l&#x27;antenne");
     expect(html).toMatch(/class="monitor-thumbnail"[^>]*aria-expanded="false"/);
     expect(html).not.toContain('data-open="true"');
   });
@@ -136,21 +135,24 @@ describe("ControlRole", () => {
     expect(html.indexOf("control-bar")).toBeLessThan(html.indexOf("control-grid"));
   });
 
-  it("n'a aucun bouton micro dans la barre du bas : la pastille du bandeau choisit le micro, un seul endroit pour ce geste", () => {
+  it("met « Micro : – » en premier dans la barre du bas, avant « Touches », et plus de pastille micro dans le bandeau", () => {
     const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
     const bar = html.slice(html.indexOf("control-bar"), html.indexOf("control-drawer"));
-    expect(bar).not.toContain("micro");
-    expect(bar.match(/<button/g)).toHaveLength(1);
-    expect(html).toContain("Choisir le micro du live");
+    expect(bar.match(/<button/g)).toHaveLength(2);
+    expect(bar.indexOf("Micro : –")).toBeGreaterThan(0);
+    expect(bar.indexOf("Micro : –")).toBeLessThan(bar.indexOf("Touches"));
+    const banner = html.slice(html.indexOf("control-banner"), html.indexOf("control-chat"));
+    expect(banner).not.toContain("Micro");
+    expect(html).not.toContain("Choisir le micro du live");
   });
 
-  it("pose les feuilles du bandeau, retour antenne compris, après le tiroir « Touches » : une feuille fixe dans l'autre serait rognée", () => {
+  it("pose les feuilles du bandeau, l'antenne comprise, après le tiroir « Touches » : une feuille fixe dans l'autre serait rognée", () => {
     const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
     const positions = [
       "Fermer les touches",
       "Fermer le menu des scènes",
       "Fermer le menu des micros",
-      "Fermer le retour antenne",
+      "Fermer l&#x27;antenne",
     ].map((text) => html.indexOf(text));
     expect(positions.every((position) => position > 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
@@ -193,62 +195,55 @@ describe("ControlBanner", () => {
     expect(open).toMatch(/<button[^>]*aria-expanded="true"[^>]*>(?:(?!<\/button>)[\s\S])*Jeu/);
   });
 
-  it("met à côté de la scène le micro du live, un bouton qui ouvre le menu des micros : « Micro : PC » ou « Micro : Caméra 1 »", () => {
+  it("n'a plus de pastille micro : le micro est dans la barre du bas, un seul endroit pour ce geste", () => {
     const withOpen = (open: string) => ({
       state: { ...STATE, mics: MICS.map((mic) => ({ ...mic, isOpen: mic.id === open })) },
       receivedAt: START,
     });
-    const pc = banner(withOpen("pc"));
-    expect(pc).toContain("Micro : PC");
-    expect(pc).toContain("Choisir le micro du live");
-    expect(pc).toMatch(/<button[^>]*aria-expanded="false"[^>]*>(?:(?!<\/button>)[\s\S])*Micro : PC/);
-    expect(banner(withOpen("camera-1"))).toContain("Micro : Caméra 1");
-    expect(banner(withOpen("camera-1"), "mics")).toMatch(
-      /<button[^>]*aria-expanded="true"[^>]*>(?:(?!<\/button>)[\s\S])*Micro : Caméra 1/,
-    );
-  });
-
-  it("dit « Micro : coupé » quand aucun micro n'est ouvert, et un tiret sans OBS", () => {
-    expect(banner({ state: { ...STATE, mics: MICS }, receivedAt: START })).toContain("Micro : coupé");
-    expect(banner({ state: IDLE_CONTROL, receivedAt: START })).toContain("Micro : –");
+    for (const open of ["pc", "camera-1"]) {
+      const html = banner(withOpen(open));
+      expect(html).not.toContain("Micro :");
+      expect(html).not.toContain("Choisir le micro");
+    }
+    expect(banner(withOpen("camera-1"), "mics")).not.toContain('aria-expanded="true"');
+    expect(banner({ state: { ...STATE, mics: MICS }, receivedAt: START })).not.toContain("Micro");
+    expect(banner({ state: IDLE_CONTROL, receivedAt: START })).not.toContain("Micro");
   });
 
   it("n'ouvre qu'une feuille à la fois : les boutons des autres pastilles restent fermés", () => {
-    const html = banner({ state: { ...STATE, mics: MICS }, receivedAt: START }, "mics");
+    const html = banner({ state: { ...STATE, mics: MICS }, receivedAt: START }, "scenes");
     expect(html.match(/aria-expanded="true"/g)).toHaveLength(1);
-    expect(html.match(/aria-expanded="false"/g)).toHaveLength(3);
+    expect(html.match(/aria-expanded="false"/g)).toHaveLength(2);
   });
 
-  it("ajoute la pastille de l'image quand OBS a une place caméra : « Image : PC » ou « Image : Caméra 1 », un bouton qui ouvre le menu de l'image", () => {
+  it("ajoute la pastille du plan quand OBS a une place caméra : « Plan : PC » ou « Plan : Caméra 1 », un bouton qui ouvre le menu du plan", () => {
     const pc = banner({ state: { ...STATE, picture: pictureOf("pc") }, receivedAt: START });
-    expect(pc).toContain("Image : PC");
-    expect(pc).toContain("Choisir qui est à l&#x27;image");
-    expect(pc).toMatch(/<button[^>]*aria-expanded="false"[^>]*>(?:(?!<\/button>)[\s\S])*Image : PC/);
+    expect(pc).toContain("Plan : PC");
+    expect(pc).toContain("Choisir le plan");
+    expect(pc).toMatch(/<button[^>]*aria-expanded="false"[^>]*>(?:(?!<\/button>)[\s\S])*Plan : PC/);
     expect(banner({ state: { ...STATE, picture: pictureOf("camera-1") }, receivedAt: START })).toContain(
-      "Image : Caméra 1",
+      "Plan : Caméra 1",
     );
     expect(banner({ state: { ...STATE, picture: pictureOf("head") }, receivedAt: START })).toContain(
-      "Image : Tête",
+      "Plan : Tête",
     );
     expect(
       banner({ state: { ...STATE, picture: pictureOf("camera-1") }, receivedAt: START }, "picture"),
-    ).toMatch(/<button[^>]*aria-expanded="true"[^>]*>(?:(?!<\/button>)[\s\S])*Image : Caméra 1/);
+    ).toMatch(/<button[^>]*aria-expanded="true"[^>]*>(?:(?!<\/button>)[\s\S])*Plan : Caméra 1/);
   });
 
-  it("met un tiret quand aucun membre n'est à l'image, et n'a pas de pastille sans place caméra", () => {
+  it("met un tiret quand aucun membre n'occupe le plan, et n'a pas de pastille sans place caméra", () => {
     expect(banner({ state: { ...STATE, picture: pictureOf(null) }, receivedAt: START })).toContain(
-      "Image : –",
+      "Plan : –",
     );
-    expect(banner({ state: STATE, receivedAt: START })).not.toContain("Image :");
-    expect(banner({ state: IDLE_CONTROL, receivedAt: START })).not.toContain(
-      "Choisir qui est à l&#x27;image",
-    );
+    expect(banner({ state: STATE, receivedAt: START })).not.toContain("Plan :");
+    expect(banner({ state: IDLE_CONTROL, receivedAt: START })).not.toContain("Choisir le plan");
   });
 
-  it("garde une seule feuille ouverte avec la pastille de l'image : les autres boutons restent fermés", () => {
+  it("garde une seule feuille ouverte avec la pastille du plan : les autres boutons restent fermés", () => {
     const html = banner({ state: { ...STATE, picture: pictureOf("pc") }, receivedAt: START }, "picture");
     expect(html.match(/aria-expanded="true"/g)).toHaveLength(1);
-    expect(html.match(/aria-expanded="false"/g)).toHaveLength(4);
+    expect(html.match(/aria-expanded="false"/g)).toHaveLength(3);
   });
 
   it("fait du nombre de viewers un bouton qui ouvre la liste des viewers, et dit si elle est ouverte", () => {
@@ -295,14 +290,21 @@ describe("ControlBanner", () => {
 });
 
 describe("ControlDock", () => {
-  const dock = (openMenu: BannerMenu | null = null, children?: ReactNode) => {
+  const withOpen = (open: string | null): ControlState => ({
+    ...STATE,
+    mics: MICS.map((mic) => ({ ...mic, isOpen: mic.id === open })),
+  });
+  const dock = (
+    openMenu: BannerMenu | null = null,
+    state: ControlState = STATE,
+    ownNumber: number | null = null,
+  ) => {
     const menu: BannerMenuState = { openMenu, monitorUrl: null, onOpenMenu: noop, onCloseMenu: noop };
     return renderToStaticMarkup(
-      <ControlDock state={STATE} menu={menu} onToast={noop}>
-        {children}
-      </ControlDock>,
+      <ControlDock state={state} menu={menu} ownNumber={ownNumber} onToast={noop} />,
     );
   };
+  const bar = (html: string) => html.slice(html.indexOf("control-bar"), html.indexOf("control-drawer"));
 
   it("met la barre, puis le tiroir « Touches » avec la grille, puis les feuilles du bandeau, toutes fermées au départ", () => {
     const html = dock();
@@ -311,7 +313,7 @@ describe("ControlDock", () => {
       "control-drawer",
       "control-grid",
       "Fermer le menu des scènes",
-      "Fermer le retour antenne",
+      "Fermer l&#x27;antenne",
     ].map((text) => html.indexOf(text));
     expect(order.every((position) => position > 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -319,18 +321,54 @@ describe("ControlDock", () => {
     expect(html).not.toContain("style=");
   });
 
-  it("met ses boutons dans la barre avant « Touches », et seulement « Touches » sans eux", () => {
-    const bar = (html: string) => html.slice(html.indexOf("control-bar"), html.indexOf("control-drawer"));
-    expect(bar(dock()).match(/<button/g)).toHaveLength(1);
-    const withMic = bar(dock(null, <button type="button">Micro</button>));
-    expect(withMic.match(/<button/g)).toHaveLength(2);
-    expect(withMic.indexOf("Micro")).toBeLessThan(withMic.indexOf("Touches"));
+  it("met « Micro : X » en premier dans la barre, avant « Touches », deux boutons seulement", () => {
+    const html = bar(dock(null, withOpen("pc")));
+    expect(html.match(/<button/g)).toHaveLength(2);
+    expect(html.indexOf("Micro : PC")).toBeGreaterThan(0);
+    expect(html.indexOf("Micro : PC")).toBeLessThan(html.indexOf("Touches"));
   });
 
-  it("n'ouvre que la feuille que le menu dit ouverte, le retour antenne par exemple, et jamais le tiroir des touches avec elle", () => {
+  it("fait de « Micro : X » un bouton qui ouvre la feuille Micro, et dit si elle est ouverte", () => {
+    expect(bar(dock(null, withOpen("pc")))).toMatch(
+      /<button[^>]*aria-expanded="false"[^>]*>(?:(?!<\/button>)[\s\S])*Micro : PC/,
+    );
+    expect(bar(dock("mics", withOpen("pc")))).toMatch(
+      /<button[^>]*aria-expanded="true"[^>]*>(?:(?!<\/button>)[\s\S])*Micro : PC/,
+    );
+    expect(bar(dock(null, withOpen("pc")))).toContain('title="Choisir le micro"');
+    const open = dock("mics", withOpen("pc"));
+    expect(open.match(/data-open="true"/g)).toHaveLength(1);
+    expect(open).toMatch(/data-open="true"><button[^>]*aria-label="Fermer le menu des micros"/);
+  });
+
+  it("dit le micro entendu : « Micro : Caméra 1 », ou « Micro : ce tél. » quand c'est la caméra de ce téléphone", () => {
+    expect(bar(dock(null, withOpen("camera-1")))).toContain("Micro : Caméra 1");
+    expect(bar(dock(null, withOpen("camera-1"), 1))).toContain("Micro : ce tél.");
+    expect(bar(dock(null, withOpen("camera-1"), 2))).toContain("Micro : Caméra 1");
+    expect(bar(dock(null, withOpen("pc"), 1))).toContain("Micro : PC");
+  });
+
+  it("dit « Micro : Muet » avec le micro barré quand aucun micro n'est ouvert, et un tiret sans OBS, sans micro barré", () => {
+    const muted = bar(dock(null, withOpen(null)));
+    expect(muted).toContain("Micro : Muet");
+    expect(muted).toContain("lucide-mic-off");
+    const unknown = bar(dock(null, IDLE_CONTROL));
+    expect(unknown).toContain("Micro : –");
+    expect(unknown).not.toContain("lucide-mic-off");
+    expect(unknown).not.toContain("Muet");
+  });
+
+  it("n'a aucun bouton en variante danger dans la barre du bas : ni le micro des autres ni Muet ne sont du rouge", () => {
+    for (const open of ["pc", "camera-1", null]) {
+      expect(bar(dock(null, withOpen(open)))).not.toContain("lp-btn--danger");
+    }
+    expect(bar(dock(null, IDLE_CONTROL))).not.toContain("lp-btn--danger");
+  });
+
+  it("n'ouvre que la feuille que le menu dit ouverte, l'antenne par exemple, et jamais le tiroir des touches avec elle", () => {
     const html = dock("monitor");
     expect(html.match(/data-open="true"/g)).toHaveLength(1);
-    expect(html).toMatch(/data-open="true"><button[^>]*aria-label="Fermer le retour antenne"/);
+    expect(html).toMatch(/data-open="true"><button[^>]*aria-label="Fermer l&#x27;antenne"/);
     expect(html).toMatch(
       /class="control-drawer" data-open="false"><button[^>]*aria-label="Fermer les touches"/,
     );
@@ -401,34 +439,53 @@ describe("SceneMenu", () => {
 });
 
 describe("MicMenu", () => {
-  const menu = (state: ControlState, isOpen = true) =>
-    renderToStaticMarkup(<MicMenu state={state} isOpen={isOpen} onClose={noop} onToast={noop} />);
+  const menu = (state: ControlState, isOpen = true, ownNumber: number | null = null) =>
+    renderToStaticMarkup(
+      <MicMenu state={state} ownNumber={ownNumber} isOpen={isOpen} onClose={noop} onToast={noop} />,
+    );
   const withOpen = (open: string | null): ControlState => ({
     ...STATE,
     mics: MICS.map((mic) => ({ ...mic, isOpen: mic.id === open })),
   });
 
-  it("ouvre une feuille avec le micro du PC et celui de chaque caméra connectée, le micro du live clair", () => {
+  it("ouvre une feuille avec PC et chaque caméra connectée, puis Muet, le micro entendu clair", () => {
     const html = menu(withOpen("camera-1"));
     expect(html).toContain("control-menu-list");
-    expect(html).toMatch(/data-state="idle"[^>]*>(?:(?!<\/button>)[\s\S])*Micro du PC/);
+    expect(html).toMatch(/data-state="idle"[^>]*>(?:(?!<\/button>)[\s\S])*>PC</);
     expect(html).toMatch(/data-state="active"[^>]*>(?:(?!<\/button>)[\s\S])*Caméra 1/);
     expect(html).toMatch(/data-state="idle"[^>]*>(?:(?!<\/button>)[\s\S])*Caméra 2/);
+    expect(html).toMatch(/data-state="idle"[^>]*>(?:(?!<\/button>)[\s\S])*>Muet</);
     expect(html.match(/data-state="active"/g)).toHaveLength(1);
   });
 
-  it("met le micro du PC en clair quand c'est lui qui parle au live, et aucun quand tous sont coupés", () => {
-    expect(menu(withOpen("pc"))).toMatch(/data-state="active"[^>]*>(?:(?!<\/button>)[\s\S])*Micro du PC/);
-    expect(menu(withOpen(null)).match(/data-state="active"/g)).toBeNull();
+  it("met Muet en dernier, après PC et les caméras dans l'ordre", () => {
+    const html = menu(withOpen("pc"));
+    const labels = ["PC", "Caméra 1", "Caméra 2", "Muet"].map((label) => html.indexOf(`>${label}<`));
+    expect(labels.every((position) => position > 0)).toBe(true);
+    expect(labels).toEqual([...labels].sort((a, b) => a - b));
   });
 
-  it("grise le micro d'une caméra dont la source OBS manque, avec ce qui manque", () => {
+  it("met PC en clair quand c'est lui qui est entendu, et Muet quand tous les micros sont coupés", () => {
+    expect(menu(withOpen("pc"))).toMatch(/data-state="active"[^>]*>(?:(?!<\/button>)[\s\S])*>PC</);
+    const muted = menu(withOpen(null));
+    expect(muted.match(/data-state="active"/g)).toHaveLength(1);
+    expect(muted).toMatch(/data-state="active"[^>]*>(?:(?!<\/button>)[\s\S])*>Muet</);
+  });
+
+  it("écrit « · ce téléphone » après la caméra du Selfie, et rien à la Régie", () => {
+    expect(menu(withOpen("pc"), true, 1)).toContain("Caméra 1 · ce téléphone");
+    expect(menu(withOpen("pc"), true, 1)).not.toContain("Caméra 2 · ce téléphone");
+    expect(menu(withOpen("pc"))).not.toContain("ce téléphone");
+  });
+
+  it("grise le micro d'une caméra dont la source OBS manque, avec ce qui manque, mais pas Muet", () => {
     const html = menu({
       ...STATE,
       mics: [{ id: "camera-3", label: "Caméra 3", isOpen: false, isAvailable: false }],
     });
     expect(html).toContain("Source OBS introuvable");
-    expect(html).toContain("disabled");
+    expect(html.match(/disabled=""/g)).toHaveLength(1);
+    expect(html).toMatch(/disabled=""[^>]*>(?:(?!<\/button>)[\s\S])*Caméra 3/);
   });
 
   it("dit d'attendre le serveur tant que la régie n'a rien donné", () => {
@@ -442,7 +499,7 @@ describe("MicMenu", () => {
     expect(html).toContain('data-open="false"');
     expect(html).toContain("lp-grabber");
     expect(html).toContain("Fermer le menu des micros");
-    expect(html).toContain("Micro du live");
+    expect(html).toContain(">Micro<");
     expect(menu(STATE)).toContain('data-open="true"');
   });
 });
@@ -484,8 +541,8 @@ describe("PictureMenu", () => {
     const html = menu({ ...STATE, picture: pictureOf("pc") }, false);
     expect(html).toContain('data-open="false"');
     expect(html).toContain("lp-grabber");
-    expect(html).toContain("Fermer le menu de l&#x27;image");
-    expect(html).toContain("Qui est à l&#x27;image");
+    expect(html).toContain("Fermer le menu du plan");
+    expect(html).toContain(">Plan<");
     expect(menu({ ...STATE, picture: pictureOf("pc") })).toContain('data-open="true"');
   });
 });
@@ -532,7 +589,7 @@ describe("ChatViewersPanel", () => {
     expect(html).not.toContain("<li");
   });
 
-  it("montre le refus de Twitch tel quel, en rouge, avec un bouton pour réessayer", () => {
+  it("montre le refus de Twitch tel quel, en orange (agis), avec un bouton pour réessayer", () => {
     const html = panel({
       kind: "failed",
       message: "Reconnecte Twitch dans l'onglet Twitch : la liste demande une autorisation de plus",
@@ -540,7 +597,8 @@ describe("ChatViewersPanel", () => {
     expect(html).toContain(
       "Reconnecte Twitch dans l&#x27;onglet Twitch : la liste demande une autorisation de plus",
     );
-    expect(html).toContain("lp-danger");
+    expect(html).toContain("lp-warning");
+    expect(html).not.toContain("lp-danger");
     expect(html).toContain('role="alert"');
     expect(html).not.toMatch(/Rafraîchir la liste[^>]*disabled/);
   });
@@ -637,7 +695,8 @@ describe("ControlToast", () => {
     expect(html).toContain("control-toast");
     expect(html).toContain('aria-hidden="true"');
     expect(html).toMatch(/role="alert"[^>]*><span[^>]*>OBS n&#x27;est pas connecté<\/span>/);
-    expect(html).toContain("lp-danger");
+    expect(html).toContain("lp-warning");
+    expect(html).not.toContain("lp-danger");
   });
 
   it("n'écrit rien sans toast, et garde ses deux régions vides", () => {

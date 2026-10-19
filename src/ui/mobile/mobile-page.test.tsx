@@ -66,7 +66,7 @@ describe("MobilePage", () => {
     const html = renderToStaticMarkup(<MobilePage urlRole="camera" onLeaveUrlRole={noop} />);
     expect(html).toContain("Caméra…");
     expect(html).toContain("En attente d&#x27;OBS");
-    expect(html).toContain("Prendre le micro de ce téléphone pour le live");
+    expect(html).toContain("Micro : ailleurs");
     expect(html).toContain("Changer de caméra");
     expect(html).toContain("Démarrage de la caméra…");
     expect(html).toContain("<video");
@@ -75,7 +75,7 @@ describe("MobilePage", () => {
 });
 
 describe("CameraControls", () => {
-  it("allume le bouton quand ce téléphone est le micro du live, et le barre en rouge quand c'en est un autre", () => {
+  it("dit « Micro ici » quand ce téléphone est le micro entendu, « Micro : ailleurs » sinon, sans rouge ni micro barré", () => {
     const on = renderToStaticMarkup(
       <CameraControls
         isDisabled={false}
@@ -83,8 +83,10 @@ describe("CameraControls", () => {
         onSwitchCamera={noop}
       />,
     );
-    expect(on).toContain("Ce téléphone est le micro du live : revenir au micro du PC");
+    expect(on).toContain("Micro ici");
+    expect(on).toContain('title="Rendre le micro au PC"');
     expect(on).not.toContain("lp-btn--danger");
+    expect(on).not.toContain("lucide-mic-off");
     const off = renderToStaticMarkup(
       <CameraControls
         isDisabled={false}
@@ -92,8 +94,10 @@ describe("CameraControls", () => {
         onSwitchCamera={noop}
       />,
     );
-    expect(off).toContain("Prendre le micro de ce téléphone pour le live");
-    expect(off).toContain("lp-btn--danger");
+    expect(off).toContain("Micro : ailleurs");
+    expect(off).toContain('title="Prendre le micro"');
+    expect(off).not.toContain("lp-btn--danger");
+    expect(off).not.toContain("lucide-mic-off");
   });
 
   it("grise les deux boutons tant que la caméra ne tourne pas", () => {

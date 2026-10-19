@@ -2,7 +2,7 @@ import type { ControlKey, KeyAction } from "./control-keys";
 
 type ControlKeyButtonProps = { item: ControlKey; onPress: (action: KeyAction) => void };
 
-// Une touche de la grille : active (claire), coupée (rouge) ou neutre, avec une ligne en dessous quand il y en a une. Un bouton du
+// Une touche de la grille : active (claire) ou neutre, avec une ligne en dessous quand il y en a une. Un bouton du
 // design system, assez haut pour le doigt.
 export const ControlKeyButton = ({ item, onPress }: ControlKeyButtonProps) => (
   <button

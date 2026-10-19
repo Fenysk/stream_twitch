@@ -28,7 +28,7 @@ export const ChatViewersPanel = ({ view, onRefresh }: ChatViewersPanelProps) => 
       </p>
     )}
     {view.kind === "failed" && (
-      <p className="lp-type-body lp-danger control-empty" role="alert">
+      <p className="lp-type-body lp-warning control-empty" role="alert">
         {view.message}
       </p>
     )}

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MUTE_MIC_ID } from "../domain/control.rules";
 import type { ControlState } from "../domain/control.schema";
 import { toInstantText } from "../domain/instant.rules";
 import type { PhoneSummary } from "../domain/phone.schema";
@@ -543,6 +544,104 @@ describe("ouvrir un micro", () => {
     updatePhones([cameraPhone(1)]);
     await control.updateMic("camera-1");
     expect(logs).toContain("Régie : micro « Caméra 1 » ouvert, 1 entrée coupée.");
+  });
+});
+
+describe("Muet : fermer tous les micros", () => {
+  // PC et caméra 1 ouverts, caméra 2 coupée : OBS laisse deux micros ouverts, comme quand Alexis les a ouverts à la main.
+  const TWO_OPEN: ObsControlState = {
+    ...LINKED,
+    cameras: [
+      { number: 1, input: "Camera 1 OBS", isMuted: false },
+      { number: 2, input: "Camera 2 OBS", isMuted: true },
+    ],
+  };
+  const ALL_MUTED: ObsControlState = {
+    ...LINKED,
+    isPcMuted: true,
+    cameras: [
+      { number: 1, input: "Camera 1 OBS", isMuted: true },
+      { number: 2, input: "Camera 2 OBS", isMuted: true },
+    ],
+  };
+
+  it("Quand la régie choisit Muet, le système doit fermer tous les micros et l'état doit n'avoir aucun micro ouvert", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone, updateObs } = setup({ obs: TWO_OPEN });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1), cameraPhone(2)]);
+    expect(
+      control
+        .getState()
+        .mics.filter(({ isOpen }) => isOpen)
+        .map(({ id }) => id),
+    ).toEqual(["pc", "camera-1"]);
+    expect(await control.updateMic(MUTE_MIC_ID)).toEqual({ ok: true });
+    expect(calls.mutes).toEqual(["Mic/Aux:coupé", "Camera 1 OBS:coupé"]);
+    await updateObs(ALL_MUTED);
+    expect(control.getState().mics.some(({ isOpen }) => isOpen)).toBe(false);
+    expect(control.getState().mics).toHaveLength(3);
+  });
+
+  it("ne coupe que les entrées ouvertes et n'ouvre aucune entrée", async () => {
+    const { control, settle, calls } = setup();
+    control.start();
+    await settle();
+    expect(await control.updateMic(MUTE_MIC_ID)).toEqual({ ok: true });
+    expect(calls.mutes).toEqual(["Mic/Aux:coupé"]);
+    expect(calls.mutes.some((call) => call.endsWith(":ouvert"))).toBe(false);
+  });
+
+  it("n'appelle pas OBS quand tout est déjà fermé, et répond que c'est fait", async () => {
+    const { control, settle, calls } = setup({ obs: ALL_MUTED });
+    control.start();
+    await settle();
+    expect(await control.updateMic(MUTE_MIC_ID)).toEqual({ ok: true });
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("coupe aussi la source d'une caméra restée ouverte dans OBS dont le téléphone est parti", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone } = setup({
+      obs: { ...TWO_OPEN, isPcMuted: true },
+    });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(2)]);
+    expect(await control.updateMic(MUTE_MIC_ID)).toEqual({ ok: true });
+    expect(calls.mutes).toEqual(["Camera 1 OBS:coupé"]);
+  });
+
+  it("Si OBS refuse une coupure, alors le système doit rendre son refus (409)", async () => {
+    const { control, settle, world } = setup({ obs: TWO_OPEN });
+    control.start();
+    await settle();
+    world.muteResult = { ok: false, reason: "OBS refuse la coupure" };
+    expect(await control.updateMic(MUTE_MIC_ID)).toEqual({
+      ok: false,
+      status: 409,
+      message: "OBS refuse la coupure",
+    });
+  });
+
+  it("Si OBS n'est pas joint, alors le système doit refuser (409) sans rien couper : Muet ne se prétend pas fait", async () => {
+    const { control, settle, calls } = setup({ obs: OBS_OFFLINE });
+    control.start();
+    await settle();
+    expect(await control.updateMic(MUTE_MIC_ID)).toEqual({
+      ok: false,
+      status: 409,
+      message: "OBS n'est pas connecté",
+    });
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("dit dans le journal combien d'entrées se coupent", async () => {
+    const { control, settle, logs, updatePhones, cameraPhone } = setup({ obs: TWO_OPEN });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1), cameraPhone(2)]);
+    await control.updateMic(MUTE_MIC_ID);
+    expect(logs).toContain("Régie : Muet, 2 entrées coupées.");
   });
 });
 

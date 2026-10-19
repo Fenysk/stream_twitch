@@ -12,12 +12,12 @@ const LINK_TEXTS: Record<Exclude<LinkStatus, "connected">, string> = {
 };
 
 // Ce que dit la pastille d'état : où en est la liaison avec OBS, puis, une fois la caméra envoyée, si elle est à l'antenne
-// (`air` : en rouge, avec un point) ou non (`quiet` : en sourdine).
+// (`air` : en rouge, avec un point) ou prête, OBS la reçoit sans qu'elle soit à l'antenne (`quiet` : en sourdine).
 export type StatusView = { text: string; tone: "plain" | "air" | "quiet" };
 
 export const toStatusView = (status: LinkStatus, isOnAir: boolean): StatusView => {
   if (status !== "connected") return { text: LINK_TEXTS[status], tone: "plain" };
-  return isOnAir ? { text: "À l'antenne", tone: "air" } : { text: "Hors antenne", tone: "quiet" };
+  return isOnAir ? { text: "À l'antenne", tone: "air" } : { text: "Prête", tone: "quiet" };
 };
 
 type CameraBadgeProps = {
@@ -25,13 +25,11 @@ type CameraBadgeProps = {
   status: LinkStatus;
   isOnAir: boolean;
   onUpdateNumber: (number: number) => Promise<string | null>;
-  // Met ce téléphone à l'image (et son micro) : le toucher sur « Hors antenne ».
-  onTakePicture: () => void;
 };
 
-// La pastille en haut à gauche : « Caméra 1 » et où en est la caméra : la liaison avec OBS, puis « À l'antenne » ou « Hors antenne ».
-// Un toucher sur le nom ouvre le choix du numéro ; « Hors antenne » est un bouton, un toucher met ce téléphone à l'image.
-export const CameraBadge = ({ number, status, isOnAir, onUpdateNumber, onTakePicture }: CameraBadgeProps) => {
+// La pastille en haut à gauche : « Caméra 1 » et où en est la caméra : la liaison avec OBS, puis « À l'antenne » ou « Prête ». Un toucher
+// sur le nom ouvre le choix du numéro ; l'état n'est qu'un statut : se montrer passe par « Montrer ».
+export const CameraBadge = ({ number, status, isOnAir, onUpdateNumber }: CameraBadgeProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const { text, tone } = toStatusView(status, isOnAir);
   return (
@@ -45,16 +43,7 @@ export const CameraBadge = ({ number, status, isOnAir, onUpdateNumber, onTakePic
           onPress={() => setIsOpen(!isOpen)}
         />
         <span className="camera-status" data-tone={tone}>
-          {tone === "quiet" ? (
-            <Button
-              label={text}
-              title="Mettre cette caméra à l'image"
-              variant="ghost"
-              onPress={onTakePicture}
-            />
-          ) : (
-            <Badge label={text} icon={tone === "air" ? RedDot : undefined} />
-          )}
+          <Badge label={text} icon={tone === "air" ? RedDot : undefined} />
         </span>
       </div>
       {isOpen && number !== null && (

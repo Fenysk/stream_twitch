@@ -3,6 +3,7 @@ import {
   isLiveMicOf,
   isMasterScene,
   type MicSource,
+  MUTE_MIC_ID,
   type ObsMics,
   PC_MIC_ID,
   toCameraMicId,
@@ -151,6 +152,17 @@ describe("toMicPlan", () => {
   it("dit inconnu un micro que la régie n'a pas, et indisponible un micro dont OBS n'a pas l'entrée", () => {
     expect(toMicPlan(sources, "camera-9")).toEqual({ kind: "unknown" });
     expect(toMicPlan(sources, "camera-3")).toEqual({ kind: "unavailable", label: "Caméra 3" });
+  });
+
+  it("Quand le micro demandé est Muet, le système doit couper toutes les entrées ouvertes, sans en ouvrir aucune", () => {
+    expect(toMicPlan(sources, MUTE_MIC_ID)).toEqual({ kind: "mute", toMute: [PC, "C1"] });
+    const closed = toMicSources(PC, { isPcMuted: true, cameras: [] }, []);
+    expect(toMicPlan(closed, MUTE_MIC_ID)).toEqual({ kind: "mute", toMute: [] });
+  });
+
+  it("réserve l'identifiant de Muet : ni le PC ni une caméra ne le portent", () => {
+    expect(MUTE_MIC_ID).toBe("mute");
+    expect(sources.some(({ id }) => id === MUTE_MIC_ID)).toBe(false);
   });
 });
 

@@ -11,7 +11,7 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: var(--space-3);
   padding: var(--space-3);
-  /* Où se pose le toast : sous la vignette du retour antenne, un tiers de la largeur du bandeau en 16:9 (le Selfie pose le sien) */
+  /* Où se pose le toast : sous la vignette de l'antenne, un tiers de la largeur du bandeau en 16:9 (le Selfie pose le sien) */
   --toast-top: calc(var(--space-4) + (100vw - 2 * var(--space-3) - 2 * var(--space-2)) * 3 / 16);
   overflow: hidden;
   background: var(--void);
@@ -19,7 +19,7 @@
 }
 
 /* Le bandeau : des pastilles, d'une même hauteur de contrôle. Quand elles ne tiennent pas sur une ligne (le live, les viewers, la scène et
-   le micro), elles passent à la suivante. */
+   le plan), elles passent à la suivante. */
 .control-banner {
   display: flex;
   flex-wrap: wrap;
@@ -45,7 +45,7 @@
   flex: none;
 }
 
-/* Le retour antenne : la vignette 16:9 d'un tiers du bandeau (un bouton qui ouvre la feuille), et la même image en grand dans la feuille.
+/* L'antenne : la vignette 16:9 d'un tiers du bandeau (un bouton qui ouvre la feuille), et la même image en grand dans la feuille.
    Les pastilles passent à côté de la vignette, puis en dessous. */
 .monitor-thumbnail,
 .monitor-large {
@@ -97,8 +97,8 @@
   border-radius: 0;
 }
 
-/* La scène à l'antenne et le micro du live prennent la place qui reste, leur nom se coupe par des points. Ce sont des boutons (ils ouvrent
-   le menu des scènes et celui des micros) qui remplissent la pastille : elle garde la hauteur des autres, et la hauteur tactile du bouton. */
+/* La scène à l'antenne et le plan prennent la place qui reste, leur nom se coupe par des points. Ce sont des boutons (ils ouvrent le menu
+   des scènes et celui du plan) qui remplissent la pastille : elle garde la hauteur des autres, et la hauteur tactile du bouton. */
 .control-banner .control-menu-pill {
   flex: 0 1 auto;
   min-width: 0;
@@ -163,7 +163,7 @@
   justify-content: center;
 }
 
-/* Les menus du bandeau (scènes, micros) : le titre de la feuille, puis une colonne de touches, qui défile quand il y en a beaucoup */
+/* Les menus du bandeau et de la barre du bas (scènes, micros, plan) : le titre de la feuille, puis une colonne de touches, qui défile quand il y en a beaucoup */
 .control-drawer-title {
   margin: 0;
 }
@@ -322,7 +322,7 @@
   min-width: 0;
 }
 
-/* La barre du bas, à portée du pouce : ses boutons au centre, « Touches » en dernier (le mic du live avant lui au Selfie) */
+/* La barre du bas, à portée du pouce : ses boutons au centre, « Micro : X » puis « Touches » */
 .control-bar {
   display: flex;
   align-items: center;
@@ -388,7 +388,7 @@
   color: var(--on-accent);
 }
 
-/* Le toast : en haut, hors d'atteinte du clavier, à la place que son rôle lui donne par `--toast-top` (sous la vignette du retour antenne
+/* Le toast : en haut, hors d'atteinte du clavier, à la place que son rôle lui donne par `--toast-top` (sous la vignette de l'antenne
    de la Régie, sous la pastille du numéro du Selfie) ; sans elle (la Caméra), à la hauteur d'une pastille. */
 .control-toast {
   position: fixed;
