@@ -123,7 +123,6 @@ La commande `pnpm exec streamdeck restart com.fenysk.stream-twitch` peut répond
 
 - Le plugin n'a pas de touche micro. Une touche Elgato qui coupe « Micro PC » ou cache une source de la place caméra agit sur OBS sans passer par la régie. Le serveur suit la coupure, mais la règle « un seul micro ouvert » n'est pas appliquée.
 - Les touches de fin écrivent une heure absolue au relâché. Un changement fait ailleurs pendant l'appui, par exemple depuis le téléphone, est écrasé.
-- Les infobulles du manifest disent « relu toutes les 10 s ». Cette relecture n'est que le secours du flux.
 - Le plugin parle à n'importe quel serveur sur le port 4747, donc aussi à un serveur de branche.
 
 ## Pour coder
