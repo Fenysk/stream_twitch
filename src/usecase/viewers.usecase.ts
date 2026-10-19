@@ -20,6 +20,8 @@ export type Viewers = {
   getCount(): number | null;
   // Ce que Twitch a répondu, sans confondre le zéro, le live hors ligne et l'inconnu : de quoi l'afficher ailleurs que dans une phrase.
   getState(): ViewersState;
+  // Prévient à chaque fois que ce que Twitch a répondu change (le nombre, hors ligne, inconnu) : la régie du téléphone le montre.
+  subscribe(listener: (state: ViewersState) => void): () => void;
 };
 
 export const VIEWERS_PERIOD_MS = 60_000;
@@ -46,6 +48,15 @@ export function createViewers({ port, schedule, log }: ViewersDeps): Viewers {
   let hasAnswered = false;
   let isStopped = false;
   let cancelNext: (() => void) | undefined;
+  const listeners = new Set<(state: ViewersState) => void>();
+
+  // Seul un changement part aux abonnés : la même réponse chaque minute ne leur dit rien.
+  const updateState = (next: ViewersState) => {
+    const isSame = JSON.stringify(next) === JSON.stringify(state);
+    state = next;
+    if (isSame) return;
+    for (const listener of listeners) listener(next);
+  };
 
   // Le journal dit ce qui change (le nombre devient connu, ou inconnu), pas chaque minute.
   const refresh = async () => {
@@ -53,13 +64,13 @@ export function createViewers({ port, schedule, log }: ViewersDeps): Viewers {
       const next = toState(await port.get());
       const line = toChangeLine(toCount(state), toCount(next), isFailing || !hasAnswered);
       if (line) log(line);
-      state = next;
       isFailing = false;
       hasAnswered = true;
+      updateState(next);
     } catch (error) {
-      state = { kind: "unknown" };
       if (!isFailing) log(`Viewers : nombre inconnu, ${toMessage(error)}`);
       isFailing = true;
+      updateState({ kind: "unknown" });
     }
   };
 
@@ -80,5 +91,11 @@ export function createViewers({ port, schedule, log }: ViewersDeps): Viewers {
     },
     getCount: () => toCount(state),
     getState: () => state,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
   };
 }

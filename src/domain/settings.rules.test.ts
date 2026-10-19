@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toEffectiveSettings, toNextLocal, toSettingsView } from "./settings.rules";
-import type { Settings } from "./settings.schema";
+import { type Settings, SettingsSchema } from "./settings.schema";
 
 const defaults: Settings = {
   obsAddress: "ws://127.0.0.1:4455",
@@ -262,5 +262,55 @@ describe("réglages de la tête qui parle (talkMin, talkMax, talkAngle)", () => 
     const view = toSettingsView({ defaults: talking, local: {}, effective: talking });
     expect(view.effective.talkAngle).toBe(3);
     expect(view.effective).not.toHaveProperty("talkMin");
+  });
+});
+
+describe("mobileOrigin", () => {
+  it("se lit dans settings.json seulement : une origine https ou http sans chemin, que l'interface ne voit pas ni ne change", () => {
+    const origin = "https://pcmasterrace.tail2d6b0a.ts.net";
+    expect(SettingsSchema.safeParse({ ...defaults, mobileOrigin: origin }).success).toBe(true);
+    for (const wrong of ["", "pcmasterrace", "https://pc/mobile", "https://pc/"]) {
+      expect(SettingsSchema.safeParse({ ...defaults, mobileOrigin: wrong }).success, wrong).toBe(false);
+    }
+    const local = toNextLocal({}, { mobileOrigin: origin });
+    expect(local.ok ? [] : local.issues).toEqual([
+      { path: "mobileOrigin", message: "ce réglage ne se change pas ici, il reste dans settings.json" },
+    ]);
+    const withOrigin = { ...defaults, mobileOrigin: origin };
+    const view = toSettingsView({ defaults: withOrigin, local: {}, effective: withOrigin });
+    expect(view.effective).not.toHaveProperty("mobileOrigin");
+  });
+});
+
+describe("cameraBoostTarget", () => {
+  it("se lit dans settings.json seulement : un level en dB de -100 à 0, que l'interface ne voit pas ni ne change", () => {
+    expect(SettingsSchema.safeParse({ ...defaults, cameraBoostTarget: -17 }).success).toBe(true);
+    for (const wrong of [3, -101, "-17"]) {
+      expect(SettingsSchema.safeParse({ ...defaults, cameraBoostTarget: wrong }).success, String(wrong)).toBe(
+        false,
+      );
+    }
+    const local = toNextLocal({}, { cameraBoostTarget: -20 });
+    expect(local.ok ? [] : local.issues).toEqual([
+      { path: "cameraBoostTarget", message: "ce réglage ne se change pas ici, il reste dans settings.json" },
+    ]);
+    const withTarget = { ...defaults, cameraBoostTarget: -17 };
+    const view = toSettingsView({ defaults: withTarget, local: {}, effective: withTarget });
+    expect(view.effective).not.toHaveProperty("cameraBoostTarget");
+  });
+});
+
+describe("cameraSlotScene", () => {
+  it("se lit dans settings.json seulement : le nom d'une scène d'OBS, que l'interface ne voit pas ni ne change", () => {
+    expect(SettingsSchema.safeParse({ ...defaults, cameraSlotScene: "Master - Webcam" }).success).toBe(true);
+    expect(SettingsSchema.safeParse({ ...defaults, cameraSlotScene: "" }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ ...defaults, cameraSlotScene: 3 }).success).toBe(false);
+    const local = toNextLocal({}, { cameraSlotScene: "Autre" });
+    expect(local.ok ? [] : local.issues).toEqual([
+      { path: "cameraSlotScene", message: "ce réglage ne se change pas ici, il reste dans settings.json" },
+    ]);
+    const withScene = { ...defaults, cameraSlotScene: "Master - Webcam" };
+    const view = toSettingsView({ defaults: withScene, local: {}, effective: withScene });
+    expect(view.effective).not.toHaveProperty("cameraSlotScene");
   });
 });

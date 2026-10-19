@@ -174,7 +174,8 @@ const toStepBefore = (at: number): number => {
 // Un cran de la fin prévue (une touche de Stream Deck) : « later » la repousse à la dizaine de minutes suivante, « sooner » la
 // ramène à la précédente. Elle ne passe jamais avant la dizaine qui suit `now`, ni au-delà de `now` + 24 h : cet appui ne change
 // rien (`endAt` revient tel quel). Une fin ramenée à `now` ou avant n'est plus prévue : `null`.
-export type EndDirection = "later" | "sooner";
+export const END_DIRECTIONS = ["later", "sooner"] as const;
+export type EndDirection = (typeof END_DIRECTIONS)[number];
 
 export function toSteppedEndAt(endAt: number | null, now: number, direction: EndDirection): number | null {
   if (direction === "sooner") {

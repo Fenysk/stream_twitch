@@ -156,3 +156,40 @@ describe("createViewers : l'état du nombre de viewers", () => {
     expect(viewers.getState()).toEqual({ kind: "live", count: 25 });
   });
 });
+
+describe("createViewers : prévenir ceux qui écoutent", () => {
+  it("Quand le nombre change, le système doit prévenir les abonnés ; la même réponse ne leur dit rien", async () => {
+    const { viewers, state, runNext } = setup(12);
+    const seen: string[] = [];
+    viewers.subscribe((next) => seen.push(JSON.stringify(next)));
+    await viewers.start();
+    await runNext();
+    state.next = 40;
+    await runNext();
+    state.next = null;
+    await runNext();
+    expect(seen).toEqual(['{"kind":"live","count":12}', '{"kind":"live","count":40}', '{"kind":"offline"}']);
+  });
+
+  it("prévient aussi quand Twitch ne répond plus, une seule fois tant que ça dure", async () => {
+    const { viewers, state, runNext } = setup(12);
+    const seen: string[] = [];
+    await viewers.start();
+    viewers.subscribe((next) => seen.push(next.kind));
+    state.next = new Error("HTTP 503");
+    await runNext();
+    await runNext();
+    expect(seen).toEqual(["unknown"]);
+  });
+
+  it("n'écrit plus à celui qui se désabonne", async () => {
+    const { viewers, state, runNext } = setup(12);
+    const seen: number[] = [];
+    const stop = viewers.subscribe(() => seen.push(1));
+    await viewers.start();
+    stop();
+    state.next = 40;
+    await runNext();
+    expect(seen).toEqual([1]);
+  });
+});

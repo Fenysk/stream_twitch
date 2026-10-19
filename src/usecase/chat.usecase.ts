@@ -4,8 +4,9 @@ import { toChatMessage } from "../domain/chat-message.rules";
 import { type ChatSettings, isSameChatLook, toChatBots, toChatLook } from "../domain/chat-settings.rules";
 import type { LiveEvent } from "../domain/live.types";
 
-// De quoi remplir une page qui se connecte (ou se rafraîchit) : les derniers messages, pas tout le tchat.
-export const CHAT_HISTORY_SIZE = 50;
+// De quoi remplir une page qui se connecte (ou se rafraîchit) : les derniers messages, pas tout le tchat. Le tchat du téléphone les garde
+// tous (sans limite) ; les pages d'OBS n'en gardent que 100 (CHAT_STATE_SIZE).
+export const CHAT_HISTORY_SIZE = 200;
 
 // Ce que la source du tchat dit au usecase. Un ban et un timeout sont le même évènement : les messages du viewer sortent.
 export type ChatSourceEvent =

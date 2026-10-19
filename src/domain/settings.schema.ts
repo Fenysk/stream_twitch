@@ -251,6 +251,23 @@ export const SettingsFieldsSchema = z
     micName: z.string("doit être un texte").min(1, "ne peut pas être vide"),
     // La source OBS du son du PC, comme le micro : choisie dans settings.json. Absente, le renard ne compare pas.
     desktopName: z.string("doit être un texte").min(1, "ne peut pas être vide").optional(),
+    // L'origine d'où les téléphones ouvrent /mobile (Tailscale Serve), choisie dans settings.json : elle porte les QR codes de
+    // l'onglet « Mobile ». Absente, l'onglet le dit.
+    mobileOrigin: z
+      .string("doit être un texte")
+      .regex(
+        /^https?:\/\/[^/\s]+$/,
+        "doit s'écrire comme https://pc.tail1234.ts.net, sans chemin ni barre finale",
+      )
+      .optional(),
+    // La place caméra : la scène d'OBS qui contient les sources de caméra (la capture du PC, la page /head, une page /camera/<n> par
+    // téléphone). La régie en affiche une seule, c'est l'image « Qui est à l'image ». Absente, il n'y a pas d'image à choisir. Choisie
+    // dans settings.json, lue au démarrage du serveur.
+    cameraSlotScene: z.string("doit être un texte").min(1, "ne peut pas être vide").optional(),
+    // La cible du boost des téléphones : le level (dB) des crêtes de la voix d'Alexis au micro du PC (de -20 à -14 dB, mesuré le 11/10). Quand
+    // le micro du live est une caméra et que sa voix est sous la cible, la source de cette caméra monte (jusqu'à +20 dB) ; absente, rien ne
+    // monte. Choisie dans settings.json, jamais dans l'interface.
+    cameraBoostTarget: decibels().optional(),
     threshold: decibels(),
     delay: positiveWhole(),
     rhythm: positiveWhole().optional(),

@@ -24,6 +24,15 @@ export const getBodyJson = async (request: Request): Promise<unknown> => {
   }
 };
 
+// Les paramètres de l'adresse (`?id=…&role=…`), vérifiés par leur schéma : leur valeur, ou la réponse qui refuse la demande.
+export function getSearch<Schema extends z.ZodType>(
+  request: Request,
+  schema: Schema,
+): z.output<Schema> | Response {
+  const parsed = schema.safeParse(Object.fromEntries(new URL(request.url, "http://localhost").searchParams));
+  return parsed.success ? parsed.data : refuse(400, toIssuesMessage(parsed.error));
+}
+
 // Le corps JSON d'une écriture, vérifié par son schéma : sa valeur, ou la réponse qui refuse la demande.
 export async function getBody<Schema extends z.ZodType>(
   request: Request,

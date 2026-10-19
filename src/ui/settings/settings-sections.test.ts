@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SECTION_GROUPS, SECTIONS, toCurrentSectionId, toSectionLabel } from "./settings-sections";
 
 describe("les onglets du menu", () => {
-  it("ouvrent Direct, Tête South Park, Découpe, Tchat, Renard, Sons, Points de chaîne, Émission et Twitch, puis annoncent les suivants, dans l'ordre", () => {
+  it("ouvrent Direct, Tête South Park, Découpe, Tchat, Renard, Sons, Points de chaîne, Émission, Mobile et Twitch, puis annoncent les suivants, dans l'ordre", () => {
     expect(SECTIONS.map(({ label }) => label)).toEqual([
       "Direct",
       "Tête South Park",
@@ -12,16 +12,28 @@ describe("les onglets du menu", () => {
       "Sons",
       "Points de chaîne",
       "Émission",
+      "Mobile",
       "Twitch",
       "Évènements",
       "Scènes",
     ]);
   });
 
-  it("n'ont une route que pour les neuf premiers : les autres arrivent plus tard", () => {
+  it("n'ont une route que pour les dix premiers : les autres arrivent plus tard", () => {
     const withPath = SECTIONS.filter((section) => "path" in section).map(({ id }) => id);
     const soon = SECTIONS.filter((section) => "isSoon" in section).map(({ label }) => label);
-    expect(withPath).toEqual(["live", "head", "cut", "chat", "fox", "sounds", "rewards", "show", "twitch"]);
+    expect(withPath).toEqual([
+      "live",
+      "head",
+      "cut",
+      "chat",
+      "fox",
+      "sounds",
+      "rewards",
+      "show",
+      "mobile",
+      "twitch",
+    ]);
     expect(soon).toEqual(["Évènements", "Scènes"]);
   });
 
@@ -34,7 +46,7 @@ describe("les onglets du menu", () => {
 describe("les groupes du menu", () => {
   const filled = SECTION_GROUPS.filter(({ sections }) => sections.length > 0);
 
-  it("rangent Direct, les sources OBS (Sons puis Points de chaîne après Renard, puis Émission), le compte Twitch, puis les onglets annoncés « Bientôt »", () => {
+  it("rangent Direct, les sources OBS (Sons puis Points de chaîne après Renard, puis Émission et Mobile), le compte Twitch, puis les onglets annoncés « Bientôt »", () => {
     expect(filled.map(({ label }) => label)).toEqual(["En direct", "Sources OBS", "Compte", "Bientôt"]);
     expect(filled[0]?.sections.map(({ label }) => label)).toEqual(["Direct"]);
     expect(filled[1]?.sections.map(({ label }) => label)).toEqual([
@@ -45,6 +57,7 @@ describe("les groupes du menu", () => {
       "Sons",
       "Points de chaîne",
       "Émission",
+      "Mobile",
     ]);
     expect(filled[2]?.sections.map(({ label }) => label)).toEqual(["Twitch"]);
     expect(filled[3]?.sections.map(({ label }) => label)).toEqual(["Évènements", "Scènes"]);
@@ -87,6 +100,7 @@ describe("le titre d'une page", () => {
     expect(toSectionLabel("sounds")).toBe("Sons");
     expect(toSectionLabel("rewards")).toBe("Points de chaîne");
     expect(toSectionLabel("show")).toBe("Émission");
+    expect(toSectionLabel("mobile")).toBe("Mobile");
     expect(toSectionLabel("twitch")).toBe("Twitch");
   });
 });
@@ -105,6 +119,7 @@ describe("l'onglet d'une adresse", () => {
     expect(toCurrentSectionId("/settings/sounds")).toBe("sounds");
     expect(toCurrentSectionId("/settings/rewards")).toBe("rewards");
     expect(toCurrentSectionId("/settings/show")).toBe("show");
+    expect(toCurrentSectionId("/settings/mobile")).toBe("mobile");
     expect(toCurrentSectionId("/settings/twitch")).toBe("twitch");
   });
 

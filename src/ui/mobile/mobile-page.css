@@ -1,0 +1,220 @@
+/* /mobile : la page du téléphone, toujours sombre (le script de la route pose data-appearance="dark" sur <html>), à la taille de
+   l'écran et sans défilement. Toutes les valeurs viennent des tokens du design system. */
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.mobile-blank,
+.role-picker,
+.camera-role {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  background: var(--void);
+  color: var(--ink);
+}
+
+/* Le choix du rôle */
+.role-picker {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.role-picker > * {
+  box-sizing: border-box;
+  width: min(100%, 420px);
+}
+
+.role-picker h1 {
+  margin: 0;
+}
+
+/* Le titre de la page tient lieu de légende : celle du groupe reste pour les lecteurs d'écran */
+.role-picker legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.role-picker .lp-choice {
+  padding: var(--space-4);
+}
+
+/* Le coin discret qui change de rôle */
+.role-corner {
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+/* Le rôle Caméra : l'aperçu plein écran, les commandes par-dessus */
+.camera-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--void);
+}
+
+/* L'aperçu de la caméra avant se voit en miroir : l'image que reçoit OBS ne change pas */
+.camera-preview.is-mirrored {
+  transform: scaleX(-1);
+}
+
+/* La caméra est à l'antenne (une de ses sources est visible dans la scène du programme d'OBS) : un cadre rouge autour de l'aperçu */
+.camera-role[data-on-air="true"]::after,
+.selfie-preview[data-on-air="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 3px solid var(--danger);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* La pastille d'état : « Hors antenne » se met en sourdine, « À l'antenne » garde le texte et ajoute son point rouge */
+.camera-status[data-tone="quiet"] .lp-badge,
+.camera-status[data-tone="quiet"] .lp-btn {
+  color: var(--muted);
+}
+
+/* L'écran noir : du noir pur, que l'OLED de l'iPhone éteint (aucun token n'est assez noir). Un toucher n'importe où le rallume. */
+.black-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: black;
+  cursor: pointer;
+}
+
+/* Le point rouge : la caméra est à l'antenne. Tout petit, dans un coin. */
+.black-screen-air {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--danger);
+}
+
+/* « Touche pour rallumer » : très sombre, puis effacé au bout de 3 s */
+.black-screen-hint {
+  color: color-mix(in srgb, var(--ink) 20%, black);
+  animation: black-hint-out var(--lp-dur-fade) ease 3s forwards;
+}
+
+@keyframes black-hint-out {
+  to {
+    opacity: 0;
+  }
+}
+
+.camera-top {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.camera-number-picker {
+  align-items: center;
+}
+
+.camera-number-row {
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.camera-bar-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--space-4);
+  display: flex;
+  justify-content: center;
+  /* Seule la barre prend les touchers : le reste de l'aperçu n'a rien à faire du doigt */
+  pointer-events: none;
+}
+
+.camera-bar-slot > * {
+  pointer-events: auto;
+}
+
+/* La caméra n'est pas à l'image : un mot discret au-dessus de la barre, que le doigt traverse. Le téléphone envoie toujours son image. */
+.camera-cut-notice {
+  position: absolute;
+  left: var(--space-4);
+  right: var(--space-4);
+  bottom: calc(var(--space-4) + var(--control-size) + var(--space-4));
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* Le message qui invite à tourner le téléphone : par-dessus l'aperçu, sans bloquer la barre */
+.rotate-hint {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--void) 70%, transparent);
+}
+
+.rotate-hint svg {
+  width: 32px;
+  height: 32px;
+}
+
+/* La caméra ne tourne pas : tout l'écran est le message, et le toucher qui la relance */
+.camera-notice {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 0;
+  text-align: center;
+  background: color-mix(in srgb, var(--void) 88%, transparent);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+button.camera-notice {
+  cursor: pointer;
+}

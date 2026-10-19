@@ -161,3 +161,77 @@ describe("createSettingsStore : reset", () => {
     expect(store.getState().local).toEqual({ threshold: -35 });
   });
 });
+
+describe("createSettingsStore : abonnés", () => {
+  it("dit chaque nouvel état à ceux qui écoutent, sans rien dire au départ", () => {
+    const { store } = setup();
+    const heard: number[] = [];
+    store.subscribe(({ effective }) => heard.push(effective.threshold));
+    expect(heard).toEqual([]);
+    store.update({ threshold: -35 });
+    store.update({ threshold: -30 });
+    expect(heard).toEqual([-35, -30]);
+  });
+
+  it("donne l'état complet : les valeurs par défaut, les valeurs locales et celles qui s'appliquent", () => {
+    const { store } = setup();
+    const states: unknown[] = [];
+    store.subscribe((state) => states.push(state));
+    store.update({ threshold: -35 });
+    expect(states).toEqual([
+      { defaults, local: { threshold: -35 }, effective: { ...defaults, threshold: -35 } },
+    ]);
+  });
+
+  it("dit aussi le retour aux valeurs par défaut", () => {
+    const { store } = setup({ threshold: -35 });
+    const heard: number[] = [];
+    store.subscribe(({ effective }) => heard.push(effective.threshold));
+    store.reset();
+    expect(heard).toEqual([-40]);
+  });
+
+  it("ne dit rien quand le changement est refusé, par une valeur invalide ou par le disque", () => {
+    const valid = setup();
+    const heardValid: unknown[] = [];
+    valid.store.subscribe((state) => heardValid.push(state));
+    valid.store.update({ threshold: 99 });
+    expect(heardValid).toEqual([]);
+    const broken = setup({}, { isDiskBroken: true });
+    const heardBroken: unknown[] = [];
+    broken.store.subscribe((state) => heardBroken.push(state));
+    broken.store.update({ threshold: -35 });
+    broken.store.reset();
+    expect(heardBroken).toEqual([]);
+  });
+
+  it("ne dit plus rien à celui qui s'est désabonné, et sert chaque abonné", () => {
+    const { store } = setup();
+    const first: number[] = [];
+    const second: number[] = [];
+    const stop = store.subscribe(({ effective }) => first.push(effective.threshold));
+    store.subscribe(({ effective }) => second.push(effective.threshold));
+    store.update({ threshold: -35 });
+    stop();
+    store.update({ threshold: -30 });
+    expect(first).toEqual([-35]);
+    expect(second).toEqual([-35, -30]);
+  });
+
+  it("finit sur le dernier état quand `onChange` change lui-même un réglage : les abonnés les voient dans l'ordre", () => {
+    const heard: number[] = [];
+    const store = createSettingsStore({
+      defaults,
+      local: {},
+      port: { updateLocal: () => undefined, deleteLocal: () => undefined },
+      onChange: ({ threshold }) => {
+        if (threshold === -35) store.update({ threshold: -30 });
+      },
+      log: () => undefined,
+    });
+    store.subscribe(({ effective }) => heard.push(effective.threshold));
+    store.update({ threshold: -35 });
+    expect(heard).toEqual([-35, -30]);
+    expect(store.getState().effective.threshold).toBe(-30);
+  });
+});

@@ -3,22 +3,24 @@ import { toCount } from "./phrase.rules";
 import type { Settings } from "./settings.schema";
 
 // Les listes de phrases de remerciement (réglages `fox*`), une par sorte d'évènement.
-export type ThanksKey =
-  | "foxThanksFollow"
-  | "foxThanksFollowGeneric"
-  | "foxThanksSub"
-  | "foxThanksGiftOne"
-  | "foxThanksGiftMany"
-  | "foxThanksCheer"
-  | "foxThanksLurk"
-  | "foxThanksLurkGeneric"
-  | "foxThanksTalkative"
-  | "foxThanksRaid"
-  | "foxThanksRaidGeneric"
-  | "foxThanksWakeAsleep"
-  | "foxThanksWakeAwake"
-  | "foxThanksPrediction"
-  | "foxThanksPredictionNoLoser";
+const THANKS_KEYS = [
+  "foxThanksFollow",
+  "foxThanksFollowGeneric",
+  "foxThanksSub",
+  "foxThanksGiftOne",
+  "foxThanksGiftMany",
+  "foxThanksCheer",
+  "foxThanksLurk",
+  "foxThanksLurkGeneric",
+  "foxThanksTalkative",
+  "foxThanksRaid",
+  "foxThanksRaidGeneric",
+  "foxThanksWakeAsleep",
+  "foxThanksWakeAwake",
+  "foxThanksPrediction",
+  "foxThanksPredictionNoLoser",
+] as const;
+export type ThanksKey = (typeof THANKS_KEYS)[number];
 
 // Ce qu'il montre avant la phrase : un sourire (1 s) pour un follow ou un cheer, un saut de joie pour un sub, un long coucou
 // pour un raid, rien pour une récompense qui le réveille ni pour une prédiction.

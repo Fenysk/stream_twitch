@@ -359,6 +359,51 @@ describe("les droits : follows et gestion des récompenses", () => {
   });
 });
 
+describe("getChatSender : écrire dans le chat au nom d'Alexis", () => {
+  it("donne le jeton d'accès et le compte quand le jeton a le droit d'écrire, renouvelé s'il est près de sa fin", async () => {
+    const { connection, state, advance } = setup({ token: storedToken });
+    await connection.start();
+    expect(await connection.getChatSender(false)).toEqual({
+      ok: true,
+      sender: { accessToken: "ACCESS-STORED", userId: "68710381" },
+    });
+    state.now = START + 3_600_000 - 30_000;
+    expect(await connection.getChatSender(false)).toEqual({
+      ok: true,
+      sender: { accessToken: "ACCESS-R1", userId: "68710381" },
+    });
+    await advance(0);
+  });
+
+  it("dit « disconnected » quand personne n'est connecté", async () => {
+    const { connection } = setup();
+    await connection.start();
+    expect(await connection.getChatSender(false)).toEqual({ ok: false, reason: "disconnected" });
+  });
+
+  it("Si le jeton gardé est d'avant le droit d'écrire, alors le système doit dire « missing-scope » sans renouveler le jeton", async () => {
+    const { connection, calls } = setup({ token: { ...storedToken, scope: WITHOUT_PREDICTIONS } });
+    await connection.start();
+    expect(await connection.getChatSender(false)).toEqual({ ok: false, reason: "missing-scope" });
+    expect(calls.refresh).toEqual([]);
+  });
+
+  it("dit « disconnected » quand le renouvellement échoue et que le jeton disparaît", async () => {
+    const { connection, state } = setup({ token: storedToken });
+    await connection.start();
+    state.refreshResults.push(refusal("HTTP 400 : Invalid refresh token"));
+    expect(await connection.getChatSender(true)).toEqual({ ok: false, reason: "disconnected" });
+  });
+
+  it("demande un autre jeton quand Twitch a refusé le précédent (`isForced`)", async () => {
+    const { connection, calls } = setup({ token: storedToken });
+    await connection.start();
+    const result = await connection.getChatSender(true);
+    expect(calls.refresh).toEqual(["REFRESH-STORED"]);
+    expect(result).toEqual({ ok: true, sender: { accessToken: "ACCESS-R1", userId: "68710381" } });
+  });
+});
+
 describe("beginLogin : l'adresse d'autorisation", () => {
   it("demande les droits des follows, des récompenses et des prédictions pour cette application, avec le retour exact et un state neuf", () => {
     const { connection } = setup();
@@ -687,5 +732,54 @@ describe("rien de secret dans le journal", () => {
       expect(text).not.toContain(secret);
     }
     expect(text.length).toBeGreaterThan(0);
+  });
+});
+
+describe("getChatViewersReader : lire qui est dans le chat au nom d'Alexis", () => {
+  // Les droits d'avant la liste du chat : tous ceux de la connexion, sauf `moderator:read:chatters`.
+  const WITHOUT_CHAT_VIEWERS = SCOPE.replace(" moderator:read:chatters", "");
+
+  it("donne le jeton d'accès et le compte quand le jeton a le droit de lire la liste, renouvelé s'il est près de sa fin", async () => {
+    const { connection, state, advance } = setup({ token: storedToken });
+    await connection.start();
+    expect(await connection.getChatViewersReader(false)).toEqual({
+      ok: true,
+      reader: { accessToken: "ACCESS-STORED", userId: "68710381" },
+    });
+    state.now = START + 3_600_000 - 30_000;
+    expect(await connection.getChatViewersReader(false)).toEqual({
+      ok: true,
+      reader: { accessToken: "ACCESS-R1", userId: "68710381" },
+    });
+    await advance(0);
+  });
+
+  it("dit « disconnected » quand personne n'est connecté", async () => {
+    const { connection } = setup();
+    await connection.start();
+    expect(await connection.getChatViewersReader(false)).toEqual({ ok: false, reason: "disconnected" });
+  });
+
+  it("Si le jeton gardé est d'avant le droit de lire la liste, alors le système doit dire « missing-scope » sans renouveler le jeton", async () => {
+    expect(WITHOUT_CHAT_VIEWERS).not.toContain("chatViewers");
+    const { connection, calls } = setup({ token: { ...storedToken, scope: WITHOUT_CHAT_VIEWERS } });
+    await connection.start();
+    expect(await connection.getChatViewersReader(false)).toEqual({ ok: false, reason: "missing-scope" });
+    expect(calls.refresh).toEqual([]);
+  });
+
+  it("laisse le jeton écrire dans le chat même sans le droit de lire la liste : les deux droits sont séparés", async () => {
+    const { connection } = setup({ token: { ...storedToken, scope: WITHOUT_CHAT_VIEWERS } });
+    await connection.start();
+    expect((await connection.getChatSender(false)).ok).toBe(true);
+    expect((await connection.getChatViewersReader(false)).ok).toBe(false);
+  });
+
+  it("demande un autre jeton quand Twitch a refusé le précédent (`isForced`)", async () => {
+    const { connection, calls } = setup({ token: storedToken });
+    await connection.start();
+    const result = await connection.getChatViewersReader(true);
+    expect(calls.refresh).toEqual(["REFRESH-STORED"]);
+    expect(result).toEqual({ ok: true, reader: { accessToken: "ACCESS-R1", userId: "68710381" } });
   });
 });

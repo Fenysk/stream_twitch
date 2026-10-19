@@ -1,3 +1,5 @@
+import { SettingsRefusalSchema } from "../../src/domain/settings.schema";
+
 // Ce que fetch sait faire pour une touche : une URL, un signal d'abandon, et pour écrire une méthode, un en-tête et un corps.
 export type FetchInit = {
   signal: AbortSignal;
@@ -62,4 +64,29 @@ export const readJson = async (url: string, fetchFn: FetchFn): Promise<JsonRead>
   const reply = await requestServer(url, fetchFn);
   if (reply.kind === "down") return reply;
   return reply.isOk && reply.body !== undefined ? { kind: "json", body: reply.body } : { kind: "to-restart" };
+};
+
+// Ce qu'un appui qui écrit apprend du serveur : fait, injoignable, ou refusé avec son statut et sa phrase.
+export type PostOutcome =
+  | { ok: true }
+  | { ok: false; reason: "unavailable" }
+  | { ok: false; reason: "refused"; status: number; message: string | undefined };
+
+// Un POST JSON sur une route du serveur. Tous les refus du serveur ont la même forme : { issues: [{ path, message }] } (http.ts, refuse).
+export const postServer = async (
+  url: string,
+  body: unknown,
+  timeoutMs: number,
+  fetchFn: FetchFn,
+): Promise<PostOutcome> => {
+  const reply = await requestServer(url, fetchFn, { method: "POST", body, timeoutMs });
+  if (reply.kind === "down") return { ok: false, reason: "unavailable" };
+  if (reply.isOk) return { ok: true };
+  const refusal = SettingsRefusalSchema.safeParse(reply.body);
+  return {
+    ok: false,
+    reason: "refused",
+    status: reply.status,
+    message: refusal.success ? refusal.data.issues[0]?.message : undefined,
+  };
 };

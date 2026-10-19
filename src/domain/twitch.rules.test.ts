@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  hasChatScope,
+  hasChatViewersScope,
   hasTwitchScope,
   isTokenFresh,
   RENEW_BEFORE_MS,
+  TWITCH_CHAT_SCOPE,
+  TWITCH_CHAT_VIEWERS_SCOPE,
   TWITCH_REDIRECT_URI,
   TWITCH_SCOPE,
   TWITCH_TOPIC_SPECS,
@@ -32,8 +36,9 @@ describe("toAuthorizeUrl : l'adresse où Alexis autorise l'application", () => {
     expect(TWITCH_REDIRECT_URI).toBe("http://localhost:4747/auth/twitch/callback");
   });
 
-  it("demande un droit par abonnement, séparés par des espaces : les follows, gérer les récompenses de points de chaîne, les prédictions", () => {
-    const scope = "moderator:read:followers channel:manage:redemptions channel:read:predictions";
+  it("demande un droit par abonnement, puis celui d'écrire dans le chat et celui de lire qui s'y trouve, séparés par des espaces : les follows, gérer les récompenses de points de chaîne, les prédictions, user:write:chat, moderator:read:chatters", () => {
+    const scope =
+      "moderator:read:followers channel:manage:redemptions channel:read:predictions user:write:chat moderator:read:chatters";
     expect(url.searchParams.get("scope")).toBe(scope);
     expect(TWITCH_SCOPE).toBe(scope);
   });
@@ -74,6 +79,44 @@ describe("hasTwitchScope", () => {
   it("accepte un jeton d'avant les récompenses (il suit les follows), pas celui qui n'a que les récompenses", () => {
     expect(hasTwitchScope("moderator:read:followers")).toBe(true);
     expect(hasTwitchScope("channel:manage:redemptions")).toBe(false);
+  });
+});
+
+describe("le droit d'écrire dans le chat", () => {
+  it("se lit dans les droits que Twitch a donnés, et manque aux jetons d'avant", () => {
+    expect(TWITCH_CHAT_SCOPE).toBe("user:write:chat");
+    expect(hasChatScope("moderator:read:followers user:write:chat")).toBe(true);
+    expect(hasChatScope("moderator:read:followers channel:manage:redemptions channel:read:predictions")).toBe(
+      false,
+    );
+    expect(hasChatScope("")).toBe(false);
+  });
+
+  it("n'est pas un abonnement EventSub : il ne change ni les abonnements permis ni ceux qui manquent", () => {
+    const withChat =
+      "moderator:read:followers channel:manage:redemptions channel:read:predictions user:write:chat";
+    expect(toGrantedTopics(withChat)).toEqual(["follow", "reward", "prediction"]);
+    expect(toMissingTopics(withChat)).toEqual([]);
+    expect(toMissingTopics("moderator:read:followers user:write:chat")).toEqual(["reward", "prediction"]);
+  });
+});
+
+describe("le droit de lire qui est dans le chat", () => {
+  it("se lit dans les droits que Twitch a donnés, et manque aux jetons d'avant", () => {
+    expect(TWITCH_CHAT_VIEWERS_SCOPE).toBe("moderator:read:chatters");
+    expect(hasChatViewersScope("moderator:read:followers moderator:read:chatters")).toBe(true);
+    expect(hasChatViewersScope("moderator:read:followers channel:manage:redemptions user:write:chat")).toBe(
+      false,
+    );
+    expect(hasChatViewersScope("")).toBe(false);
+  });
+
+  it("n'est pas un abonnement EventSub, et ne se confond pas avec le droit des follows qui s'y ressemble", () => {
+    const granted =
+      "moderator:read:followers channel:manage:redemptions channel:read:predictions moderator:read:chatters";
+    expect(toGrantedTopics(granted)).toEqual(["follow", "reward", "prediction"]);
+    expect(toMissingTopics(granted)).toEqual([]);
+    expect(hasTwitchScope("moderator:read:chatters")).toBe(false);
   });
 });
 

@@ -252,7 +252,7 @@ describe("la connexion à Twitch, de bout en bout contre un faux Twitch", () => 
     expect(authorize.origin + authorize.pathname).toBe("https://id.twitch.tv/oauth2/authorize");
     expect(authorize.searchParams.get("redirect_uri")).toBe("http://localhost:4747/auth/twitch/callback");
     expect(authorize.searchParams.get("scope")).toBe(
-      "moderator:read:followers channel:manage:redemptions channel:read:predictions",
+      "moderator:read:followers channel:manage:redemptions channel:read:predictions user:write:chat moderator:read:chatters",
     );
     expect(result).toEqual({ ok: true, login: "fenysk" });
     expect(connection.getStatus()).toEqual({ kind: "connected", login: "fenysk", missing: [] });

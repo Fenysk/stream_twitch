@@ -21,6 +21,9 @@ export type SettingsStore = {
   getState(): SettingsState;
   update(changes: SettingsChanges): SettingsUpdate;
   reset(): SettingsUpdate;
+  // Chaque nouvel état, tant qu'on écoute, d'où que vienne le changement (onglet des réglages, téléphone, Stream Deck, le serveur
+  // lui-même). L'état de départ se lit par `getState`.
+  subscribe(listener: (state: SettingsState) => void): () => void;
 };
 
 const toDiskIssue = (error: unknown): SettingsIssue => ({
@@ -46,8 +49,13 @@ export function createSettingsStore({
     log(`settings.local.json ignoré, ses valeurs ne vont plus avec settings.json : ${problems}`);
   }
 
+  const listeners = new Set<(state: SettingsState) => void>();
+
+  // Les abonnés d'abord, `onChange` ensuite : un changement que `onChange` provoque lui-même (l'expression disparue qu'on efface)
+  // arrive après celui qui l'a causé, et les abonnés finissent sur le dernier état.
   const apply = (next: SettingsState): SettingsUpdate => {
     state = next;
+    for (const listener of listeners) listener(next);
     onChange(next.effective);
     return { ok: true, state };
   };
@@ -74,6 +82,12 @@ export function createSettingsStore({
         return { ok: false, issues: [toDiskIssue(error)] };
       }
       return apply({ defaults, local: {}, effective: defaults });
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
 }

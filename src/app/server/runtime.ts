@@ -27,16 +27,20 @@ import { createRewardPhraseStore } from "../../infra/reward-phrase.repository";
 import { getSettings } from "../../infra/settings.repository";
 import { createSoundStore, upgradeSounds } from "../../infra/sound.repository";
 import { createTwitchAuthClient } from "../../infra/twitch-auth.client";
+import { createChatWriterClient } from "../../infra/twitch-chat.client";
+import { createChatViewersClient } from "../../infra/twitch-chat-viewers.client";
 import { createEventFeed } from "../../infra/twitch-events.client";
 import { createRewardsClient } from "../../infra/twitch-rewards.client";
 import { createTimetableClient } from "../../infra/twitch-timetable.client";
 import { createTwitchTokenStore } from "../../infra/twitch-token.repository";
 import { createViewersClient } from "../../infra/twitch-viewers.client";
 import { createPowerShellRunner, createVoiceClient, sweepVoiceFiles } from "../../infra/voice.client";
+import { createCameraBoost } from "../../usecase/camera-boost.usecase";
 import { type Chat, createChat } from "../../usecase/chat.usecase";
 import { type ClipLibrary, createClipLibrary } from "../../usecase/clip.usecase";
 import { createClipAnalysis } from "../../usecase/clip-analysis.usecase";
 import { createClipChat } from "../../usecase/clip-chat.usecase";
+import { type Control, createControl } from "../../usecase/control.usecase";
 import { createEmoteSync } from "../../usecase/emote-sync.usecase";
 import { createExpressionLibrary, type ExpressionLibrary } from "../../usecase/expression.usecase";
 import { createFox, type Fox } from "../../usecase/fox.usecase";
@@ -58,6 +62,8 @@ import { createFoxTally } from "../../usecase/fox-tally.usecase";
 import { createFoxThanks, type FoxThanks } from "../../usecase/fox-thanks.usecase";
 import { createFoxTunnel } from "../../usecase/fox-tunnel.usecase";
 import { createHeadLoop, type HeadFeed } from "../../usecase/head.usecase";
+import { createMonitor, type Monitor } from "../../usecase/monitor.usecase";
+import { createPhones, type Phones } from "../../usecase/phone.usecase";
 import { createRewardLibrary, type RewardLibrary } from "../../usecase/reward.usecase";
 import { createRewardPhraseLibrary, type RewardPhraseLibrary } from "../../usecase/reward-phrase.usecase";
 import { createSettingsStore, type SettingsStore } from "../../usecase/settings.usecase";
@@ -69,6 +75,7 @@ import { createSoundQueue, type SoundQueue } from "../../usecase/sound-queue.use
 import { createTimetable } from "../../usecase/timetable.usecase";
 import { createTwitchConnection, type TwitchConnection } from "../../usecase/twitch-connection.usecase";
 import { createViewers, type Viewers, type ViewersPort } from "../../usecase/viewers.usecase";
+import { toEndPort } from "./control-end";
 import { log } from "./server-log";
 import { getTwitchApp } from "./twitch-app";
 
@@ -103,6 +110,12 @@ export type Runtime = {
   // L'émission : elle commence quand la page /show passe à l'antenne d'OBS et s'arrête dès qu'elle n'y est plus ; Jean-Renard n'est
   // alors que dans /show.
   director: ShowDirector;
+  // Les téléphones ouverts sur /mobile et les pages OBS de leurs caméras : le serveur ne fait que les mettre en relation (WebRTC).
+  phones: Phones;
+  // La régie du téléphone : l'état d'OBS, des viewers et du live qu'elle montre, et ses gestes (scène, mic, fin du live, message).
+  control: Control;
+  // Le retour antenne de la régie : l'image de la scène du programme, une capture d'OBS partagée entre les téléphones.
+  monitor: Monitor;
 };
 
 // Le plugin Nitro et les routes serveur partagent ce module : c'est le seul état du serveur.
@@ -181,7 +194,9 @@ export function startRuntime(): Runtime {
     onChange: (effective: Settings) => {
       loop.update(effective);
       applyExpression(effective);
-      obs.updateMicName(effective.micName);
+      // Le nom du mic du PC et la fin prévue vont à la régie : elle garde l'entrée écoutée sur le mic ouvert, caméra comprise.
+      control.update(effective);
+      cameraBoost.update(effective);
       obs.updateDesktopName(effective.desktopName);
       fox.update(effective);
       mode.update(effective);
@@ -233,6 +248,7 @@ export function startRuntime(): Runtime {
       address: initial.obsAddress,
       micName: initial.micName,
       desktopName: initial.desktopName,
+      cameraSlotScene: initial.cameraSlotScene,
       // Seules les sources qui pointent vers CE port sont rafraîchies : un serveur d'essai sur un autre port ne touche pas à celle du stream.
       pageHosts: [`localhost:${port}`, `127.0.0.1:${port}`],
       log,
@@ -467,8 +483,10 @@ export function startRuntime(): Runtime {
   const rewardStore = createRewardStore(join(root, "data", "rewards.json"), log);
   upgradeSounds(soundsFolder, rewardStore, log);
   const soundStore = createSoundStore(soundsFolder, log);
+  // Sans l'application Twitch, les clients Helix (rewards, chat) répondent que Twitch n'est pas prêt.
+  const twitchClientId = twitchApp?.clientId ?? "";
   const twitchRewards = createRewardsClient({
-    clientId: twitchApp?.clientId ?? "",
+    clientId: twitchClientId,
     broadcasterId: initial.chatChannelId,
     getAccessToken: (isForced) => twitch.getRewardsToken(isForced),
   });
@@ -585,12 +603,61 @@ export function startRuntime(): Runtime {
     schedule,
     log,
   });
+  // Les téléphones : l'image et le son vont du téléphone à la page OBS sans passer par le serveur, qui ne fait passer que les signaux.
+  const phones = createPhones({ log });
+  // Le boost des téléphones : la voix d'Alexis arrive plus faible d'un téléphone que du micro du PC ; quand le micro du live est une caméra,
+  // la source de cette caméra monte vers `cameraBoostTarget`, jamais celle du PC.
+  const cameraBoost = createCameraBoost({
+    levels: obs.levels,
+    port: obs.boost,
+    settings: initial,
+    schedule,
+    log,
+  });
+  // La régie du téléphone : elle lit OBS (scène, micros), la diffusion, les viewers et les téléphones, écrit dans le chat au nom
+  // d'Alexis (droit `user:write:chat` du jeton), décale la fin du live (`foxEndAt`), et garde l'entrée que la tête et Jean-Renard
+  // écoutent sur le mic ouvert.
+  const control = createControl({
+    obs: obs.control,
+    broadcast: obs.broadcast,
+    viewers,
+    phones,
+    chat: createChatWriterClient({
+      clientId: twitchClientId,
+      broadcasterId: initial.chatChannelId,
+      getSender: (isForced) => twitch.getChatSender(isForced),
+    }),
+    chatViewers: createChatViewersClient({
+      clientId: twitchClientId,
+      broadcasterId: initial.chatChannelId,
+      getReader: (isForced) => twitch.getChatViewersReader(isForced),
+    }),
+    end: toEndPort(settings),
+    settings: initial,
+    // L'entrée écoutée est celle du micro du live : la tête et Jean-Renard la suivent, et le boost aussi quand c'est une caméra.
+    listen: (input) => {
+      obs.updateMicName(input);
+      cameraBoost.updateLiveInput(input);
+    },
+    clock: Date.now,
+    schedule,
+    log,
+  });
+  // Le retour antenne capture la scène que la régie dit à l'antenne.
+  const monitor = createMonitor({
+    port: obs.monitor,
+    getScene: () => control.getState().scene,
+    clock: Date.now,
+    schedule,
+  });
   log(`Renard : liste d'insultes chargée (${insults.parts.length + insults.words.size} entrées).`);
   shown = start.head.expression;
   loop.start();
   if (!start.found) settings.update({ expression: null });
   director.start();
   obs.start();
+  control.start();
+  cameraBoost.start();
   clipChat.start();
   mode.start();
   queue.start();
@@ -635,6 +702,9 @@ export function startRuntime(): Runtime {
     foxReward,
     clips,
     director,
+    phones,
+    control,
+    monitor,
   };
   return current;
 }

@@ -1,18 +1,10 @@
 import { useEffect, useState } from "react";
-import { ChatEventSchema } from "../../domain/chat.schema";
 import { type ChatState, EMPTY_CHAT_STATE, toNextChatState } from "../../domain/chat-state.rules";
+import { watchChat } from "./chat-stream";
 
-// La page ne connaît que le flux du serveur : EventSource se reconnecte seul s'il tombe, et le serveur renvoie alors l'état entier.
+// La page ne connaît que le flux du serveur : le tchat d'OBS (messages montrés selon l'allure, les 100 derniers).
 export const useChatView = (): ChatState => {
   const [state, setState] = useState<ChatState>(EMPTY_CHAT_STATE);
-  useEffect(() => {
-    const source = new EventSource("/api/chat/events");
-    source.onmessage = (event: MessageEvent<string>) => {
-      const parsed = ChatEventSchema.safeParse(JSON.parse(event.data));
-      if (parsed.success) setState((current) => toNextChatState(current, parsed.data));
-      else console.error("Message du tchat illisible :", parsed.error.message);
-    };
-    return () => source.close();
-  }, []);
+  useEffect(() => watchChat((event) => setState((current) => toNextChatState(current, event))), []);
   return state;
 };

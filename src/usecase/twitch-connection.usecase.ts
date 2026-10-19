@@ -1,5 +1,7 @@
 import type { LiveEvent } from "../domain/live.types";
 import {
+  hasChatScope,
+  hasChatViewersScope,
   hasTwitchScope,
   isTokenFresh,
   type TokenGrant,
@@ -76,6 +78,21 @@ export type LoginQuery = { code: string | null; state: string | null; error: str
 
 export type LoginResult = { ok: true; login: string } | { ok: false; message: string };
 
+// De quoi écrire dans le chat au nom d'Alexis : un jeton d'accès et son compte (Helix demande l'identifiant de l'expéditeur).
+export type ChatSender = { accessToken: string; userId: string };
+
+// Le jeton ne peut pas écrire : personne n'est connecté (ou le renouvellement a échoué), ou le jeton gardé est d'avant le droit
+// d'écrire (`user:write:chat`) et demande de se reconnecter.
+export type ChatSenderResult =
+  | { ok: true; sender: ChatSender }
+  | { ok: false; reason: "disconnected" | "missing-scope" };
+
+// De quoi lire la liste du chat (Helix `GET /chat/chatters`) : le jeton d'accès et le compte d'Alexis, modérateur de sa chaîne, qui doit avoir
+// `moderator:read:chatters` : un jeton d'avant ce droit demande de se reconnecter.
+export type ChatViewersReaderResult =
+  | { ok: true; reader: ChatSender }
+  | { ok: false; reason: "disconnected" | "missing-scope" };
+
 export type TwitchConnection = {
   // Relit le jeton gardé et écoute les évènements ; sans jeton, le journal dit une fois que les follows attendent.
   start(): Promise<void>;
@@ -84,6 +101,11 @@ export type TwitchConnection = {
   // Le jeton d'accès pour gérer les rewards des sons ; `null` : pas connecté, ou il manque le droit de gérer les récompenses
   // (reconnecte-toi).
   getRewardsToken(isForced: boolean): Promise<string | null>;
+  // De quoi écrire dans le chat (le jeton d'accès, renouvelé s'il est près de sa fin, et le compte) ; `isForced` : Twitch vient de
+  // refuser le précédent.
+  getChatSender(isForced: boolean): Promise<ChatSenderResult>;
+  // De quoi lire qui est dans le chat, même règle ; `isForced` : Twitch vient de refuser le précédent.
+  getChatViewersReader(isForced: boolean): Promise<ChatViewersReaderResult>;
   // L'adresse où Alexis autorise l'application, avec un state neuf.
   beginLogin(): { ok: true; url: string } | { ok: false; message: string };
   // Le retour de Twitch : vérifie le state, échange le code, garde le jeton, écoute les évènements.
@@ -271,6 +293,24 @@ export function createTwitchConnection({
     async getRewardsToken(isForced) {
       if (!token || toMissingTopics(token.scope).includes("reward")) return null;
       return getAccessToken(isForced);
+    },
+    async getChatSender(isForced) {
+      const current = token;
+      if (!current) return { ok: false, reason: "disconnected" };
+      if (!hasChatScope(current.scope)) return { ok: false, reason: "missing-scope" };
+      const accessToken = await getAccessToken(isForced);
+      return accessToken
+        ? { ok: true, sender: { accessToken, userId: current.userId } }
+        : { ok: false, reason: "disconnected" };
+    },
+    async getChatViewersReader(isForced) {
+      const current = token;
+      if (!current) return { ok: false, reason: "disconnected" };
+      if (!hasChatViewersScope(current.scope)) return { ok: false, reason: "missing-scope" };
+      const accessToken = await getAccessToken(isForced);
+      return accessToken
+        ? { ok: true, reader: { accessToken, userId: current.userId } }
+        : { ok: false, reason: "disconnected" };
     },
     beginLogin() {
       if (!app) return { ok: false, message: MISSING_APP_MESSAGE };

@@ -18,6 +18,12 @@ export const FAKE_REDIRECT = "http://localhost:4747/auth/twitch/callback";
 
 export type { FakeReward, FakeSpend };
 
+// Un message publié dans le chat : la chaîne, le compte qui l'écrit et son texte.
+export type FakeChatMessage = { broadcasterId: string; senderId: string; message: string };
+
+// Une personne connectée au chat (`GET /helix/chat/chatters`) : son identifiant, son login et son pseudo affiché.
+export type FakeChatViewer = { id: string; login: string; name: string };
+
 // `query` : la partie de l'adresse après « ? » (`id=reward-1&broadcaster_id=68710381`).
 export type FakeRequest = {
   method: string;
@@ -69,6 +75,13 @@ export type FakeTwitch = {
   revokeEverything(): void;
   // La durée des prochains jetons d'accès, en secondes.
   setLifetime(seconds: number): void;
+  // Les messages que Twitch a publiés dans le chat (`POST /helix/chat/messages`), du premier au dernier.
+  chatMessages(): FakeChatMessage[];
+  // Twitch accepte le prochain message mais ne le publie pas (mot bloqué, filtre du chat) : `is_sent` à faux, avec cette raison.
+  rejectNextMessage(reason: string): void;
+  // Les personnes connectées au chat que `GET /helix/chat/chatters` donne, et le nombre de personnes par page (1000 chez Twitch, au plus).
+  setChatViewers(chatViewers: readonly FakeChatViewer[]): void;
+  setChatViewersPageSize(size: number): void;
   stop(): Promise<void>;
 };
 
@@ -79,7 +92,15 @@ const INVALID_CODE = '{ "status": 400, "message": "Invalid authorization code" }
 const INVALID_REFRESH = '{ "status": 400, "message": "Invalid refresh token" }';
 const INVALID_SECRET = '{ "status": 403, "message": "invalid client secret" }';
 const INVALID_ACCESS = '{ "status": 401, "message": "invalid access token" }';
-const DEFAULT_SCOPES = ["moderator:read:followers", "channel:manage:redemptions", "channel:read:predictions"];
+const DEFAULT_SCOPES = [
+  "moderator:read:followers",
+  "channel:manage:redemptions",
+  "channel:read:predictions",
+  "user:write:chat",
+  "moderator:read:chatters",
+];
+const CHAT_MESSAGES_PATH = "/helix/chat/messages";
+const CHAT_VIEWERS_PATH = "/helix/chat/chatters";
 const FOLLOW_TYPE = "channel.follow";
 const REWARD_TYPE = "channel.channel_points_custom_reward_redemption.add";
 const PREDICTION_TYPE = "channel.prediction.end";
@@ -121,6 +142,10 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
   const refusedTypes = new Set<string>();
   let scopes: readonly string[] = DEFAULT_SCOPES;
   let lifetime = 14_400;
+  const chatMessages: FakeChatMessage[] = [];
+  let chatViewers: readonly FakeChatViewer[] = [];
+  let chatViewersPageSize = 1000;
+  let rejection: string | null = null;
   let sessionCount = 0;
   let followCount = 0;
   let rewardCount = 0;
@@ -182,6 +207,64 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
     });
   };
 
+  // `POST /helix/chat/messages` : le jeton d'Alexis et le client-id de l'application ; un message vide est refusé (400), un message
+  // à `rejectNextMessage` est accepté mais pas publié.
+  const answerChat = ({ headers, body }: FakeRequest): Reply => {
+    if (!isAuthorized(headers)) return unauthorized();
+    const fields: Record<string, unknown> = JSON.parse(body || "{}");
+    const broadcasterId = fields.broadcaster_id;
+    const senderId = fields.sender_id;
+    const message = fields.message;
+    if (
+      typeof broadcasterId !== "string" ||
+      typeof senderId !== "string" ||
+      typeof message !== "string" ||
+      message === ""
+    ) {
+      return { status: 400, body: '{ "status": 400, "message": "The message field is required" }' };
+    }
+    if (rejection !== null) {
+      const reason = rejection;
+      rejection = null;
+      // Twitch écrit les champs en snake_case : la réponse se compose en texte.
+      return {
+        status: 200,
+        body: `{"data":[{"message_id":"","is_sent":false,"drop_reason":{"code":"msg_rejected","message":${JSON.stringify(reason)}}}]}`,
+      };
+    }
+    chatMessages.push({ broadcasterId, senderId, message });
+    return {
+      status: 200,
+      body: `{"data":[{"message_id":"message-${chatMessages.length}","is_sent":true}]}`,
+    };
+  };
+
+  // `GET /helix/chat/chatters` : le jeton d'Alexis et le client-id ; `broadcaster_id` et `moderator_id` sont obligatoires (400 sinon). La
+  // page commence à `after` (le rang du premier, que `pagination.cursor` donne) et compte au plus `first` personnes.
+  const answerChatViewers = ({ headers, query }: FakeRequest): Reply => {
+    if (!isAuthorized(headers)) return unauthorized();
+    const params = new URLSearchParams(query);
+    if (!params.get("broadcaster_id") || !params.get("moderator_id")) {
+      return {
+        status: 400,
+        body: '{ "status": 400, "message": "The broadcaster_id and moderator_id are required" }',
+      };
+    }
+    const size = Math.min(Number(params.get("first") ?? "100"), chatViewersPageSize);
+    const start = Number(params.get("after") ?? "0");
+    const page = chatViewers.slice(start, start + size);
+    const next = start + size < chatViewers.length ? `{"cursor":"${start + size}"}` : "{}";
+    // Twitch écrit les champs en snake_case : la réponse se compose en texte.
+    const rows = page.map(
+      ({ id, login, name }) =>
+        `{"user_id":${JSON.stringify(id)},"user_login":${JSON.stringify(login)},"user_name":${JSON.stringify(name)}}`,
+    );
+    return {
+      status: 200,
+      body: `{"data":[${rows.join(",")}],"pagination":${next},"total":${chatViewers.length}}`,
+    };
+  };
+
   const answerSubscription = ({ headers, body }: FakeRequest): Reply => {
     if (!isAuthorized(headers)) return unauthorized();
     const type: unknown = JSON.parse(body || "{}").type;
@@ -206,14 +289,19 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
     return { status: 200, body: "" };
   };
 
-  const answer = (request: FakeRequest): Reply => {
-    const route = `${request.method} ${request.path}`;
-    if (route === "POST /oauth2/token") return answerToken(request.body);
-    if (route === "GET /oauth2/validate") return answerIdentity(request.headers);
-    if (route === "POST /oauth2/revoke") return answerRevoke(request.body);
-    if (route === "POST /helix/eventsub/subscriptions") return answerSubscription(request);
-    return answerRewards(request) ?? { status: 404, body: '{ "message": "inconnu" }' };
+  // Une réponse par « MÉTHODE /chemin » ; les rewards ont les leurs (fake-twitch-rewards.testkit.ts).
+  const routes: Record<string, (request: FakeRequest) => Reply> = {
+    "POST /oauth2/token": ({ body }) => answerToken(body),
+    "GET /oauth2/validate": ({ headers }) => answerIdentity(headers),
+    "POST /oauth2/revoke": ({ body }) => answerRevoke(body),
+    "POST /helix/eventsub/subscriptions": answerSubscription,
+    [`POST ${CHAT_MESSAGES_PATH}`]: answerChat,
+    [`GET ${CHAT_VIEWERS_PATH}`]: answerChatViewers,
   };
+
+  const answer = (request: FakeRequest): Reply =>
+    routes[`${request.method} ${request.path}`]?.(request) ??
+    answerRewards(request) ?? { status: 404, body: '{ "message": "inconnu" }' };
 
   const server: Server = createServer(async (incoming, response) => {
     const url = new URL(incoming.url ?? "/", "http://fake");
@@ -330,6 +418,16 @@ export async function startFakeTwitch(): Promise<FakeTwitch> {
     },
     setLifetime(seconds) {
       lifetime = seconds;
+    },
+    chatMessages: () => [...chatMessages],
+    rejectNextMessage(reason) {
+      rejection = reason;
+    },
+    setChatViewers(list) {
+      chatViewers = list;
+    },
+    setChatViewersPageSize(size) {
+      chatViewersPageSize = size;
     },
     stop: () =>
       new Promise<void>((resolve) => {

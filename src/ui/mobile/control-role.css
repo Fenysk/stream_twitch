@@ -1,0 +1,404 @@
+/* Le rôle Régie de /mobile, en portrait : le bandeau, le chat, la grille de touches. Toutes les valeurs viennent des tokens du design
+   system ; les tailles de texte viennent de ses classes `lp-type-*`. */
+
+.control-role {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  display: grid;
+  /* Une seule colonne, jamais plus large que l'écran : le champ d'« Écrire » ou une touche longue ne la poussent pas */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  /* La hauteur de la vignette du retour antenne : un tiers de la largeur du bandeau, en 16:9 */
+  --monitor-height: calc((100vw - 2 * var(--space-3) - 2 * var(--space-2)) * 3 / 16);
+  overflow: hidden;
+  background: var(--void);
+  color: var(--ink);
+}
+
+/* Le bandeau : des pastilles, d'une même hauteur de contrôle. Quand elles ne tiennent pas sur une ligne (le live, les viewers, la scène et
+   le micro), elles passent à la suivante. */
+.control-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.control-banner .lp-pill {
+  width: auto;
+  flex: none;
+}
+
+.control-banner .lp-pill-content {
+  box-sizing: border-box;
+  min-height: var(--control-size);
+  padding: 0 var(--space-3);
+}
+
+.control-banner svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* Le retour antenne : la vignette 16:9 d'un tiers du bandeau (un bouton qui ouvre la feuille), et la même image en grand dans la feuille.
+   Les pastilles passent à côté de la vignette, puis en dessous. */
+.monitor-thumbnail,
+.monitor-large {
+  box-sizing: border-box;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: calc(var(--control-size) / 2);
+  background: var(--void);
+  box-shadow: 0 0 0 1px var(--pill-border);
+}
+
+.monitor-thumbnail {
+  flex: 0 0 calc((100% - 2 * var(--space-2)) / 3);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+
+.monitor-thumbnail:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.monitor-large {
+  width: 100%;
+}
+
+.monitor-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.monitor-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 0 var(--space-2);
+  text-align: center;
+}
+
+/* Le squelette remplit la place de l'image, sans les 120 px de sa variante `area` */
+.monitor-thumbnail .lp-skeleton,
+.monitor-large .lp-skeleton {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
+/* La scène à l'antenne et le micro du live prennent la place qui reste, leur nom se coupe par des points. Ce sont des boutons (ils ouvrent
+   le menu des scènes et celui des micros) qui remplissent la pastille : elle garde la hauteur des autres, et la hauteur tactile du bouton. */
+.control-banner .control-menu-pill {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.control-menu-pill .lp-pill-content {
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.control-banner .control-menu-content {
+  padding: 0;
+}
+
+.control-menu-pill .lp-btn {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.control-menu-pill .lp-btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La liste des viewers : le nombre et « Rafraîchir » sur une ligne, la précision, puis les pseudos qui défilent quand ils sont nombreux */
+.control-viewers-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.control-viewers-note {
+  margin: 0;
+}
+
+.control-chatViewers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+  max-height: 45dvh;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+/* La confirmation de l'arrêt du live : le texte, puis « Annuler » et « Arrêter » côte à côte, chacun la moitié de la largeur */
+.control-confirm-text {
+  margin: 0;
+}
+
+.control-confirm {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.control-confirm .lp-btn {
+  flex: 1;
+  justify-content: center;
+}
+
+/* Les menus du bandeau (scènes, micros) : le titre de la feuille, puis une colonne de touches, qui défile quand il y en a beaucoup */
+.control-drawer-title {
+  margin: 0;
+}
+
+.control-menu-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  max-height: 55dvh;
+  overflow-y: auto;
+}
+
+.control-live-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--danger);
+}
+
+/* Le chat : la colonne d'OBS dans un cadre, et « Écrire » dessous */
+.control-chat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.control-chat-feed {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: calc(var(--control-size) / 2 + var(--space-2));
+  background: var(--pill-surface);
+  box-shadow: 0 0 0 1px var(--pill-border);
+}
+
+/* Le tchat du téléphone : celui de Twitch, pas celui d'OBS. Une zone qui défile, les messages du plus ancien (en haut) au plus récent (en
+   bas, où ils se posent quand ils sont peu). Le nickname et l'emote reprennent les classes de chat.css. */
+.chat-log {
+  --chat-size: 16px;
+  --chat-line: calc(var(--chat-size) * 1.4);
+  position: absolute;
+  inset: 0;
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+/* Le bas de la zone garde la place du bouton « Écrire » (la rangée d'un bouton, et sa marge) : le dernier message se pose au-dessus de lui.
+   Le champ ouvert (data-writing sur la section) remplace le bouton : la place n'est plus réservée. */
+.control-chat {
+  --chat-write-room: calc(var(--control-size) + var(--space-3) * 2);
+}
+
+.control-chat[data-writing] {
+  --chat-write-room: var(--space-3);
+}
+
+.chat-log-scroll {
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-3) var(--space-3) var(--chat-write-room);
+}
+
+.chat-log-list {
+  box-sizing: border-box;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.chat-log-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-2);
+}
+
+.chat-log-line {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--chat-size);
+  line-height: var(--chat-line);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Un message qu'OBS ne montre pas, ou supprimé : atténué ; un message supprimé est en plus barré (le nickname et l'emote restent lisibles) */
+.chat-log-row[data-mark] .chat-log-line {
+  color: var(--muted);
+}
+
+.chat-log-row[data-mark] .chat-nickname,
+.chat-log-row[data-mark] .chat-emote {
+  opacity: 0.55;
+}
+
+.chat-log-row[data-mark="deleted"] .chat-log-line {
+  text-decoration: line-through;
+}
+
+.chat-log-mark {
+  flex: none;
+  color: var(--muted);
+}
+
+/* « Nouveaux messages » : posé en bas de la zone, seul le bouton prend le toucher */
+.chat-log-news {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--chat-write-room);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.chat-log-news > * {
+  pointer-events: auto;
+}
+
+/* « Écrire » : en bas à droite de la boîte du chat, par-dessus la place que la zone lui garde */
+.chat-write {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+}
+
+.chat-composer {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.chat-composer p {
+  margin: 0;
+}
+
+.chat-composer-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chat-composer-row .lp-input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+/* La grille : le contrôle segmenté sur toute la largeur, puis 3 colonnes de touches */
+.control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.control-grid .lp-segmented {
+  box-sizing: border-box;
+  width: 100%;
+  justify-self: stretch;
+}
+
+/* Chaque page garde son nom sur une ligne et prend la place que son nom demande (« Jean-Renard » est le plus long) */
+.control-grid .lp-segmented-option {
+  flex: 1 1 auto;
+  justify-content: center;
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+
+.control-keys {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  max-height: 30dvh;
+  overflow-y: auto;
+}
+
+.control-empty {
+  margin: 0;
+  padding: var(--space-3) 0;
+  text-align: center;
+}
+
+.control-key {
+  height: auto;
+  min-height: 56px;
+  padding: var(--space-2);
+  flex-direction: column;
+  gap: 2px;
+  border-radius: calc(var(--control-size) / 2);
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.control-key-note {
+  opacity: 0.75;
+}
+
+/* Une touche active est claire */
+.control-key[data-state="active"] {
+  background: var(--ink);
+  color: var(--on-accent);
+}
+
+/* Le toast : en haut, sous le bandeau, hors d'atteinte du clavier. Sur la Régie il passe sous la vignette du retour antenne ; les autres
+   rôles gardent la hauteur d'une pastille. */
+.control-toast {
+  position: fixed;
+  top: calc(var(--space-4) + var(--monitor-height, var(--control-size) + var(--space-3)));
+  left: 50%;
+  z-index: 10;
+  width: auto;
+  transform: translateX(-50%);
+}
+
+.control-toast .lp-pill-content {
+  width: auto;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+
+/* Le coin qui change de rôle, dans le bandeau : un bouton rond, sans marge autour (en dernier : sa spécificité passe devant celle des pastilles) */
+.control-banner .role-corner .lp-pill-content {
+  padding: 0;
+}

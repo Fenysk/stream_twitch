@@ -22,8 +22,21 @@ export const TWITCH_TOPIC_SPECS: Readonly<
   },
 };
 
-// Les droits que le renard demande à Alexis, séparés par des espaces : un par abonnement.
-export const TWITCH_SCOPE = TWITCH_TOPICS.map((topic) => TWITCH_TOPIC_SPECS[topic].scope).join(" ");
+// Le droit d'écrire dans le chat au nom d'Alexis (`POST /helix/chat/messages`), pour « Écrire » dans la régie du téléphone. Ce n'est pas
+// un abonnement EventSub : il n'est pas un topic, et un jeton qui ne l'a pas écoute tout comme avant.
+export const TWITCH_CHAT_SCOPE = "user:write:chat";
+
+// Le droit de lire la liste des personnes connectées au chat (`GET /helix/chat/chatters`, le compte d'Alexis en modérateur de sa chaîne),
+// pour la liste des viewers de la régie. Comme le précédent, ce n'est pas un topic EventSub.
+export const TWITCH_CHAT_VIEWERS_SCOPE = "moderator:read:chatters";
+
+// Les droits que le renard demande à Alexis, séparés par des espaces : un par abonnement, puis celui d'écrire dans le chat et celui de
+// lire qui s'y trouve.
+export const TWITCH_SCOPE = [
+  ...TWITCH_TOPICS.map((topic) => TWITCH_TOPIC_SPECS[topic].scope),
+  TWITCH_CHAT_SCOPE,
+  TWITCH_CHAT_VIEWERS_SCOPE,
+].join(" ");
 
 // Où Twitch renvoie le navigateur après l'autorisation. Twitch le compare à la lettre à l'adresse enregistrée dans l'application :
 // il est écrit ici en entier, port compris.
@@ -49,6 +62,12 @@ export const isTokenFresh = ({ expiresAt }: Pick<TwitchToken, "expiresAt">, now:
   now < expiresAt - RENEW_BEFORE_MS;
 
 const hasScope = (granted: string, scope: string): boolean => granted.split(/\s+/).includes(scope);
+
+// Le jeton peut écrire dans le chat : Twitch a donné `user:write:chat` (un jeton d'avant ne l'a pas).
+export const hasChatScope = (scope: string): boolean => hasScope(scope, TWITCH_CHAT_SCOPE);
+
+// Le jeton peut lire la liste du chat : Twitch a donné `moderator:read:chatters` (un jeton d'avant ne l'a pas).
+export const hasChatViewersScope = (scope: string): boolean => hasScope(scope, TWITCH_CHAT_VIEWERS_SCOPE);
 
 // Le droit de voir les follows fait partie de ceux que Twitch a donnés : sans lui, la connexion ne sert à rien.
 export const hasTwitchScope = (scope: string): boolean => hasScope(scope, TWITCH_TOPIC_SPECS.follow.scope);

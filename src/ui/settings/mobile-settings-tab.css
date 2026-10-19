@@ -1,0 +1,73 @@
+/* L'onglet « Mobile » : les QR codes, les adresses des sources OBS et la liste des téléphones */
+
+.mobile-qr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+.mobile-qr {
+  margin: 0;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.mobile-qr-code {
+  display: block;
+  width: 160px;
+  height: 160px;
+  border-radius: var(--radius-sm);
+}
+
+.mobile-qr-url {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.mobile-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mobile-address {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  border-radius: calc(var(--control-size) / 2);
+  background: var(--chip);
+}
+
+.mobile-address-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.mobile-address-url {
+  grid-column: 1;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.mobile-address .lp-btn {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.mobile-phone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  border-radius: calc(var(--control-size) / 2);
+  background: var(--chip);
+}

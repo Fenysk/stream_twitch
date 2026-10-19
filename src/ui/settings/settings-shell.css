@@ -11,6 +11,7 @@
 @import "./live-tab.css";
 @import "./rewards-tab.css";
 @import "./show-tab.css";
+@import "./mobile-settings-tab.css";
 @import "../clips/clip-editor.css";
 @import "../clips/clip-timeline.css";
 @import "../chat/chat.css";

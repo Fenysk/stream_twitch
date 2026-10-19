@@ -12,6 +12,7 @@ import {
   PawPrint,
   Radio,
   Scissors,
+  Smartphone,
   Smile,
   Tv,
 } from "lucide-react";
@@ -33,6 +34,7 @@ export const SECTION_GROUPS = [
       { id: "sounds", label: "Sons", icon: AudioLines, path: "/settings/sounds" },
       { id: "rewards", label: "Points de chaîne", icon: Coins, path: "/settings/rewards" },
       { id: "show", label: "Émission", icon: Film, path: "/settings/show" },
+      { id: "mobile", label: "Mobile", icon: Smartphone, path: "/settings/mobile" },
     ],
   },
   {

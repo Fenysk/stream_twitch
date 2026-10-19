@@ -2,9 +2,9 @@
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "UUID": "com.fenysk.stream-twitch",
   "Name": "Stream Twitch",
-  "Version": "0.3.0.0",
+  "Version": "0.4.0.0",
   "Author": "Fenysk",
-  "Description": "Pilote le serveur local de Stream Twitch depuis des touches : le nombre de viewers, des interrupteurs, des cycles de valeurs et des préréglages qui montrent l'état réel des réglages, des phrases pour Jean-Renard, et l'heure de fin du live réglée par crans de 10 min.",
+  "Description": "Pilote le serveur local de Stream Twitch depuis des touches : le nombre de viewers, des interrupteurs, des cycles de valeurs et des préréglages qui montrent l'état réel des réglages, des phrases pour Jean-Renard, l'heure de fin du live réglée par crans de 10 min, et qui est à l'image (PC, une caméra, Tête).",
   "Icon": "imgs/plugin/icon",
   "Category": "Stream Twitch",
   "CategoryIcon": "imgs/plugin/category",
@@ -149,6 +149,23 @@
       "States": [
         {
           "Image": "imgs/actions/end-sooner/key",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#f6e8e0",
+          "FontSize": 12,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "UUID": "com.fenysk.stream-twitch.picture",
+      "Name": "Image",
+      "Tooltip": "Montre qui est à l'image (PC, une caméra, Tête), à l'instant où il change. Appuyer passe au suivant : PC, les caméras disponibles, Tête, puis PC ; le micro suit.",
+      "Icon": "imgs/actions/picture/icon",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/picture/key",
           "TitleAlignment": "bottom",
           "TitleColor": "#f6e8e0",
           "FontSize": 12,

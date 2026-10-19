@@ -14,14 +14,17 @@ import { Route as ChatRouteImport } from './routes/chat'
 import { Route as CountdownRouteImport } from './routes/countdown'
 import { Route as FoxRouteImport } from './routes/fox'
 import { Route as HeadRouteImport } from './routes/head'
+import { Route as MobileRouteImport } from './routes/mobile'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ShowRouteImport } from './routes/show'
 import { Route as SoundsRouteImport } from './routes/sounds'
+import { Route as CameraNumberRouteImport } from './routes/camera/$number'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsChatRouteImport } from './routes/settings.chat'
 import { Route as SettingsCutRouteImport } from './routes/settings.cut'
 import { Route as SettingsFoxRouteImport } from './routes/settings.fox'
 import { Route as SettingsHeadRouteImport } from './routes/settings.head'
+import { Route as SettingsMobileRouteImport } from './routes/settings.mobile'
 import { Route as SettingsRewardsRouteImport } from './routes/settings.rewards'
 import { Route as SettingsShowRouteImport } from './routes/settings.show'
 import { Route as SettingsSoundsRouteImport } from './routes/settings.sounds'
@@ -52,6 +55,11 @@ const HeadRoute = HeadRouteImport.update({
   path: '/head',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MobileRoute = MobileRouteImport.update({
+  id: '/mobile',
+  path: '/mobile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -65,6 +73,11 @@ const ShowRoute = ShowRouteImport.update({
 const SoundsRoute = SoundsRouteImport.update({
   id: '/sounds',
   path: '/sounds',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CameraNumberRoute = CameraNumberRouteImport.update({
+  id: '/camera/$number',
+  path: '/camera/$number',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
@@ -90,6 +103,11 @@ const SettingsFoxRoute = SettingsFoxRouteImport.update({
 const SettingsHeadRoute = SettingsHeadRouteImport.update({
   id: '/head',
   path: '/head',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsMobileRoute = SettingsMobileRouteImport.update({
+  id: '/mobile',
+  path: '/mobile',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsRewardsRoute = SettingsRewardsRouteImport.update({
@@ -119,13 +137,16 @@ export interface FileRoutesByFullPath {
   '/countdown': typeof CountdownRoute
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
+  '/mobile': typeof MobileRoute
   '/settings': typeof SettingsRouteWithChildren
   '/show': typeof ShowRoute
   '/sounds': typeof SoundsRoute
+  '/camera/$number': typeof CameraNumberRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
+  '/settings/mobile': typeof SettingsMobileRoute
   '/settings/rewards': typeof SettingsRewardsRoute
   '/settings/show': typeof SettingsShowRoute
   '/settings/sounds': typeof SettingsSoundsRoute
@@ -138,12 +159,15 @@ export interface FileRoutesByTo {
   '/countdown': typeof CountdownRoute
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
+  '/mobile': typeof MobileRoute
   '/show': typeof ShowRoute
   '/sounds': typeof SoundsRoute
+  '/camera/$number': typeof CameraNumberRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
+  '/settings/mobile': typeof SettingsMobileRoute
   '/settings/rewards': typeof SettingsRewardsRoute
   '/settings/show': typeof SettingsShowRoute
   '/settings/sounds': typeof SettingsSoundsRoute
@@ -157,13 +181,16 @@ export interface FileRoutesById {
   '/countdown': typeof CountdownRoute
   '/fox': typeof FoxRoute
   '/head': typeof HeadRoute
+  '/mobile': typeof MobileRoute
   '/settings': typeof SettingsRouteWithChildren
   '/show': typeof ShowRoute
   '/sounds': typeof SoundsRoute
+  '/camera/$number': typeof CameraNumberRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
   '/settings/head': typeof SettingsHeadRoute
+  '/settings/mobile': typeof SettingsMobileRoute
   '/settings/rewards': typeof SettingsRewardsRoute
   '/settings/show': typeof SettingsShowRoute
   '/settings/sounds': typeof SettingsSoundsRoute
@@ -178,13 +205,16 @@ export interface FileRouteTypes {
     | '/countdown'
     | '/fox'
     | '/head'
+    | '/mobile'
     | '/settings'
     | '/show'
     | '/sounds'
+    | '/camera/$number'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
     | '/settings/head'
+    | '/settings/mobile'
     | '/settings/rewards'
     | '/settings/show'
     | '/settings/sounds'
@@ -197,12 +227,15 @@ export interface FileRouteTypes {
     | '/countdown'
     | '/fox'
     | '/head'
+    | '/mobile'
     | '/show'
     | '/sounds'
+    | '/camera/$number'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
     | '/settings/head'
+    | '/settings/mobile'
     | '/settings/rewards'
     | '/settings/show'
     | '/settings/sounds'
@@ -215,13 +248,16 @@ export interface FileRouteTypes {
     | '/countdown'
     | '/fox'
     | '/head'
+    | '/mobile'
     | '/settings'
     | '/show'
     | '/sounds'
+    | '/camera/$number'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
     | '/settings/head'
+    | '/settings/mobile'
     | '/settings/rewards'
     | '/settings/show'
     | '/settings/sounds'
@@ -235,9 +271,11 @@ export interface RootRouteChildren {
   CountdownRoute: typeof CountdownRoute
   FoxRoute: typeof FoxRoute
   HeadRoute: typeof HeadRoute
+  MobileRoute: typeof MobileRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   ShowRoute: typeof ShowRoute
   SoundsRoute: typeof SoundsRoute
+  CameraNumberRoute: typeof CameraNumberRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -277,6 +315,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HeadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mobile': {
+      id: '/mobile'
+      path: '/mobile'
+      fullPath: '/mobile'
+      preLoaderRoute: typeof MobileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -296,6 +341,13 @@ declare module '@tanstack/react-router' {
       path: '/sounds'
       fullPath: '/sounds'
       preLoaderRoute: typeof SoundsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/camera/$number': {
+      id: '/camera/$number'
+      path: '/camera/$number'
+      fullPath: '/camera/$number'
+      preLoaderRoute: typeof CameraNumberRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/': {
@@ -331,6 +383,13 @@ declare module '@tanstack/react-router' {
       path: '/head'
       fullPath: '/settings/head'
       preLoaderRoute: typeof SettingsHeadRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/mobile': {
+      id: '/settings/mobile'
+      path: '/mobile'
+      fullPath: '/settings/mobile'
+      preLoaderRoute: typeof SettingsMobileRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/rewards': {
@@ -369,6 +428,7 @@ interface SettingsRouteChildren {
   SettingsCutRoute: typeof SettingsCutRoute
   SettingsFoxRoute: typeof SettingsFoxRoute
   SettingsHeadRoute: typeof SettingsHeadRoute
+  SettingsMobileRoute: typeof SettingsMobileRoute
   SettingsRewardsRoute: typeof SettingsRewardsRoute
   SettingsShowRoute: typeof SettingsShowRoute
   SettingsSoundsRoute: typeof SettingsSoundsRoute
@@ -381,6 +441,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsCutRoute: SettingsCutRoute,
   SettingsFoxRoute: SettingsFoxRoute,
   SettingsHeadRoute: SettingsHeadRoute,
+  SettingsMobileRoute: SettingsMobileRoute,
   SettingsRewardsRoute: SettingsRewardsRoute,
   SettingsShowRoute: SettingsShowRoute,
   SettingsSoundsRoute: SettingsSoundsRoute,
@@ -398,9 +459,11 @@ const rootRouteChildren: RootRouteChildren = {
   CountdownRoute: CountdownRoute,
   FoxRoute: FoxRoute,
   HeadRoute: HeadRoute,
+  MobileRoute: MobileRoute,
   SettingsRoute: SettingsRouteWithChildren,
   ShowRoute: ShowRoute,
   SoundsRoute: SoundsRoute,
+  CameraNumberRoute: CameraNumberRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
