@@ -90,7 +90,7 @@
   height: 16px;
 }
 
-/* L'antenne : la vignette 16:9 d'un tiers du bandeau, centrée en face de la légende (un bouton qui ouvre la feuille), et la même image en
+/* L'antenne : la vignette 16:9 d'un tiers du bandeau (220 px au plus, en paysage), centrée en face de la légende (un bouton qui ouvre la feuille), et la même image en
    grand dans la feuille. La légende garde le reste : assez pour « Live 3:05:41 · 128 » à côté du coin de la Régie. */
 .monitor-thumbnail,
 .monitor-large {
@@ -104,7 +104,7 @@
 
 .monitor-thumbnail {
   flex: none;
-  width: 36%;
+  width: min(36%, 220px);
   padding: 0;
   border: 0;
   cursor: pointer;

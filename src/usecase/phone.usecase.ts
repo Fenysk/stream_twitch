@@ -1,15 +1,14 @@
-import { hasCamera, toNextNumber } from "../domain/camera.rules";
+import { toNextNumber } from "../domain/camera.rules";
 import type {
   LinkRequest,
   PhoneEvent,
-  PhoneRole,
   PhoneSummary,
   ScreenEvent,
   Signal,
   SignalRequest,
 } from "../domain/phone.schema";
 
-export type PhoneOpening = { id: string; role: PhoneRole; number?: number | undefined };
+export type PhoneOpening = { id: string; number?: number | undefined };
 export type ScreenOpening = { id: string; number: number };
 
 export type NumberResult = { ok: true; number: number } | { ok: false; status: 404 | 409; message: string };
@@ -23,8 +22,9 @@ export type RelayResult = { ok: true; isDelivered: boolean } | { ok: false; stat
 export type PhonesDeps = { log: (message: string) => void };
 
 export type Phones = {
-  // Un téléphone ouvre son flux : il prend un numéro de caméra si son rôle en a une (celui qu'il avait gardé s'il est libre), et
-  // apprend la page OBS de ce numéro. Rend de quoi fermer le flux. Le même identifiant remplace son ancienne connexion.
+  // Un téléphone ouvre son flux, sans numéro : il n'en prend un qu'en filmant (`updateLink`). `number` : celui qu'il avait gardé, qu'il
+  // reprend à son premier Filmer s'il est libre. Rend de quoi fermer le flux. Le même identifiant remplace son ancienne connexion, et une
+  // caméra qui se reconnecte garde son numéro.
   openPhone(opening: PhoneOpening, send: (event: PhoneEvent) => void): () => void;
   // Une page OBS ouvre son flux : elle apprend si son téléphone est là. La dernière page ouverte d'un numéro est la page active.
   openScreen(opening: ScreenOpening, send: (event: ScreenEvent) => void): () => void;
@@ -32,22 +32,25 @@ export type Phones = {
   updateNumber(phoneId: string, number: number): NumberResult;
   // Un signal passe du téléphone à la page active de son numéro, ou de la page active à son téléphone.
   relay(request: SignalRequest): RelayResult;
-  // Un côté dit où en est la liaison : le téléphone s'il filme, la page OBS si sa liaison est vive. Le tableau des téléphones le redit.
+  // Un côté dit où en est la liaison : le téléphone s'il est une caméra (Filmer) et s'il envoie une image, la page OBS si sa liaison est vive.
+  // Filmer donne un numéro au téléphone, l'arrêter le rend, sans rouvrir le flux. Le tableau des téléphones le redit.
   updateLink(request: LinkRequest): LinkResult;
   getState(): PhoneSummary[];
   // Le tableau des téléphones connectés, à chaque changement.
   subscribe(listener: (phones: PhoneSummary[]) => void): () => void;
 };
 
-// `shownScreen` et `isPhoneShown` : ce que le serveur a déjà dit à ce côté (rien : jamais), pour ne pas le répéter. `isFilming` : le
-// téléphone filme (vrai à l'ouverture : seul un téléphone dont la caméra est arrêtée le dit). `isLinked` : la liaison de la page OBS avec
-// son téléphone est vive (faux à l'ouverture : la page le dit quand la mise en relation est faite).
+// `shownScreen` et `isPhoneShown` : ce que le serveur a déjà dit à ce côté (rien : jamais), pour ne pas le répéter. `isCamera` : Filmer est
+// appuyé, le téléphone a un numéro (faux à l'ouverture, sauf pour une caméra qui se reconnecte). `wanted` : le numéro qu'il voudrait au
+// prochain Filmer (celui gardé, puis le dernier tenu). `isFilming` : sa caméra envoie une image (faux à l'ouverture : le téléphone le dit).
+// `isLinked` : la liaison de la page OBS avec son téléphone est vive (faux à l'ouverture : la page le dit quand la mise en relation est faite).
 type PhoneEntry = {
   id: string;
-  role: PhoneRole;
   number: number | null;
+  wanted: number | undefined;
   send: (event: PhoneEvent) => void;
   shownScreen: string | null | undefined;
+  isCamera: boolean;
   isFilming: boolean;
 };
 
@@ -83,7 +86,6 @@ const toSummaries = (roster: Roster): PhoneSummary[] =>
   [...roster.phones.values()]
     .map((phone) => ({
       id: phone.id,
-      role: phone.role,
       number: phone.number,
       hasScreen: phone.number !== null && roster.screens.some((screen) => screen.number === phone.number),
       isReceiving: isReceivingImage(roster, phone),
@@ -110,22 +112,15 @@ const notify = (roster: Roster, number: number | null): void => {
   }
 };
 
-// Le numéro gardé s'il est libre, sinon le plus petit libre ; aucun pour un rôle sans caméra. Le téléphone qui revient ne prend pas
-// son propre numéro pour un conflit.
-const assignNumber = (
-  roster: Roster,
-  id: string,
-  role: PhoneRole,
-  wanted: number | undefined,
-): number | null => {
-  if (!hasCamera(role)) return null;
+// Le numéro voulu s'il est libre, sinon le plus petit libre. Le téléphone qui revient ne prend pas son propre numéro pour un conflit.
+const assignNumber = (roster: Roster, id: string, wanted: number | undefined): number => {
   const taken = [...roster.phones.values()].flatMap((phone) =>
     phone.id !== id && phone.number !== null ? [phone.number] : [],
   );
   return wanted !== undefined && !taken.includes(wanted) ? wanted : toNextNumber(taken);
 };
 
-const toPhoneName = ({ id, role }: PhoneEntry): string => `Téléphone ${id.slice(0, 4)} (${role})`;
+const toPhoneName = ({ id }: PhoneEntry): string => `Téléphone ${id.slice(0, 4)}`;
 
 const relayFromPhone = (roster: Roster, phoneId: string, signal: Signal): RelayResult => {
   const phone = roster.phones.get(phoneId);
@@ -144,12 +139,45 @@ const relayFromScreen = (roster: Roster, screenId: string, signal: Signal): Rela
   return { ok: true, isDelivered: phone !== undefined };
 };
 
-// Le téléphone dit s'il filme, la page OBS dit si sa liaison est vive : rend si cela change quelque chose, `null` quand l'envoyeur est inconnu.
-const updateFilming = (roster: Roster, phoneId: string, isFilming: boolean): boolean | null => {
+// Filmer : le téléphone prend un numéro (celui voulu s'il est libre, sinon le plus petit libre), le dit et apprend la page OBS de ce numéro.
+const startCamera = (roster: Roster, phone: PhoneEntry): number => {
+  const number = assignNumber(roster, phone.id, phone.wanted);
+  phone.isCamera = true;
+  phone.number = number;
+  phone.wanted = number;
+  phone.shownScreen = undefined;
+  phone.send({ kind: "number", number });
+  notify(roster, number);
+  return number;
+};
+
+// Arrêter de filmer : le téléphone rend son numéro (il le voudra au prochain Filmer), le sait, et la page OBS apprend qu'il est parti.
+const stopCamera = (roster: Roster, phone: PhoneEntry): number | null => {
+  const previous = phone.number;
+  phone.isCamera = false;
+  phone.number = null;
+  phone.shownScreen = undefined;
+  phone.send({ kind: "number", number: null });
+  notify(roster, previous);
+  return previous;
+};
+
+// Le téléphone dit s'il est une caméra et s'il envoie une image : rend si cela change quelque chose, `null` quand il est inconnu. Une image
+// ne s'envoie que d'une caméra : `isFilming` sans `isCamera` vaut faux.
+const updateFilming = (
+  roster: Roster,
+  { phoneId, isCamera, isFilming }: Extract<LinkRequest, { from: "phone" }>,
+  log: (message: string) => void,
+): boolean | null => {
   const phone = roster.phones.get(phoneId);
   if (!phone) return null;
-  const isChanged = phone.isFilming !== isFilming;
-  phone.isFilming = isFilming;
+  const isSending = isCamera && isFilming;
+  const isChanged = phone.isCamera !== isCamera || phone.isFilming !== isSending;
+  if (isCamera && !phone.isCamera) log(`${toPhoneName(phone)} filme : caméra ${startCamera(roster, phone)}.`);
+  if (!isCamera && phone.isCamera) {
+    log(`${toPhoneName(phone)} ne filme plus (caméra ${stopCamera(roster, phone)} rendue).`);
+  }
+  phone.isFilming = isSending;
   return isChanged;
 };
 
@@ -171,18 +199,25 @@ export function createPhones({ log }: PhonesDeps): Phones {
   };
 
   return {
-    openPhone({ id, role, number: wanted }, send) {
+    openPhone({ id, number: wanted }, send) {
       const previous = roster.phones.get(id);
+      const isCamera = previous?.isCamera ?? false;
       const entry: PhoneEntry = {
         id,
-        role,
-        number: assignNumber(roster, id, role, wanted),
+        number: null,
+        wanted: previous?.number ?? wanted,
         send,
         shownScreen: undefined,
-        isFilming: true,
+        isCamera,
+        isFilming: false,
       };
       roster.phones.set(id, entry);
-      send({ kind: "number", number: entry.number });
+      // Une caméra qui se reconnecte garde son numéro sans trou : un autre téléphone n'y prend pas sa place.
+      if (isCamera) {
+        entry.number = assignNumber(roster, id, entry.wanted);
+        entry.wanted = entry.number;
+        send({ kind: "number", number: entry.number });
+      }
       notify(roster, entry.number);
       if (previous && previous.number !== entry.number) notify(roster, previous.number);
       publish();
@@ -213,7 +248,7 @@ export function createPhones({ log }: PhonesDeps): Phones {
       const phone = roster.phones.get(phoneId);
       if (!phone) return { ok: false, status: 404, message: NOT_FOUND_PHONE };
       const previous = phone.number;
-      if (previous === null) return { ok: false, status: 409, message: "ce rôle n'a pas de caméra" };
+      if (previous === null) return { ok: false, status: 409, message: "ce téléphone ne filme pas" };
       if (previous === number) return { ok: true, number };
       if (getPhoneOf(roster, number)) {
         return {
@@ -223,6 +258,7 @@ export function createPhones({ log }: PhonesDeps): Phones {
         };
       }
       phone.number = number;
+      phone.wanted = number;
       phone.shownScreen = undefined;
       phone.send({ kind: "number", number });
       notify(roster, previous);
@@ -238,7 +274,7 @@ export function createPhones({ log }: PhonesDeps): Phones {
     updateLink(request) {
       const isChanged =
         request.from === "phone"
-          ? updateFilming(roster, request.phoneId, request.isFilming)
+          ? updateFilming(roster, request, log)
           : updateLinked(roster, request.screenId, request.isLinked);
       if (isChanged === null) {
         return {

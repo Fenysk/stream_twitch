@@ -9,17 +9,26 @@ const ANSWER: Signal = { kind: "answer", session: "session-0001", description: "
 const setup = () => {
   const logs: string[] = [];
   const phones = createPhones({ log: (line) => logs.push(line) });
-  const connectPhone = (id: string, role: PhoneRole = "camera", number?: number) => {
+  // Ouvre le flux d'un téléphone : sans numéro tant qu'il ne filme pas. Une Caméra ou un Selfie filme dès l'ouverture (`role` ne sert qu'à le
+  // dire) : son téléphone appuie sur Filmer par la liaison, le flux reste le même.
+  const openPhone = (id: string, number?: number) => {
     const events: PhoneEvent[] = [];
-    const close = phones.openPhone({ id, role, number }, (event) => events.push(event));
+    const close = phones.openPhone({ id, number }, (event) => events.push(event));
     return { events, close };
+  };
+  const updateFilm = (id: string, isCamera: boolean, isFilming = isCamera) =>
+    phones.updateLink({ from: "phone", phoneId: id, isCamera, isFilming });
+  const connectPhone = (id: string, role: PhoneRole = "camera", number?: number) => {
+    const phone = openPhone(id, number);
+    if (role !== "control") updateFilm(id, true);
+    return phone;
   };
   const connectScreen = (id: string, number: number) => {
     const events: ScreenEvent[] = [];
     const close = phones.openScreen({ id, number }, (event) => events.push(event));
     return { events, close };
   };
-  return { phones, logs, connectPhone, connectScreen };
+  return { phones, logs, openPhone, updateFilm, connectPhone, connectScreen };
 };
 
 const numbersOf = (events: PhoneEvent[]): (number | null)[] =>
@@ -53,7 +62,7 @@ describe("Les numéros de caméra", () => {
   it("donne un numéro au Selfie comme à la caméra, et aucun à la régie", () => {
     const { connectPhone } = setup();
     expect(numbersOf(connectPhone("phone-aaaa", "selfie").events)).toEqual([1]);
-    expect(numbersOf(connectPhone("phone-bbbb", "control").events)).toEqual([null]);
+    expect(numbersOf(connectPhone("phone-bbbb", "control").events)).toEqual([]);
     expect(numbersOf(connectPhone("phone-cccc", "camera").events)).toEqual([2]);
   });
 
@@ -267,16 +276,16 @@ describe("Le passage des signaux", () => {
 });
 
 describe("Les téléphones connectés", () => {
-  it("liste chaque téléphone avec son rôle, son numéro et sa page OBS, dans l'ordre des numéros", () => {
+  it("liste chaque téléphone avec son numéro (aucun s'il ne filme pas) et sa page OBS, dans l'ordre des numéros", () => {
     const { phones, connectPhone, connectScreen } = setup();
     connectPhone("phone-cccc", "control");
     connectPhone("phone-bbbb", "selfie", 2);
     connectPhone("phone-aaaa", "camera", 1);
     connectScreen("screen-0001", 1);
     expect(phones.getState()).toEqual([
-      { id: "phone-aaaa", role: "camera", number: 1, hasScreen: true, isReceiving: false },
-      { id: "phone-bbbb", role: "selfie", number: 2, hasScreen: false, isReceiving: false },
-      { id: "phone-cccc", role: "control", number: null, hasScreen: false, isReceiving: false },
+      { id: "phone-aaaa", number: 1, hasScreen: true, isReceiving: false },
+      { id: "phone-bbbb", number: 2, hasScreen: false, isReceiving: false },
+      { id: "phone-cccc", number: null, hasScreen: false, isReceiving: false },
     ]);
   });
 
@@ -289,19 +298,20 @@ describe("Les téléphones connectés", () => {
     phones.updateNumber("phone-aaaa", 2);
     screen.close();
     phone.close();
-    expect(seen).toEqual([1, 1, 1, 1, 0]);
+    expect(seen).toEqual([1, 1, 1, 1, 1, 0]);
     stop();
     connectPhone("phone-bbbb");
-    expect(seen).toHaveLength(5);
+    expect(seen).toHaveLength(6);
   });
 
-  it("dit dans le journal quel téléphone arrive et part, avec son rôle et son numéro", () => {
+  it("dit dans le journal quel téléphone arrive et part, et quand il filme avec son numéro", () => {
     const { logs, connectPhone } = setup();
     const phone = connectPhone("phone-aaaa", "selfie");
     phone.close();
     expect(logs).toEqual([
-      "Téléphone phon (selfie) connecté : caméra 1.",
-      "Téléphone phon (selfie) déconnecté.",
+      "Téléphone phon connecté.",
+      "Téléphone phon filme : caméra 1.",
+      "Téléphone phon déconnecté.",
     ]);
   });
 });
@@ -335,9 +345,9 @@ describe("La liaison qui arrive jusqu'à OBS", () => {
     connectPhone("phone-aaaa");
     connectScreen("screen-0001", 1);
     phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
-    phones.updateLink({ from: "phone", phoneId: "phone-aaaa", isFilming: false });
+    phones.updateLink({ from: "phone", phoneId: "phone-aaaa", isCamera: true, isFilming: false });
     expect(receivingOf(phones)).toEqual([false]);
-    phones.updateLink({ from: "phone", phoneId: "phone-aaaa", isFilming: true });
+    phones.updateLink({ from: "phone", phoneId: "phone-aaaa", isCamera: true, isFilming: true });
     expect(receivingOf(phones)).toEqual([true]);
   });
 
@@ -369,7 +379,7 @@ describe("La liaison qui arrive jusqu'à OBS", () => {
     connectPhone("phone-aaaa");
     connectScreen("screen-0001", 1);
     phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
-    phones.updateLink({ from: "phone", phoneId: "phone-aaaa", isFilming: false });
+    phones.updateLink({ from: "phone", phoneId: "phone-aaaa", isCamera: true, isFilming: false });
     connectPhone("phone-aaaa");
     expect(receivingOf(phones)).toEqual([true]);
   });
@@ -384,7 +394,9 @@ describe("La liaison qui arrive jusqu'à OBS", () => {
     const { phones } = setup();
     const seen: number[] = [];
     phones.subscribe((list) => seen.push(list.length));
-    expect(phones.updateLink({ from: "phone", phoneId: "phone-zzzz", isFilming: false })).toEqual({
+    expect(
+      phones.updateLink({ from: "phone", phoneId: "phone-zzzz", isCamera: false, isFilming: false }),
+    ).toEqual({
       ok: false,
       status: 404,
       message: "téléphone inconnu : rouvre /mobile",
@@ -405,7 +417,124 @@ describe("La liaison qui arrive jusqu'à OBS", () => {
     phones.subscribe((list) => notices.push(list.map(({ isReceiving }) => String(isReceiving)).join(",")));
     phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
     phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
-    phones.updateLink({ from: "phone", phoneId: "phone-aaaa", isFilming: true });
+    phones.updateLink({ from: "phone", phoneId: "phone-aaaa", isCamera: true, isFilming: true });
     expect(notices).toEqual(["true"]);
+  });
+});
+
+describe("Filmer : un téléphone, un seul flux qui filme ou non", () => {
+  it("Quand un téléphone ouvre son flux sans filmer, le système ne doit lui donner aucun numéro et ne rien lui envoyer", () => {
+    const { phones, openPhone } = setup();
+    const phone = openPhone("phone-aaaa");
+    expect(phone.events).toEqual([]);
+    expect(phones.getState()).toEqual([
+      { id: "phone-aaaa", number: null, hasScreen: false, isReceiving: false },
+    ]);
+  });
+
+  it("ne donne un numéro qu'au premier Filmer : un téléphone qui ne filme jamais n'en prend pas", () => {
+    const { phones, openPhone, updateFilm } = setup();
+    openPhone("phone-aaaa");
+    const camera = openPhone("phone-bbbb");
+    expect(updateFilm("phone-bbbb", true, false)).toEqual({ ok: true });
+    expect(numbersOf(camera.events)).toEqual([1]);
+    expect(phones.getState().map(({ id, number }) => `${id}:${number}`)).toEqual([
+      "phone-bbbb:1",
+      "phone-aaaa:null",
+    ]);
+  });
+
+  it("Quand un téléphone filme, le système doit le dire sur le même flux, avec la page OBS du numéro, sans l'ouvrir de nouveau", () => {
+    const { openPhone, updateFilm, connectScreen } = setup();
+    connectScreen("screen-0001", 1);
+    const phone = openPhone("phone-aaaa");
+    updateFilm("phone-aaaa", true, false);
+    expect(phone.events).toEqual([
+      { kind: "number", number: 1 },
+      { kind: "screen", screenId: "screen-0001" },
+    ]);
+  });
+
+  it("prend le numéro que le téléphone a gardé à l'ouverture, s'il est libre, au premier Filmer", () => {
+    const { openPhone, updateFilm } = setup();
+    const phone = openPhone("phone-aaaa", 4);
+    expect(numbersOf(phone.events)).toEqual([]);
+    updateFilm("phone-aaaa", true);
+    expect(numbersOf(phone.events)).toEqual([4]);
+  });
+
+  it("Quand le téléphone arrête de filmer, le système doit rendre son numéro, le dire (number: null) et prévenir la page OBS qu'il est parti", () => {
+    const { phones, openPhone, updateFilm, connectScreen } = setup();
+    const screen = connectScreen("screen-0001", 1);
+    const phone = openPhone("phone-aaaa");
+    updateFilm("phone-aaaa", true);
+    updateFilm("phone-aaaa", false);
+    expect(numbersOf(phone.events)).toEqual([1, null]);
+    expect(phone.events.at(-1)).toEqual({ kind: "number", number: null });
+    expect(screen.events.at(-1)).toEqual({ kind: "phone", isPresent: false });
+    expect(phones.getState()).toEqual([
+      { id: "phone-aaaa", number: null, hasScreen: false, isReceiving: false },
+    ]);
+  });
+
+  it("rend le même numéro au prochain Filmer, s'il est libre, sinon le plus petit libre", () => {
+    const { openPhone, updateFilm } = setup();
+    const first = openPhone("phone-aaaa");
+    updateFilm("phone-aaaa", true);
+    updateFilm("phone-aaaa", false);
+    updateFilm("phone-aaaa", true);
+    expect(numbersOf(first.events)).toEqual([1, null, 1]);
+    updateFilm("phone-aaaa", false);
+    const second = openPhone("phone-bbbb");
+    updateFilm("phone-bbbb", true);
+    updateFilm("phone-aaaa", true);
+    expect(numbersOf(second.events)).toEqual([1]);
+    expect(numbersOf(first.events)).toEqual([1, null, 1, null, 2]);
+  });
+
+  it("garde le numéro et l'état d'une caméra quand son téléphone rouvre le flux : aucun trou où un autre prendrait sa place", () => {
+    const { phones, openPhone, updateFilm } = setup();
+    openPhone("phone-aaaa");
+    updateFilm("phone-aaaa", true);
+    const reopened = openPhone("phone-aaaa");
+    expect(numbersOf(reopened.events)).toEqual([1]);
+    expect(phones.getState().map(({ id, number }) => `${id}:${number}`)).toEqual(["phone-aaaa:1"]);
+    updateFilm("phone-aaaa", true);
+    expect(numbersOf(reopened.events)).toEqual([1]);
+  });
+
+  it("n'affirme pas qu'un téléphone envoie une image sans qu'il filme : isFilming seul ne suffit pas", () => {
+    const { phones, openPhone, updateFilm, connectScreen } = setup();
+    openPhone("phone-aaaa");
+    connectScreen("screen-0001", 1);
+    phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
+    updateFilm("phone-aaaa", false, true);
+    expect(phones.getState().map(({ isReceiving }) => isReceiving)).toEqual([false]);
+  });
+
+  it("refuse (409) un changement de numéro à un téléphone qui ne filme pas, et ne publie que les vrais changements de Filmer", () => {
+    const { phones, openPhone, updateFilm } = setup();
+    openPhone("phone-aaaa");
+    expect(phones.updateNumber("phone-aaaa", 3)).toMatchObject({ ok: false, status: 409 });
+    const seen: number[] = [];
+    phones.subscribe((list) => seen.push(list.length));
+    updateFilm("phone-aaaa", true);
+    updateFilm("phone-aaaa", true);
+    updateFilm("phone-aaaa", true, false);
+    updateFilm("phone-aaaa", false);
+    updateFilm("phone-aaaa", false);
+    expect(seen).toEqual([1, 1, 1]);
+  });
+
+  it("dit dans le journal qu'un téléphone arrête de filmer", () => {
+    const { logs, openPhone, updateFilm } = setup();
+    openPhone("phone-aaaa");
+    updateFilm("phone-aaaa", true);
+    updateFilm("phone-aaaa", false);
+    expect(logs).toEqual([
+      "Téléphone phon connecté.",
+      "Téléphone phon filme : caméra 1.",
+      "Téléphone phon ne filme plus (caméra 1 rendue).",
+    ]);
   });
 });

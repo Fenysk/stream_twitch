@@ -26,11 +26,11 @@ import { updateMic } from "../control-api";
 import type { ToastTone } from "../design/toast-announcement";
 import type { ShownAlert } from "./alert-line";
 import { toAlertActionLabel, toAlertText } from "./alert-text";
+import type { CameraStatus } from "./camera-control";
 import { toSentence } from "./control-keys";
-import { isMicMuted, toMicName } from "./control-view";
+import { type ControlView, isMicMuted, toMicName } from "./control-view";
 import { getStopAskedAt } from "./stop-asked";
-import type { CameraStatus, CameraStream } from "./use-camera-stream";
-import type { ControlView } from "./use-control-state";
+import type { CameraStream } from "./use-camera-stream";
 import type { PhoneLink } from "./use-phone-link";
 
 // Ce téléphone qui filme (Selfie, Caméra) : sa caméra (son état, et `restart` la relance), le plan et son numéro (la liaison), et le geste

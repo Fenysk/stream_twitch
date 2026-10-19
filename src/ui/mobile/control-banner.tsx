@@ -3,9 +3,8 @@ import { Button } from "../design/button";
 import { classNames } from "../design/class-names";
 import { useNow } from "../settings/use-now";
 import type { BannerMenu } from "./banner-menus";
-import { toAntennaText, toLiveLineText } from "./control-view";
+import { type ControlView, toAntennaText, toLiveLineText } from "./control-view";
 import { RedDot } from "./red-dot";
-import type { ControlView } from "./use-control-state";
 
 // `openMenu` : la feuille que le bandeau a ouverte, s'il en a une (le bouton de sa ligne le dit) ; `onOpenMenu` ouvre celle d'une ligne.
 // `children` : ce qui finit le bandeau, à droite de la légende (le coin qui change de rôle sur la Régie, rien sous l'aperçu du Selfie).

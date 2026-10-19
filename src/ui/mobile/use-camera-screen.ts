@@ -18,7 +18,7 @@ export const useCameraScreen = (number: number): MediaStream | null => {
       send: createSignalSender({ from: "screen", screenId: id }),
       onStream: setStream,
       // Le serveur n'offre l'image de cette caméra que si la liaison avec son téléphone est vive.
-      onLink: createLinkReporter({ from: "screen", screenId: id }),
+      onLink: createLinkReporter(id),
       log: (message) => console.warn(message),
     });
     const stop = watchScreen(id, number, (event) => {

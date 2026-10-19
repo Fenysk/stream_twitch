@@ -1,4 +1,4 @@
-import type { CameraStatus } from "./use-camera-stream";
+import type { CameraStatus } from "./camera-control";
 
 type Notice = { title: string; hint: string; action: string | null };
 

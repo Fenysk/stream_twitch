@@ -11,7 +11,6 @@ import {
   PHONE_STALE_MS,
   type PhoneEvent,
   PhoneEventSchema,
-  type PhoneRole,
   type ScreenEvent,
   ScreenEventSchema,
   type Signal,
@@ -80,7 +79,6 @@ const watchStream = <Payload>(
 
 type PhoneWatch = {
   id: string;
-  role: PhoneRole;
   // Le numéro de caméra que le téléphone a gardé, relu à chaque ouverture du flux.
   getNumber: () => number | null;
   onEvent: (event: PhoneEvent) => void;
@@ -90,12 +88,13 @@ type PhoneWatch = {
   onStale: (isStale: boolean) => void;
 };
 
-// Le flux d'un téléphone : son numéro, la page OBS de ce numéro et les signaux de cette page, et un battement qui dit qu'il est vivant.
-export const watchPhone = ({ id, role, getNumber, onEvent, onOpen, onStale }: PhoneWatch): (() => void) =>
+// Le flux d'un téléphone, ouvert une fois qu'il filme ou non : l'état de la régie et un battement qui dit qu'il est vivant, puis, quand il
+// filme, son numéro, la page OBS de ce numéro et les signaux de cette page.
+export const watchPhone = ({ id, getNumber, onEvent, onOpen, onStale }: PhoneWatch): (() => void) =>
   watchStream(
     () => {
       const number = getNumber();
-      const query = new URLSearchParams({ id, role, ...(number === null ? {} : { number: String(number) }) });
+      const query = new URLSearchParams({ id, ...(number === null ? {} : { number: String(number) }) });
       return `/api/mobile/phone?${query}`;
     },
     PhoneEventSchema,
@@ -138,16 +137,11 @@ export const createSignalSender = (source: SignalSource): ((signal: Signal) => v
   };
 };
 
-export type LinkSource = { from: "phone"; phoneId: string } | { from: "screen"; screenId: string };
-
-// Où en est la liaison d'un côté, dite au serveur : le téléphone dit s'il filme, la page OBS si sa liaison est vive. Les messages d'un côté
-// partent un par un, dans l'ordre où ils sont donnés (« vive » puis « perdue » ne se croisent pas). Un refus (le serveur a redémarré : le
-// flux se rouvre, et le côté redit où il en est) n'est que journalisé.
-export const createLinkReporter = (source: LinkSource): ((isUp: boolean) => void) => {
+// Où en est la liaison d'un côté, dite au serveur. Les messages d'un côté partent un par un, dans l'ordre où ils sont donnés (« vive » puis
+// « perdue » ne se croisent pas). Un refus (le serveur a redémarré : le flux se rouvre, et le côté redit où il en est) n'est que journalisé.
+const createLinkSender = (): ((request: LinkRequest) => void) => {
   let chain: Promise<void> = Promise.resolve();
-  return (isUp) => {
-    const request: LinkRequest =
-      source.from === "phone" ? { ...source, isFilming: isUp } : { ...source, isLinked: isUp };
+  return (request) => {
     chain = chain.then(async () => {
       const answer = await ask(
         "/api/mobile/link",
@@ -157,6 +151,20 @@ export const createLinkReporter = (source: LinkSource): ((isUp: boolean) => void
       if (!answer.ok) console.warn("Mobile : liaison non transmise", answer.message);
     });
   };
+};
+
+// La page OBS d'une caméra dit si sa liaison avec le téléphone est vive.
+export const createLinkReporter = (screenId: string): ((isLinked: boolean) => void) => {
+  const send = createLinkSender();
+  return (isLinked) => send({ from: "screen", screenId, isLinked });
+};
+
+// Le téléphone dit s'il est une caméra (Filmer est appuyé) et si sa caméra envoie une image : sans rouvrir son flux.
+export type FilmReport = { isCamera: boolean; isFilming: boolean };
+
+export const createFilmReporter = (phoneId: string): ((report: FilmReport) => void) => {
+  const send = createLinkSender();
+  return (report) => send({ from: "phone", phoneId, ...report });
 };
 
 // Le téléphone prend un autre numéro de caméra : le numéro gardé, ou le refus (déjà pris par un autre téléphone).

@@ -13,6 +13,9 @@ import { useMobileState } from "./use-mobile-state";
 // Le port du serveur du stream, quand l'onglet est ouvert par une adresse sans port (celle de Tailscale).
 const STREAM_PORT = "4747";
 
+// Un téléphone qui ne filme pas n'a pas de numéro : il sert de régie.
+const NO_CAMERA_LABEL = "Régie";
+
 const RoleCodes = ({ origin }: { origin: string | null }) => (
   <SettingsCard title="Ouvrir sur le téléphone">
     {origin === null ? (
@@ -48,11 +51,11 @@ const PhoneList = ({ phones }: { phones: readonly PhoneSummary[] }) => (
       </p>
     ) : (
       <ul className="mobile-list" aria-live="polite">
-        {phones.map(({ id, role, number, hasScreen }) => (
+        {phones.map(({ id, number, hasScreen }) => (
           <li key={id} className="mobile-phone">
-            <span className="lp-type-body">{number === null ? toRoleLabel(role) : toCameraName(number)}</span>
+            <span className="lp-type-body">{number === null ? NO_CAMERA_LABEL : toCameraName(number)}</span>
             <span className="lp-type-caption lp-muted">
-              {toRoleLabel(role)} · téléphone {id.slice(0, 4)}
+              {number === null ? "Ne filme pas" : "Filme"} · téléphone {id.slice(0, 4)}
             </span>
             {number !== null && <Badge label={hasScreen ? "Source OBS connectée" : "Pas de source OBS"} />}
           </li>

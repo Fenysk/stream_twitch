@@ -1,16 +1,21 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { IDLE_CONTROL } from "../../domain/control.schema";
 import type { PictureStanding } from "../../domain/picture.schema";
 import { BlackScreen } from "./black-screen";
 import { CameraBadge, toStatusView } from "./camera-badge";
 import { CameraControls } from "./camera-controls";
 import { CutCameraButton } from "./cut-camera-button";
 import { CutNotice } from "./cut-notice";
-import { LiveMicButton } from "./live-mic-button";
+import { MicButton } from "./mic-button";
 import { MobilePage } from "./mobile-page";
 
+// L'orientation du téléphone, par test : le rendu du serveur la rend toujours en paysage.
+const orientation = vi.hoisted(() => ({ isPortrait: false }));
+
+vi.mock("./use-portrait", () => ({ usePortrait: () => orientation.isPortrait }));
+
 const noop = () => undefined;
-const asyncNoop = async () => null;
 
 describe("toStatusView", () => {
   it("dit où en est la liaison avec OBS tant que la caméra n'y est pas envoyée, à l'antenne ou non", () => {
@@ -27,7 +32,7 @@ describe("toStatusView", () => {
 describe("CameraBadge", () => {
   const badge = (status: "waiting" | "connecting" | "connected", isOnAir: boolean) =>
     renderToStaticMarkup(
-      <CameraBadge number={1} status={status} isOnAir={isOnAir} onUpdateNumber={asyncNoop} />,
+      <CameraBadge number={1} status={status} isOnAir={isOnAir} isOpen={false} onPress={noop} />,
     );
 
   it("montre « À l'antenne » avec un point rouge quand la caméra y est", () => {
@@ -84,7 +89,7 @@ describe("CameraControls : l'écran noir", () => {
     renderToStaticMarkup(
       <CameraControls
         isDisabled={isDisabled}
-        mic={<LiveMicButton isLiveMic isDisabled={isDisabled} onPress={noop} />}
+        mic={<MicButton state={IDLE_CONTROL} ownNumber={null} isExpanded={false} onPress={noop} />}
         onSwitchCamera={noop}
         {...(hasBlackout ? { onBlackout: noop } : {})}
       />,
@@ -95,10 +100,10 @@ describe("CameraControls : l'écran noir", () => {
     expect(controls(true).match(/<button/g)).toHaveLength(3);
   });
 
-  it("n'a que le mic et la caméra sans écran noir, et grise le troisième avec les autres", () => {
+  it("n'a que le mic et la caméra sans écran noir, et grise l'objectif et l'écran noir mais pas le micro : il ouvre une feuille", () => {
     expect(controls(false)).not.toContain("Éteindre");
     expect(controls(false).match(/<button/g)).toHaveLength(2);
-    expect(controls(true, true).match(/disabled=""/g)).toHaveLength(3);
+    expect(controls(true, true).match(/disabled=""/g)).toHaveLength(2);
   });
 });
 
@@ -206,7 +211,9 @@ describe("le témoin « À l'antenne » dans les rôles", () => {
   });
 
   it("met sur le Selfie la marque de l'antenne sur l'aperçu, sans écran noir", () => {
+    orientation.isPortrait = true;
     const html = renderToStaticMarkup(<MobilePage urlRole="selfie" onLeaveUrlRole={noop} />);
+    orientation.isPortrait = false;
     expect(html).toMatch(/class="selfie-preview"[^>]*data-on-air="false"/);
     expect(html).not.toContain("Éteindre l&#x27;écran");
   });

@@ -1,12 +1,28 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { type ControlState, IDLE_CONTROL } from "../../domain/control.schema";
 import { CameraControls } from "./camera-controls";
 import { CameraNotice } from "./camera-notice";
-import { LiveMicButton } from "./live-mic-button";
+import { MicButton } from "./mic-button";
 import { MobilePage } from "./mobile-page";
 import { RolePicker } from "./role-picker";
 
+// L'orientation du téléphone, par test : le rendu du serveur la rend toujours en paysage.
+const orientation = vi.hoisted(() => ({ isPortrait: false }));
+
+vi.mock("./use-portrait", () => ({ usePortrait: () => orientation.isPortrait }));
+
 const noop = () => undefined;
+
+// Le micro du PC et celui de la caméra 1, l'un des deux ouvert.
+const withOpen = (open: string): ControlState => ({
+  ...IDLE_CONTROL,
+  isLinked: true,
+  mics: [
+    { id: "pc", label: "Micro du PC", isOpen: open === "pc", isAvailable: true },
+    { id: "camera-1", label: "Caméra 1", isOpen: open === "camera-1", isAvailable: true },
+  ],
+});
 
 describe("RolePicker", () => {
   it("demande « Ce téléphone sert de… » et propose Caméra, Régie et Selfie avec leur phrase, sans rien présélectionner", () => {
@@ -35,7 +51,9 @@ describe("MobilePage", () => {
   });
 
   it("Quand l'adresse porte ?role=selfie, le système doit ouvrir le Selfie, ni la caméra ni la régie seule", () => {
+    orientation.isPortrait = true;
     const html = renderToStaticMarkup(<MobilePage urlRole="selfie" onLeaveUrlRole={noop} />);
+    orientation.isPortrait = false;
     expect(html).toContain("selfie-role");
     expect(html).not.toContain("camera-role");
     expect(html).not.toContain("Ce téléphone sert de");
@@ -66,7 +84,7 @@ describe("MobilePage", () => {
     const html = renderToStaticMarkup(<MobilePage urlRole="camera" onLeaveUrlRole={noop} />);
     expect(html).toContain("Caméra…");
     expect(html).toContain("En attente d&#x27;OBS");
-    expect(html).toContain("Micro : ailleurs");
+    expect(html).toContain("Micro : –");
     expect(html).toContain("Changer de caméra");
     expect(html).toContain("Démarrage de la caméra…");
     expect(html).toContain("<video");
@@ -75,40 +93,40 @@ describe("MobilePage", () => {
 });
 
 describe("CameraControls", () => {
-  it("dit « Micro ici » quand ce téléphone est le micro entendu, « Micro : ailleurs » sinon, sans rouge ni micro barré", () => {
+  it("dit « Micro : ce tél. » quand ce téléphone est le micro entendu, « Micro : PC » sinon, et ouvre la feuille Micro, sans rouge ni micro barré", () => {
     const on = renderToStaticMarkup(
       <CameraControls
         isDisabled={false}
-        mic={<LiveMicButton isLiveMic isDisabled={false} onPress={noop} />}
+        mic={<MicButton state={withOpen("camera-1")} ownNumber={1} isExpanded={false} onPress={noop} />}
         onSwitchCamera={noop}
       />,
     );
-    expect(on).toContain("Micro ici");
-    expect(on).toContain('title="Rendre le micro au PC"');
+    expect(on).toContain("Micro : ce tél.");
+    expect(on).toContain('title="Choisir le micro"');
     expect(on).not.toContain("lp-btn--danger");
     expect(on).not.toContain("lucide-mic-off");
     const off = renderToStaticMarkup(
       <CameraControls
         isDisabled={false}
-        mic={<LiveMicButton isLiveMic={false} isDisabled={false} onPress={noop} />}
+        mic={<MicButton state={withOpen("pc")} ownNumber={1} isExpanded onPress={noop} />}
         onSwitchCamera={noop}
       />,
     );
-    expect(off).toContain("Micro : ailleurs");
-    expect(off).toContain('title="Prendre le micro"');
+    expect(off).toContain("Micro : PC");
+    expect(off).toContain('aria-expanded="true"');
     expect(off).not.toContain("lp-btn--danger");
     expect(off).not.toContain("lucide-mic-off");
   });
 
-  it("grise les deux boutons tant que la caméra ne tourne pas", () => {
+  it("grise le changement d'objectif tant que la caméra ne tourne pas, mais pas le micro : il ouvre une feuille", () => {
     const html = renderToStaticMarkup(
       <CameraControls
         isDisabled
-        mic={<LiveMicButton isLiveMic isDisabled onPress={noop} />}
+        mic={<MicButton state={withOpen("pc")} ownNumber={null} isExpanded={false} onPress={noop} />}
         onSwitchCamera={noop}
       />,
     );
-    expect(html.match(/disabled=""/g)).toHaveLength(2);
+    expect(html.match(/disabled=""/g)).toHaveLength(1);
   });
 });
 

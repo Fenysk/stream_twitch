@@ -80,9 +80,9 @@ describe("l'onglet Mobile", () => {
     state.mobile = {
       origin: ORIGIN,
       phones: [
-        { id: "phone-aaaa-0001", role: "camera", number: 1, hasScreen: true, isReceiving: true },
-        { id: "phone-bbbb-0002", role: "selfie", number: 2, hasScreen: false, isReceiving: false },
-        { id: "phone-cccc-0003", role: "control", number: null, hasScreen: false, isReceiving: false },
+        { id: "phone-aaaa-0001", number: 1, hasScreen: true, isReceiving: true },
+        { id: "phone-bbbb-0002", number: 2, hasScreen: false, isReceiving: false },
+        { id: "phone-cccc-0003", number: null, hasScreen: false, isReceiving: false },
       ],
     };
     const card = toCard(render(), "Sources navigateur d'OBS");
@@ -102,24 +102,25 @@ describe("l'onglet Mobile", () => {
     expect(toCard(render(), "Téléphones connectés")).toContain("Aucun téléphone connecté.");
   });
 
-  it("liste chaque téléphone connecté avec son rôle, son numéro et l'état de sa source OBS", () => {
+  it("liste chaque téléphone connecté : « Caméra N » avec « Filme » s'il filme, « Régie » avec « Ne filme pas » sinon, et l'état de sa source OBS", () => {
     state.mobile = {
       origin: ORIGIN,
       phones: [
-        { id: "phone-aaaa-0001", role: "camera", number: 1, hasScreen: true, isReceiving: true },
-        { id: "phone-bbbb-0002", role: "selfie", number: 2, hasScreen: false, isReceiving: false },
-        { id: "phone-cccc-0003", role: "control", number: null, hasScreen: false, isReceiving: false },
+        { id: "phone-aaaa-0001", number: 1, hasScreen: true, isReceiving: true },
+        { id: "phone-bbbb-0002", number: 2, hasScreen: false, isReceiving: false },
+        { id: "phone-cccc-0003", number: null, hasScreen: false, isReceiving: false },
       ],
     };
     const card = toCard(render(), "Téléphones connectés");
     expect(card.match(/<li/g)).toHaveLength(3);
     expect(card).toContain("Caméra 1");
-    expect(card).toContain("Caméra · téléphone phon");
+    expect(card).toContain("Filme · téléphone phon");
     expect(card).toContain("Source OBS connectée");
     expect(card).toContain("Caméra 2");
-    expect(card).toContain("Selfie · téléphone phon");
+    expect(card).toContain("Filme · téléphone phon");
     expect(card).toContain("Pas de source OBS");
     expect(card).toContain("Régie");
+    expect(card).toContain("Ne filme pas · téléphone phon");
     expect(card.match(/Source OBS connectée|Pas de source OBS/g)).toHaveLength(2);
   });
 });

@@ -21,6 +21,7 @@ import {
   toPictureSources,
   toPictureStanding,
   toPictureState,
+  toStopFilmText,
 } from "./picture.rules";
 import type { PictureStanding, PictureState } from "./picture.schema";
 
@@ -457,5 +458,23 @@ describe("noms des membres", () => {
     for (const wrong of ["pc", "head", "camera-0", "camera-02", "camera-", "camera-1x", "Camera-1"]) {
       expect(toPictureCameraNumber(wrong), wrong).toBeNull();
     }
+  });
+});
+
+describe("toStopFilmText : ce que dit « Arrêter de filmer » avant d'agir", () => {
+  const standing = (isCurrent: boolean): PictureStanding => ({ hasPlace: true, isCurrent, shown: "Tête" });
+
+  it("Quand le téléphone a le plan et le micro, le système doit dire que le plan passe à la Tête et le micro au PC", () => {
+    expect(toStopFilmText(standing(true), true)).toBe("Le plan passe à Tête, le micro au PC.");
+  });
+
+  it("ne dit que le plan quand le micro est ailleurs, et que le micro quand le plan est ailleurs", () => {
+    expect(toStopFilmText(standing(true), false)).toBe("Le plan passe à Tête.");
+    expect(toStopFilmText(standing(false), true)).toBe("Le micro passe au PC.");
+  });
+
+  it("ne demande rien quand le téléphone n'a ni le plan ni le micro : rien ne change à l'antenne", () => {
+    expect(toStopFilmText(standing(false), false)).toBeNull();
+    expect(toStopFilmText({ hasPlace: false, isCurrent: false, shown: null }, false)).toBeNull();
   });
 });

@@ -7,7 +7,7 @@ import {
   type PhoneRole,
 } from "../../domain/phone.schema";
 import { createControl, OBS_OFFLINE, type ObsControlState } from "../../usecase/control.usecase";
-import { createPhones } from "../../usecase/phone.usecase";
+import { createPhones, type Phones } from "../../usecase/phone.usecase";
 import { openPhoneStream } from "./phone-stream";
 
 // La régie à la main : un état que le test change, et ceux qui l'écoutent.
@@ -39,6 +39,12 @@ const describeEvent = (event: PhoneEvent): string => {
   return event.kind;
 };
 
+// Le téléphone appuie sur Filmer : il le dit par la liaison, le flux ne se rouvre pas.
+const film = (phones: Pick<Phones, "updateLink">, id: string, isCamera = true): void => {
+  phones.updateLink({ from: "phone", phoneId: id, isCamera, isFilming: isCamera });
+};
+
+// `role` : une Caméra ou un Selfie filme dès l'ouverture, la Régie ne filme pas.
 const setup = (role: PhoneRole) => {
   const phones = createPhones({ log: () => undefined });
   const fake = createFakeControl();
@@ -47,44 +53,53 @@ const setup = (role: PhoneRole) => {
   const named: string[] = [];
   const close = openPhoneStream(
     { phones, control: fake.control },
-    { id: "phone-0001", role },
+    { id: "phone-0001" },
     (event: PhoneEvent) => {
       events.push(event);
       received.push(describeEvent(event));
     },
     (event) => named.push(event),
   );
+  if (role !== "control") film(phones, "phone-0001");
   return { phones, fake, received, events, named, close };
 };
 
 describe("openPhoneStream", () => {
-  it("Quand un téléphone Régie se connecte, le système doit lui envoyer son numéro, puis l'état de la régie sous le nom control", () => {
+  it("Quand un téléphone qui ne filme pas se connecte, le système doit lui envoyer l'état de la régie sous le nom control, sans numéro", () => {
     const { received } = setup("control");
-    expect(received).toEqual(["number", "control null"]);
+    expect(received).toEqual(["control null"]);
   });
 
   it("lui envoie ensuite chaque changement de la régie, dans l'ordre", () => {
     const { received, fake } = setup("control");
     fake.publish({ ...IDLE_CONTROL, scene: "Jeu" });
     fake.publish({ ...IDLE_CONTROL, scene: "Pause" });
-    expect(received).toEqual(["number", "control null", "control Jeu", "control Pause"]);
+    expect(received).toEqual(["control null", "control Jeu", "control Pause"]);
   });
 
-  it("donne aussi la régie au Selfie, qui la montre dans un tiroir", () => {
+  it("donne la régie à un téléphone qui filme, comme à celui qui ne filme pas, sur le même flux", () => {
     expect(setup("selfie").received).toEqual([
+      "control null",
       "number",
       "air false",
       "mic false",
       "picture",
       "screen",
-      "control null",
     ]);
   });
 
-  it("n'envoie rien de la régie à un téléphone Caméra : seulement si sa caméra est à l'antenne et si son mic est celui du live", () => {
+  it("envoie à un téléphone qui filme chaque changement de la régie en plus de ses évènements de caméra, sans rien répéter de ceux-ci", () => {
     const { received, fake } = setup("camera");
     fake.publish({ ...IDLE_CONTROL, scene: "Jeu" });
-    expect(received).toEqual(["number", "air false", "mic false", "picture", "screen"]);
+    expect(received).toEqual([
+      "control null",
+      "number",
+      "air false",
+      "mic false",
+      "picture",
+      "screen",
+      "control Jeu",
+    ]);
   });
 
   it("dit au téléphone qui filme quand sa caméra entre à l'antenne et quand elle en sort, sans répéter ce qu'il sait déjà", () => {
@@ -93,15 +108,7 @@ describe("openPhoneStream", () => {
     fake.publish({ ...IDLE_CONTROL, scene: "Pause", onAir: [1, 2] });
     fake.publish({ ...IDLE_CONTROL, scene: "Fin", onAir: [1] });
     fake.publish({ ...IDLE_CONTROL, scene: "Fin", onAir: [] });
-    expect(received).toEqual([
-      "number",
-      "air false",
-      "mic false",
-      "picture",
-      "screen",
-      "air true",
-      "air false",
-    ]);
+    expect(received.filter((line) => line.startsWith("air"))).toEqual(["air false", "air true", "air false"]);
   });
 
   it("dit au téléphone qui filme quand son mic devient celui du live et quand il ne l'est plus, sans répéter ce qu'il sait déjà", () => {
@@ -137,11 +144,12 @@ describe("openPhoneStream", () => {
     const received: string[] = [];
     openPhoneStream(
       { phones, control: fake.control },
-      { id: "phone-0001", role: "camera" },
+      { id: "phone-0001" },
       (event) => received.push(describeEvent(event)),
       () => undefined,
     );
-    expect(received.slice(0, 3)).toEqual(["number", "air false", "mic true"]);
+    film(phones, "phone-0001");
+    expect(received.slice(0, 4)).toEqual(["control null", "number", "air false", "mic true"]);
   });
 
   it("n'envoie jamais `mic` à la régie, qui n'a pas de caméra", () => {
@@ -174,11 +182,12 @@ describe("openPhoneStream", () => {
     const received: string[] = [];
     openPhoneStream(
       { phones, control: fake.control },
-      { id: "phone-0001", role: "selfie" },
+      { id: "phone-0001" },
       (event) => received.push(describeEvent(event)),
       () => undefined,
     );
-    expect(received.slice(0, 2)).toEqual(["number", "air true"]);
+    film(phones, "phone-0001");
+    expect(received.slice(0, 3)).toEqual(["control null", "number", "air true"]);
   });
 
   it("dit au téléphone qui filme où en est l'image pour lui : s'il y est, et qui y est, sans répéter ce qu'il sait déjà", () => {
@@ -264,7 +273,62 @@ describe("openPhoneStream", () => {
     fake.publish({ ...IDLE_CONTROL, scene: "Jeu" });
     expect(phones.getState()).toEqual([]);
     expect(fake.listeners()).toBe(0);
-    expect(received).toEqual(["number", "control null"]);
+    expect(received).toEqual(["control null"]);
+  });
+});
+
+describe("un téléphone, un seul flux qui filme ou non", () => {
+  const CAMERA_KINDS = ["air", "mic", "picture", "screen", "signal"];
+  const isCameraEvent = (line: string): boolean => CAMERA_KINDS.some((kind) => line.startsWith(kind));
+
+  it("Tant que le téléphone ne filme pas, le système ne doit lui envoyer que la régie : aucun évènement de caméra, même quand elle change", () => {
+    const { received, fake } = setup("control");
+    fake.publish({ ...IDLE_CONTROL, scene: "Jeu", onAir: [1] });
+    expect(received).toEqual(["control null", "control Jeu"]);
+    expect(received.some(isCameraEvent)).toBe(false);
+  });
+
+  it("Quand il appuie sur Filmer, le système doit lui envoyer ses évènements de caméra sur le même flux, sans en ouvrir ni en fermer un", () => {
+    const { phones, received, fake } = setup("control");
+    expect(fake.listeners()).toBe(1);
+    film(phones, "phone-0001");
+    expect(received).toEqual(["control null", "number", "air false", "mic false", "picture", "screen"]);
+    fake.publish({ ...IDLE_CONTROL, scene: "Jeu", onAir: [1] });
+    expect(received.slice(6)).toEqual(["air true", "control Jeu"]);
+    expect(fake.listeners()).toBe(1);
+    expect(phones.getState()).toHaveLength(1);
+  });
+
+  it("Quand il arrête de filmer, le système doit lui dire qu'il n'a plus de numéro et ne plus lui envoyer d'évènement de caméra, la régie toujours", () => {
+    const { phones, events, received, fake } = setup("camera");
+    film(phones, "phone-0001", false);
+    const before = received.length;
+    expect(events.at(-1)).toEqual({ kind: "number", number: null });
+    expect(events.filter((event) => event.kind === "number").map((event) => event.number)).toEqual([1, null]);
+    fake.publish({ ...IDLE_CONTROL, scene: "Jeu", onAir: [1] });
+    expect(received.slice(before)).toEqual(["control Jeu"]);
+    expect(fake.listeners()).toBe(1);
+  });
+
+  it("redit tout au prochain Filmer : air, mic et picture repartent de zéro, comme à une première ouverture", () => {
+    const { phones, received, fake } = setup("camera");
+    fake.publish({ ...IDLE_CONTROL, onAir: [1] });
+    film(phones, "phone-0001", false);
+    fake.publish({ ...IDLE_CONTROL, onAir: [] });
+    const before = received.length;
+    film(phones, "phone-0001");
+    expect(received.slice(before)).toEqual(["number", "air false", "mic false", "picture", "screen"]);
+  });
+
+  it("ne dit pas le numéro au téléphone qui ne filme pas, mais le rend à la page OBS quand il part", () => {
+    const { phones } = setup("camera");
+    const screenEvents: string[] = [];
+    phones.openScreen({ id: "screen-0001", number: 1 }, (event) =>
+      screenEvents.push(event.kind === "phone" ? `phone ${event.isPresent}` : event.kind),
+    );
+    expect(screenEvents).toEqual(["phone true"]);
+    film(phones, "phone-0001", false);
+    expect(screenEvents).toEqual(["phone true", "phone false"]);
   });
 });
 
@@ -318,10 +382,11 @@ describe("la régie réelle et les téléphones qui filment", () => {
     await change([]);
     openPhoneStream(
       { phones, control },
-      { id: "phone-0001", role: "camera" },
+      { id: "phone-0001" },
       (event) => received.push(describeEvent(event)),
       () => undefined,
     );
+    film(phones, "phone-0001");
     await change([1]);
     await change([1, 2]);
     await change([2]);
@@ -333,16 +398,18 @@ describe("la régie réelle et les téléphones qui filment", () => {
     control.start();
     openPhoneStream(
       { phones, control },
-      { id: "phone-0001", role: "camera" },
+      { id: "phone-0001" },
       () => undefined,
       () => undefined,
     );
+    film(phones, "phone-0001");
     openPhoneStream(
       { phones, control },
-      { id: "phone-0002", role: "selfie" },
+      { id: "phone-0002" },
       (event) => received.push(describeEvent(event)),
       () => undefined,
     );
+    film(phones, "phone-0002");
     await change([1]);
     expect(received.filter((line) => line.startsWith("air"))).toEqual(["air false"]);
     await change([1, 2]);
@@ -367,7 +434,7 @@ describe("le battement du flux d'un téléphone", () => {
     expect(named).toEqual(["keepalive"]);
     vi.advanceTimersByTime(PHONE_KEEPALIVE_MS * 2);
     expect(named).toEqual(["keepalive", "keepalive", "keepalive"]);
-    expect(received).toEqual(["number", "control null"]);
+    expect(received).toEqual(["control null"]);
   });
 
   it("bat aussi pour la Caméra et le Selfie : tous les rôles voient un flux muet", () => {
@@ -384,7 +451,7 @@ describe("le battement du flux d'un téléphone", () => {
     const { named, events } = setup("control");
     vi.advanceTimersByTime(PHONE_KEEPALIVE_MS * 3);
     expect(named).toHaveLength(3);
-    expect(events).toHaveLength(2);
+    expect(events).toHaveLength(1);
   });
 
   it("Quand le flux se ferme, le système doit cesser de battre", () => {

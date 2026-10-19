@@ -1,10 +1,11 @@
-// L'écran du téléphone ne se met pas en veille tant que la caméra tourne (Screen Wake Lock). Le navigateur relâche le verrou quand la
+// L'écran du téléphone ne se met pas en veille tant que le téléphone filme (Screen Wake Lock). Le navigateur relâche le verrou quand la
 // page passe en arrière-plan : il est redemandé au retour.
 
 import { useEffect } from "react";
 
-export const useWakeLock = (): void => {
+export const useWakeLock = (isActive: boolean): void => {
   useEffect(() => {
+    if (!isActive) return;
     if (!("wakeLock" in navigator)) {
       console.warn("Caméra : ce navigateur ne peut pas garder l'écran allumé");
       return;
@@ -27,5 +28,5 @@ export const useWakeLock = (): void => {
       document.removeEventListener("visibilitychange", onVisibility);
       void lock?.release();
     };
-  }, []);
+  }, [isActive]);
 };

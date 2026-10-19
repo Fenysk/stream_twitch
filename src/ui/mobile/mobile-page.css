@@ -63,7 +63,7 @@ body {
   opacity: 0.6;
 }
 
-/* Le rôle Caméra : l'aperçu plein écran, les commandes par-dessus */
+/* L'aperçu de la caméra, plein écran en paysage (`.camera-role`) ou en haut en portrait (`.selfie-preview`), les commandes par-dessus */
 .camera-preview {
   position: absolute;
   inset: 0;
@@ -131,8 +131,11 @@ body {
   }
 }
 
+/* La pastille et le coin restent au-dessus de l'avis de caméra arrêtée (`.camera-notice`) : « Arrêter de filmer » et le numéro restent
+   à portée du doigt quand la caméra est refusée ou interrompue */
 .camera-top {
   position: absolute;
+  z-index: 2;
   top: var(--space-4);
   left: var(--space-4);
   right: var(--space-4);
@@ -142,7 +145,7 @@ body {
   gap: var(--space-2);
 }
 
-/* L'alerte de la Caméra : sous la pastille du numéro, par-dessus l'aperçu */
+/* L'alerte en paysage : sous la pastille du numéro, par-dessus l'aperçu */
 .camera-role .alert-line {
   position: absolute;
   top: calc(var(--space-4) + var(--control-size) + 3 * var(--space-2));
@@ -161,6 +164,7 @@ body {
 
 .camera-bar-slot {
   position: absolute;
+  z-index: 2;
   left: 0;
   right: 0;
   bottom: var(--space-4);
@@ -184,25 +188,6 @@ body {
   text-align: center;
   color: var(--muted);
   pointer-events: none;
-}
-
-/* Le message qui invite à tourner le téléphone : par-dessus l'aperçu, sans bloquer la barre */
-.rotate-hint {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: var(--space-2);
-  text-align: center;
-  pointer-events: none;
-  background: color-mix(in srgb, var(--void) 70%, transparent);
-}
-
-.rotate-hint svg {
-  width: 32px;
-  height: 32px;
 }
 
 /* La caméra ne tourne pas : tout l'écran est le message, et le toucher qui la relance */

@@ -1,12 +1,11 @@
 // Ce que le téléphone demande à sa caméra, à son mic et à l'encodeur : 1080p en 16:9 (à la verticale en 9:16 pour le Selfie) si le
 // téléphone le sait faire, l'image à 6 Mb/s au plus (le WiFi de la maison), H.264 devant (l'encodeur de l'iPhone est dans la puce).
 
-export type Facing = "environment" | "user";
+import type { Facing, Orientation } from "../../domain/phone-layout.rules";
 
-// Comment l'image est cadrée : en largeur (le trépied du rôle Caméra) ou en hauteur (le Selfie tenu en portrait, jamais recadré).
-export type CameraOrientation = "landscape" | "portrait";
-
-const IMAGE_SIZES: Record<CameraOrientation, { width: number; height: number }> = {
+// Comment l'image est cadrée : en largeur (16:9, téléphone filmé à l'horizontale) ou en hauteur (9:16, jamais recadré), pris à l'appui de
+// Filmer.
+const IMAGE_SIZES: Record<Orientation, { width: number; height: number }> = {
   landscape: { width: 1920, height: 1080 },
   portrait: { width: 1080, height: 1920 },
 };
@@ -15,7 +14,7 @@ export const VIDEO_MAX_BITRATE = 6_000_000;
 
 export const toOtherFacing = (facing: Facing): Facing => (facing === "environment" ? "user" : "environment");
 
-export const toVideoConstraints = (facing: Facing, orientation: CameraOrientation): MediaTrackConstraints => {
+export const toVideoConstraints = (facing: Facing, orientation: Orientation): MediaTrackConstraints => {
   const { width, height } = IMAGE_SIZES[orientation];
   return {
     facingMode: { ideal: facing },
@@ -32,10 +31,7 @@ export const isPreviewMirrored = (facing: Facing): boolean => facing === "user";
 // Le son du mic avec le traitement vocal d'iOS, comme FaceTime : annulation d'écho, réduction de bruit et gain automatique. Le mic brut
 // arrivait vers -45 à -50 dB à distance de parole, trop bas pour OBS ; c'est ce traitement qui remonte et nettoie la voix sur iPhone. Le boost
 // du serveur (boost.rules.ts) complète ce qui manque encore.
-export const toCameraConstraints = (
-  facing: Facing,
-  orientation: CameraOrientation,
-): MediaStreamConstraints => ({
+export const toCameraConstraints = (facing: Facing, orientation: Orientation): MediaStreamConstraints => ({
   video: toVideoConstraints(facing, orientation),
   audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
 });

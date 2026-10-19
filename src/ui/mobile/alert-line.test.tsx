@@ -2,13 +2,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALERT_KINDS } from "../../domain/alert.rules";
 import { type ControlState, IDLE_CONTROL } from "../../domain/control.schema";
+import { toRoleFilmStart } from "../../domain/phone-layout.rules";
 import { AlertLine, type ShownAlert } from "./alert-line";
 import { toAlertActionLabel, toAlertText } from "./alert-text";
-import { CameraRole } from "./camera-role";
 import { ControlBanner } from "./control-banner";
-import { ControlRole } from "./control-role";
-import { SelfieRole } from "./selfie-role";
+import { PhoneScreen } from "./phone-screen";
 import { getStopAskedAt, updateStopAskedAt } from "./stop-asked";
+
+// L'orientation du téléphone, par test : le rendu du serveur la rend toujours en paysage.
+const orientation = vi.hoisted(() => ({ isPortrait: true }));
+
+vi.mock("./use-portrait", () => ({ usePortrait: () => orientation.isPortrait }));
 
 const noop = () => undefined;
 const START = Date.parse("2026-10-19T20:00:00.000Z");
@@ -136,22 +140,23 @@ describe("l'arrêt du live demandé depuis cette page", () => {
   });
 });
 
-describe("les rôles au départ", () => {
+describe("les dispositions au départ", () => {
+  const pages = [
+    <PhoneScreen key="plain" initialFilm={null} onUpdateRole={noop} />,
+    <PhoneScreen key="selfie" initialFilm={toRoleFilmStart("selfie")} onUpdateRole={noop} />,
+    <PhoneScreen key="camera" initialFilm={toRoleFilmStart("camera")} onUpdateRole={noop} />,
+  ];
+
   it("Quand la page vient de s'ouvrir, le système ne doit montrer aucune alerte : il faut qu'une condition dure 3 s", () => {
-    for (const page of [
-      <ControlRole key="control" onUpdateRole={noop} />,
-      <SelfieRole key="selfie" onUpdateRole={noop} />,
-      <CameraRole key="camera" onUpdateRole={noop} />,
-    ]) {
-      expect(renderToStaticMarkup(page)).not.toContain("alert-line");
+    for (const isPortrait of [true, false]) {
+      orientation.isPortrait = isPortrait;
+      for (const page of pages) expect(renderToStaticMarkup(page)).not.toContain("alert-line");
     }
   });
 
-  it("garde le bandeau de la Régie et du Selfie dans le haut de l'écran, que l'alerte rejoindra sous lui", () => {
-    for (const page of [
-      <ControlRole key="control" onUpdateRole={noop} />,
-      <SelfieRole key="selfie" onUpdateRole={noop} />,
-    ]) {
+  it("garde le bandeau de l'écran qui ne filme pas et de celui qui filme en portrait dans le haut de l'écran, que l'alerte rejoindra sous lui", () => {
+    orientation.isPortrait = true;
+    for (const page of pages) {
       const html = renderToStaticMarkup(page);
       expect(html).toContain('class="control-top"');
       expect(html.indexOf("control-top")).toBeLessThan(html.indexOf("control-banner"));

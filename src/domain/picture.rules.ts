@@ -190,6 +190,15 @@ export const toCutRequest = (standing: PictureStanding, number: number | null): 
 // Le bouton est-il touchable ? Il faut une place caméra, ou être déjà à l'image (de quoi la quitter).
 export const canCutCamera = ({ hasPlace, isCurrent }: PictureStanding): boolean => hasPlace || isCurrent;
 
+// Ce que dit « Arrêter de filmer » avant d'agir quand ce téléphone tient le plan ou le micro du live : il passe à la Tête, et au PC (le repli
+// de `Control` après 3 s). `null` : il n'a ni l'un ni l'autre, rien ne change à l'antenne, pas de confirmation.
+export const toStopFilmText = ({ isCurrent }: PictureStanding, isLiveMic: boolean): string | null => {
+  const head = toPictureLabel(HEAD_PICTURE_ID);
+  if (isCurrent && isLiveMic) return `Le plan passe à ${head}, le micro au PC.`;
+  if (isCurrent) return `Le plan passe à ${head}.`;
+  return isLiveMic ? "Le micro passe au PC." : null;
+};
+
 // Ce que l'aperçu d'un téléphone dit discrètement quand il n'a pas le plan : « Caméra cachée · Tête au plan ». `null` : rien à dire (il a
 // le plan, pas de place caméra, ou personne ne l'occupe).
 export const toCutNotice = ({ hasPlace, isCurrent, shown }: PictureStanding): string | null =>

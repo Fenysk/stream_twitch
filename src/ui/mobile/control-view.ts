@@ -3,7 +3,7 @@
 
 import type { PhoneChatMark } from "../../domain/chat-phone.rules";
 import { isLiveMicOf, PC_MIC_ID, toDurationText, toLiveMic } from "../../domain/control.rules";
-import type { ControlMic, ControlState } from "../../domain/control.schema";
+import { type ControlMic, type ControlState, IDLE_CONTROL } from "../../domain/control.schema";
 import { toEndClock } from "../../domain/hours.rules";
 import type { ViewersState } from "../../domain/viewers.types";
 import { toViewersLine } from "../settings/live-states";
@@ -82,3 +82,17 @@ export const CHAT_VIEWERS_NOTE =
 // Ce que le chat du téléphone écrit à côté d'un message marqué (voir toPhoneChatMark) : « supprimé » pour un message supprimé. Un message
 // que seul le téléphone montre (masqué dans OBS) n'a pas de texte, il est seulement atténué ; rien non plus pour un message qu'OBS montre.
 export const toMarkText = (mark: PhoneChatMark): string => (mark === "deleted" ? "supprimé" : "");
+
+// `receivedAt` : l'instant (horloge du téléphone) où l'état est arrivé, de quoi faire avancer la durée du live entre deux états.
+// `staleAt` : l'instant où le flux est devenu périmé (rien reçu depuis 15 s, ou une erreur), absent ou `null` tant qu'il est vivant : la durée
+// du live cesse alors d'avancer, et le bandeau se grise.
+export type ControlView = { state: ControlState; receivedAt: number; staleAt?: number | null };
+
+// Ce que la page voit tant que le serveur n'a rien dit.
+export const IDLE_VIEW: ControlView = { state: IDLE_CONTROL, receivedAt: 0 };
+
+// La vue quand le flux devient périmé ou redevient vivant : l'état, lui, ne change pas.
+export const toStaleView = (view: ControlView, isStale: boolean, now: number): ControlView => ({
+  ...view,
+  staleAt: isStale ? now : null,
+});

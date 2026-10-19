@@ -115,7 +115,7 @@ describe("les demandes de la régie", () => {
   });
 
   it("lit ce que chaque côté d'une caméra dit de sa liaison : le téléphone s'il filme, la page OBS si sa liaison est vive", () => {
-    const phone = { from: "phone", phoneId: "phone-aaaa-0001", isFilming: false };
+    const phone = { from: "phone", phoneId: "phone-aaaa-0001", isCamera: true, isFilming: false };
     const screen = { from: "screen", screenId: "screen-aaaa-0001", isLinked: true };
     expect(LinkRequestSchema.parse(phone)).toEqual(phone);
     expect(LinkRequestSchema.parse(screen)).toEqual(screen);

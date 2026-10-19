@@ -6,10 +6,11 @@ import { MonitorSheet } from "./monitor-sheet";
 import { StopLiveSheet } from "./stop-live-sheet";
 import { ViewersSheet } from "./viewers-sheet";
 
-// Les feuilles que le bandeau et la barre du bas ouvrent, une à la fois : l'antenne en grand avec les scènes et le plan (la vignette et la
-// première ligne), le live (la deuxième ligne), d'où s'ouvrent la liste des viewers et la confirmation de l'arrêt, et le micro (la barre
-// du bas).
-export type BannerMenu = "monitor" | "live" | "viewers" | "stop" | "mics";
+// Les feuilles que le bandeau, la barre du bas et l'aperçu ouvrent, une à la fois : l'antenne en grand avec les scènes et le plan (la vignette
+// et la première ligne), le live (la deuxième ligne), d'où s'ouvrent la liste des viewers et la confirmation de l'arrêt, le micro (la barre
+// du bas), la caméra (la pastille de l'aperçu, `CameraSheet`) et la confirmation d'arrêter de filmer (`StopFilmSheet`), que pose l'écran du
+// téléphone.
+export type BannerMenu = "monitor" | "live" | "viewers" | "stop" | "mics" | "camera" | "unfilm";
 
 type BannerMenusProps = {
   state: ControlState;

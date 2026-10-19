@@ -1,8 +1,6 @@
-import { useState } from "react";
 import { toCameraName } from "../../domain/camera.rules";
 import { Badge } from "../design/badge";
 import { Button } from "../design/button";
-import { CameraNumberPicker } from "./camera-number-picker";
 import type { LinkStatus } from "./camera-sender";
 import { RedDot } from "./red-dot";
 
@@ -24,31 +22,30 @@ type CameraBadgeProps = {
   number: number | null;
   status: LinkStatus;
   isOnAir: boolean;
-  onUpdateNumber: (number: number) => Promise<string | null>;
+  // La feuille Caméra est ouverte.
+  isOpen: boolean;
+  onPress: () => void;
 };
 
-// La pastille en haut à gauche : « Caméra 1 » et où en est la caméra : la liaison avec OBS, puis « À l'antenne » ou « Prête ». Un toucher
-// sur le nom ouvre le choix du numéro ; l'état n'est qu'un statut : se montrer passe par « Montrer ».
-export const CameraBadge = ({ number, status, isOnAir, onUpdateNumber }: CameraBadgeProps) => {
-  const [isOpen, setIsOpen] = useState(false);
+// La pastille en haut à gauche de l'aperçu : « Caméra 1 » et où en est la caméra : la liaison avec OBS, puis « À l'antenne » ou « Prête ». Un
+// toucher sur le nom ouvre la feuille Caméra (le numéro, arrêter de filmer) ; l'état n'est qu'un statut : se montrer passe par « Montrer ».
+export const CameraBadge = ({ number, status, isOnAir, isOpen, onPress }: CameraBadgeProps) => {
   const { text, tone } = toStatusView(status, isOnAir);
   return (
     <div className="lp-pill">
       <div className="lp-pill-content">
         <Button
           label={number === null ? "Caméra…" : toCameraName(number)}
+          title="Caméra : numéro, arrêter de filmer"
           variant="ghost"
           isExpanded={isOpen}
           isDisabled={number === null}
-          onPress={() => setIsOpen(!isOpen)}
+          onPress={onPress}
         />
         <span className="camera-status" data-tone={tone}>
           <Badge label={text} icon={tone === "air" ? RedDot : undefined} />
         </span>
       </div>
-      {isOpen && number !== null && (
-        <CameraNumberPicker number={number} onUpdateNumber={onUpdateNumber} onDone={() => setIsOpen(false)} />
-      )}
     </div>
   );
 };

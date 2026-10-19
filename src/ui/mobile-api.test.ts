@@ -5,7 +5,7 @@ import {
   type PhoneEvent,
   type ScreenEvent,
 } from "../domain/phone.schema";
-import { watchPhone, watchScreen } from "./mobile-api";
+import { createFilmReporter, createLinkReporter, watchPhone, watchScreen } from "./mobile-api";
 
 // Un faux EventSource : le test donne les messages, les battements et les erreurs, et lit ce que la page ouvre et ferme.
 class FakeEventSource {
@@ -62,7 +62,6 @@ const setup = () => {
   const events: PhoneEvent[] = [];
   const stop = watchPhone({
     id: "phone-0001",
-    role: "control",
     getNumber: () => null,
     onEvent: (event) => events.push(event),
     onOpen: () => undefined,
@@ -163,5 +162,78 @@ describe("watchPhone : un flux muet devient périmé", () => {
     expect(FakeEventSource.instances).toHaveLength(1);
     expect(lastSource().isClosed).toBe(false);
     stop();
+  });
+});
+
+describe("Filmer : le téléphone le dit sans rouvrir son flux", () => {
+  type Sent = { url: string; body: unknown };
+
+  const stubServer = (): Sent[] => {
+    const sent: Sent[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      sent.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response("{}", { status: 200 });
+    });
+    return sent;
+  };
+
+  it("ouvre le flux avec l'identifiant et le numéro gardé, sans rôle", () => {
+    const stop = watchPhone({
+      id: "phone-0001",
+      getNumber: () => 3,
+      onEvent: () => undefined,
+      onOpen: () => undefined,
+      onStale: () => undefined,
+    });
+    expect(lastSource().url).toBe("/api/mobile/phone?id=phone-0001&number=3");
+    stop();
+  });
+
+  it("n'écrit pas de numéro à la première ouverture d'un téléphone qui n'en a jamais pris", () => {
+    const stop = watchPhone({
+      id: "phone-0001",
+      getNumber: () => null,
+      onEvent: () => undefined,
+      onOpen: () => undefined,
+      onStale: () => undefined,
+    });
+    expect(lastSource().url).toBe("/api/mobile/phone?id=phone-0001");
+    stop();
+  });
+
+  it("Quand le téléphone passe de « ne filme pas » à « filme » et retour, le système doit le dire un message à la fois, dans l'ordre, sans ouvrir ni fermer de flux", async () => {
+    const sent = stubServer();
+    const { stop } = setup();
+    const report = createFilmReporter("phone-0001");
+    report({ isCamera: true, isFilming: false });
+    report({ isCamera: true, isFilming: true });
+    report({ isCamera: false, isFilming: false });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sent).toEqual([
+      {
+        url: "/api/mobile/link",
+        body: { from: "phone", phoneId: "phone-0001", isCamera: true, isFilming: false },
+      },
+      {
+        url: "/api/mobile/link",
+        body: { from: "phone", phoneId: "phone-0001", isCamera: true, isFilming: true },
+      },
+      {
+        url: "/api/mobile/link",
+        body: { from: "phone", phoneId: "phone-0001", isCamera: false, isFilming: false },
+      },
+    ]);
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(lastSource().isClosed).toBe(false);
+    stop();
+  });
+
+  it("dit la liaison de la page OBS d'une caméra par le même chemin", async () => {
+    const sent = stubServer();
+    createLinkReporter("screen-0001")(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sent).toEqual([
+      { url: "/api/mobile/link", body: { from: "screen", screenId: "screen-0001", isLinked: true } },
+    ]);
   });
 });

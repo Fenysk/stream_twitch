@@ -190,7 +190,6 @@ const setup = (overrides: { settings?: Partial<ControlSettings>; obs?: ObsContro
   };
   const cameraPhone = (number: number, isReceiving = true): PhoneSummary => ({
     id: `phone-000${number}`,
-    role: "camera",
     number,
     hasScreen: true,
     isReceiving,
@@ -363,10 +362,7 @@ describe("les micros des caméras connectées", () => {
     const { control, settle, updatePhones, cameraPhone } = setup();
     control.start();
     await settle();
-    updatePhones([
-      cameraPhone(2),
-      { id: "phone-9999", role: "control", number: null, hasScreen: false, isReceiving: false },
-    ]);
+    updatePhones([cameraPhone(2), { id: "phone-9999", number: null, hasScreen: false, isReceiving: false }]);
     expect(control.getState().mics.map(({ id }) => id)).toEqual(["pc", "camera-2"]);
     updatePhones([cameraPhone(1), cameraPhone(2)]);
     expect(control.getState().mics.map(({ id }) => id)).toEqual(["pc", "camera-1", "camera-2"]);

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  LinkRequestSchema,
   MobileSearchSchema,
   NumberRequestSchema,
   PhoneEventSchema,
   PhoneQuerySchema,
+  PhoneSummarySchema,
   ScreenEventSchema,
   ScreenQuerySchema,
   SignalRequestSchema,
@@ -100,6 +102,37 @@ describe("l'adresse des flux", () => {
       number: 12,
     });
     expect(ScreenQuerySchema.safeParse({ id: "screen-0001" }).success).toBe(false);
+  });
+});
+
+describe("Filmer : ce que le téléphone dit au serveur", () => {
+  it("lit s'il est une caméra (Filmer est appuyé) et si sa caméra envoie une image : les deux sont exigés", () => {
+    expect(
+      LinkRequestSchema.parse({ from: "phone", phoneId: "phone-0001", isCamera: true, isFilming: false }),
+    ).toEqual({ from: "phone", phoneId: "phone-0001", isCamera: true, isFilming: false });
+    expect(
+      LinkRequestSchema.safeParse({ from: "phone", phoneId: "phone-0001", isFilming: true }).success,
+    ).toBe(false);
+    expect(
+      LinkRequestSchema.safeParse({ from: "phone", phoneId: "phone-0001", isCamera: true }).success,
+    ).toBe(false);
+    expect(
+      LinkRequestSchema.safeParse({ from: "screen", screenId: "screen-0001", isLinked: true }).success,
+    ).toBe(true);
+  });
+
+  it("ouvre le flux sans rôle : seuls l'identifiant et le numéro gardé comptent, un rôle d'une ancienne page est toléré", () => {
+    expect(PhoneQuerySchema.parse({ id: "phone-0001" })).toEqual({ id: "phone-0001" });
+    expect(PhoneQuerySchema.parse({ id: "phone-0001", number: "2" })).toEqual({
+      id: "phone-0001",
+      number: 2,
+    });
+  });
+
+  it("résume un téléphone par son numéro (vide : il ne filme pas), sans rôle", () => {
+    const summary = { id: "phone-0001", number: null, hasScreen: false, isReceiving: false };
+    expect(PhoneSummarySchema.parse(summary)).toEqual(summary);
+    expect(PhoneSummarySchema.parse({ ...summary, role: "camera" })).toEqual(summary);
   });
 });
 

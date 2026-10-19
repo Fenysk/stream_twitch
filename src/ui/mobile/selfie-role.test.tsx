@@ -1,11 +1,20 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { toRoleFilmStart } from "../../domain/phone-layout.rules";
 import { ControlDrawer } from "./control-drawer";
-import { SelfieRole } from "./selfie-role";
+import { PhoneScreen } from "./phone-screen";
+
+// Le téléphone est tenu en hauteur : le rendu du serveur le rend toujours en paysage.
+vi.mock("./use-portrait", () => ({ usePortrait: () => true }));
 
 const noop = () => undefined;
 
-describe("SelfieRole", () => {
+// Un téléphone qui filme avec l'objectif avant, en portrait : l'état de départ d'un `?role=selfie`.
+const SelfieRole = ({ onUpdateRole }: { onUpdateRole: () => void }) => (
+  <PhoneScreen initialFilm={toRoleFilmStart("selfie")} onUpdateRole={onUpdateRole} />
+);
+
+describe("PhoneScreen qui filme en portrait", () => {
   it("montre de haut en bas l'aperçu, le chat avec « Écrire », le bouton « Sons », puis le tiroir fermé", () => {
     const html = renderToStaticMarkup(<SelfieRole onUpdateRole={noop} />);
     expect(html).toContain("selfie-role");
@@ -114,10 +123,13 @@ describe("SelfieRole", () => {
     expect(html).not.toContain('data-open="true"');
   });
 
-  it("n'a que deux boutons dans la barre du bas, « Micro : X » puis « Sons »", () => {
+  it("n'a que trois boutons dans la barre du bas, « Micro : X », « Montrer » (la caméra au plan) puis « Sons », et pas « Filmer »", () => {
     const html = renderToStaticMarkup(<SelfieRole onUpdateRole={noop} />);
     const bar = html.slice(html.indexOf("control-bar"), html.indexOf("control-drawer"));
-    expect(bar.match(/<button/g)).toHaveLength(2);
+    expect(bar.match(/<button/g)).toHaveLength(3);
+    expect(bar.indexOf("Micro : –")).toBeLessThan(bar.indexOf("Montrer"));
+    expect(bar.indexOf("Montrer")).toBeLessThan(bar.indexOf(">Sons<"));
+    expect(bar).not.toContain("Filmer");
   });
 
   it("a le même haut que la Régie sous l'aperçu : la vignette et sa légende de deux lignes, sans le coin (il est sur l'aperçu)", () => {

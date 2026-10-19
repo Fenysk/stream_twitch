@@ -1,9 +1,9 @@
 import { CameraNumberSchema, type PhoneRole, PhoneRoleSchema } from "./phone.schema";
 
-// Le Selfie filme aussi : il prend un numéro de caméra comme le rôle Caméra. La régie n'en prend pas.
+// Les rôles d'une adresse `?role=` qui font filmer le téléphone dès l'ouverture : la Caméra (arrière) et le Selfie (avant). La Régie non.
 export const hasCamera = (role: PhoneRole): boolean => role === "camera" || role === "selfie";
 
-// La régie : le téléphone Régie, et le Selfie (en tiroir). Ils reçoivent l'état de la régie.
+// Plus lu depuis R4 : tout téléphone reçoit l'état de la régie, qu'il filme ou non. Sort avec les rôles à R5.
 export const hasControl = (role: PhoneRole): boolean => role === "control" || role === "selfie";
 
 // Le plus petit numéro libre, à partir de 1.

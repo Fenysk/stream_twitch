@@ -2,8 +2,8 @@ import { z } from "zod";
 import { ControlStateSchema } from "./control.schema";
 import { PictureStandingSchema } from "./picture.schema";
 
-// Ce que fait un téléphone : filmer sur un trépied (camera), tenir la régie (control) ou se filmer (selfie, qui compte aussi comme
-// une caméra).
+// Ce que l'adresse `/mobile?role=` (les QR codes) demande à la page au départ : filmer avec la caméra arrière (camera), ne pas filmer
+// (control) ou filmer avec l'avant (selfie). Le serveur ne connaît pas les rôles : un téléphone filme ou non (`isCamera`). R5 les retire.
 export const PHONE_ROLES = ["camera", "control", "selfie"] as const;
 export const PhoneRoleSchema = z.enum(PHONE_ROLES);
 export type PhoneRole = z.infer<typeof PhoneRoleSchema>;
@@ -41,10 +41,10 @@ export const SignalSchema = z.discriminatedUnion("kind", [
 ]);
 export type Signal = z.infer<typeof SignalSchema>;
 
-// Ce que le serveur dit à un téléphone : son numéro (vide : son rôle n'a pas de caméra), la page OBS de ce numéro (vide : aucune), les
-// signaux de cette page, au téléphone qui a la régie l'état de la régie (OBS, viewers, live) à la connexion puis à chaque changement,
-// et au téléphone qui filme si sa caméra est à l'antenne (une source de ce numéro est visible dans la scène du programme d'OBS) et si son
-// mic est celui du live (le premier mic ouvert dans OBS est celui de sa caméra), et où en est l'image pour lui (est-il à l'image, qui l'est).
+// Ce que le serveur dit à un téléphone : son numéro (vide : il ne filme pas), à tout téléphone l'état de la régie (OBS, viewers, live) à la
+// connexion puis à chaque changement, et, tant qu'il filme (`isCamera`), la page OBS de son numéro (vide : aucune), les signaux de cette
+// page, si sa caméra est à l'antenne (une source de ce numéro est visible dans la scène du programme d'OBS), si son mic est celui du live
+// (le premier mic ouvert dans OBS est celui de sa caméra) et où en est l'image pour lui (est-il à l'image, qui l'est).
 export const PhoneEventSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("number"), number: CameraNumberSchema.nullable() }),
   z.object({ kind: z.literal("screen"), screenId: ClientIdSchema.nullable() }),
@@ -87,29 +87,35 @@ const UrlNumberSchema = z
   .regex(/^[1-9][0-9]{0,3}$/, "le numéro doit être un entier de 1 à 9999")
   .transform(Number);
 
-// L'adresse du flux d'un téléphone (`?id=…&role=…&number=…`) et celle du flux d'une page OBS (`?id=…&number=…`). `number` du téléphone :
-// celui qu'il a gardé, absent à sa première ouverture.
+// L'adresse du flux d'un téléphone (`?id=…&number=…`) et celle du flux d'une page OBS (`?id=…&number=…`). `number` du téléphone : celui
+// qu'il a gardé, absent à sa première ouverture. `role` est toléré et ignoré : une page ouverte avant R4 l'envoie encore.
 export const PhoneQuerySchema = z.object({
   id: ClientIdSchema,
-  role: PhoneRoleSchema,
+  role: PhoneRoleSchema.optional(),
   number: UrlNumberSchema.optional(),
 });
 export const ScreenQuerySchema = z.object({ id: ClientIdSchema, number: UrlNumberSchema });
 
-// Ce que dit un côté de la liaison, pour que le serveur sache si l'image d'une caméra arrive vraiment dans OBS : le téléphone dit s'il filme
-// (`isFilming`, faux quand sa caméra est arrêtée : Safari en arrière-plan, un appel), la page OBS de son numéro dit si sa liaison avec lui est
-// vive (`isLinked`, vrai tant que la mise en relation WebRTC est établie).
+// Ce que dit un côté de la liaison, pour que le serveur sache si l'image d'une caméra arrive vraiment dans OBS : le téléphone dit s'il est une
+// caméra (`isCamera` : « Filmer » est appuyé, il prend un numéro) et si sa caméra envoie une image (`isFilming`, faux quand elle est arrêtée :
+// Safari en arrière-plan, un appel), la page OBS de son numéro dit si sa liaison avec lui est vive (`isLinked`, vrai tant que la mise en
+// relation WebRTC est établie). Le flux du téléphone ne se rouvre jamais pour cela.
 export const LinkRequestSchema = z.discriminatedUnion("from", [
-  z.object({ from: z.literal("phone"), phoneId: ClientIdSchema, isFilming: z.boolean() }),
+  z.object({
+    from: z.literal("phone"),
+    phoneId: ClientIdSchema,
+    isCamera: z.boolean(),
+    isFilming: z.boolean(),
+  }),
   z.object({ from: z.literal("screen"), screenId: ClientIdSchema, isLinked: z.boolean() }),
 ]);
 export type LinkRequest = z.infer<typeof LinkRequestSchema>;
 
-// Un téléphone connecté, tel que l'onglet « Mobile » le voit. `hasScreen` : la page OBS de son numéro est ouverte. `isReceiving` : son image
-// arrive dans OBS, c'est-à-dire que cette page est ouverte, que sa liaison est vive et que le téléphone filme.
+// Un téléphone connecté, tel que l'onglet « Mobile » le voit : un numéro quand il est une caméra, aucun sinon. `hasScreen` : la page OBS de son
+// numéro est ouverte. `isReceiving` : son image arrive dans OBS, c'est-à-dire que cette page est ouverte, que sa liaison est vive et que le
+// téléphone filme.
 export const PhoneSummarySchema = z.object({
   id: ClientIdSchema,
-  role: PhoneRoleSchema,
   number: CameraNumberSchema.nullable(),
   hasScreen: z.boolean(),
   isReceiving: z.boolean(),

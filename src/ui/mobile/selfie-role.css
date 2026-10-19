@@ -1,4 +1,4 @@
-/* Le rôle Selfie de /mobile, en portrait : l'aperçu, le bandeau (avec l'antenne en vignette), le chat, la barre du bas. Il reprend
+/* L'écran du téléphone qui filme en portrait : l'aperçu, le bandeau (avec l'antenne en vignette), le chat, la barre du bas. Il reprend
    la mise en page de la Régie (control-role.css), le tiroir (control-drawer.css) et les commandes de la Caméra (mobile-page.css). Toutes
    les valeurs viennent des tokens du design system. */
 
@@ -26,7 +26,10 @@
   right: var(--space-2);
 }
 
+/* L'objectif, seul sur l'aperçu en portrait : en bas à droite */
 .selfie-preview .camera-bar-slot {
+  left: auto;
+  right: var(--space-2);
   bottom: var(--space-2);
 }
 

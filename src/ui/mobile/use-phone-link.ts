@@ -1,24 +1,30 @@
-// La liaison d'un téléphone avec le serveur : son flux (numéro, page OBS, signaux, et l'état de la régie pour le Selfie) et l'envoi de sa
-// caméra à la page OBS de son numéro. Le numéro pris est gardé sur le téléphone pour le retrouver à la prochaine ouverture.
+// La liaison d'un téléphone avec le serveur : son flux, ouvert une fois qu'il filme ou non (l'état de la régie, puis, quand il filme, son
+// numéro, la page OBS de ce numéro et ses signaux) et l'envoi de sa caméra à la page OBS de son numéro. Le numéro pris est gardé sur le
+// téléphone pour le retrouver à la prochaine ouverture.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PhoneEvent, PhoneRole } from "../../domain/phone.schema";
+import type { PhoneEvent } from "../../domain/phone.schema";
 import { IDLE_STANDING, type PictureStanding } from "../../domain/picture.schema";
-import { createLinkReporter, createSignalSender, updatePhoneNumber, watchPhone } from "../mobile-api";
+import {
+  createFilmReporter,
+  createSignalSender,
+  type FilmReport,
+  updatePhoneNumber,
+  watchPhone,
+} from "../mobile-api";
 import { type CameraSender, createCameraSender, type LinkStatus } from "./camera-sender";
+import { type ControlView, IDLE_VIEW, toStaleView } from "./control-view";
 import { getPhoneId, getSavedNumber, updateSavedNumber } from "./mobile-storage";
 import { openSenderPeer } from "./peer";
 import { createRandomId } from "./random-id";
-import { type ControlView, IDLE_VIEW, toStaleView } from "./use-control-state";
 
 export type PhoneLink = {
-  // `null` tant que le serveur n'a pas donné de numéro.
+  // `null` tant que le serveur n'a pas donné de numéro : il en donne un au premier Filmer, et le reprend quand le téléphone arrête de filmer.
   number: number | null;
   status: LinkStatus;
   // Prend ce numéro de caméra : rend le refus du serveur à montrer, ou `null` quand c'est fait.
   updateNumber: (number: number) => Promise<string | null>;
-  // L'état de la régie que le serveur donne au téléphone qui l'a (le Selfie) ; vide pour une Caméra, à qui il n'en envoie pas.
-  // Elle dit aussi si le flux est périmé (`staleAt`), pour tous les rôles : la Caméra n'a pas d'état de régie mais un flux qui bat.
+  // L'état de la régie que le serveur donne à tout téléphone, qu'il filme ou non, avec ce que dit le flux de sa fraîcheur (`staleAt`).
   control: ControlView;
   // La caméra de ce téléphone est à l'antenne : une de ses sources est visible dans la scène du programme d'OBS.
   isOnAir: boolean;
@@ -44,8 +50,8 @@ type EventTargets = {
   setStanding: (standing: PictureStanding) => void;
 };
 
-// Ce que le serveur dit à un téléphone qui filme : son numéro (gardé), la page OBS de ce numéro, les signaux de cette page, si sa caméra
-// est à l'antenne, si son mic est celui du live et, au Selfie, l'état de la régie.
+// Ce que le serveur dit à un téléphone : l'état de la régie, et, quand il filme, son numéro (gardé), la page OBS de ce numéro, les signaux
+// de cette page, si sa caméra est à l'antenne et si son mic est celui du live.
 const applyEvent = (
   event: PhoneEvent,
   { link, setNumber, setControl, setOnAir, setLiveMic, setStanding }: EventTargets,
@@ -76,16 +82,16 @@ const applyEvent = (
   }
 };
 
-// Ce que le téléphone dit au serveur de sa caméra : elle filme ou elle est arrêtée (Safari en arrière-plan, un appel). Le serveur ne connaît
-// le téléphone qu'une fois son flux ouvert (`isOpen`) : avant, rien ne part ; à l'ouverture, et à chaque réouverture, le téléphone redit où
-// il en est.
-type FilmingReport = { isOpen: boolean; isFilming: boolean; send: ((isFilming: boolean) => void) | null };
+// Ce que le téléphone dit au serveur de sa caméra : Filmer est appuyé ou non (`isCamera`), et elle envoie une image ou elle est arrêtée
+// (Safari en arrière-plan, un appel). Le serveur ne connaît le téléphone qu'une fois son flux ouvert (`isOpen`) : avant, rien ne part ; à
+// l'ouverture, et à chaque réouverture, le téléphone redit où il en est. Le flux ne se rouvre jamais pour cela.
+type FilmingReport = FilmReport & { isOpen: boolean; send: ((report: FilmReport) => void) | null };
 
-const tellFilming = ({ isOpen, isFilming, send }: FilmingReport): void => {
-  if (isOpen) send?.(isFilming);
+const tellFilming = ({ isOpen, isCamera, isFilming, send }: FilmingReport): void => {
+  if (isOpen) send?.({ isCamera, isFilming });
 };
 
-export const usePhoneLink = (role: PhoneRole, stream: MediaStream | null): PhoneLink => {
+export const usePhoneLink = (isCamera: boolean, stream: MediaStream | null): PhoneLink => {
   const [number, setNumber] = useState<number | null>(null);
   const [status, setStatus] = useState<LinkStatus>("waiting");
   const [control, setControl] = useState<ControlView>(IDLE_VIEW);
@@ -94,12 +100,12 @@ export const usePhoneLink = (role: PhoneRole, stream: MediaStream | null): Phone
   const [standing, setStanding] = useState<PictureStanding>(IDLE_STANDING);
   const sender = useRef<CameraSender<MediaStream> | null>(null);
   const phoneId = useRef("");
-  const filming = useRef<FilmingReport>({ isOpen: false, isFilming: false, send: null });
+  const filming = useRef<FilmingReport>({ isOpen: false, isCamera, isFilming: false, send: null });
 
   useEffect(() => {
     const id = getPhoneId();
     phoneId.current = id;
-    filming.current.send = createLinkReporter({ from: "phone", phoneId: id });
+    filming.current.send = createFilmReporter(id);
     const link = createCameraSender<MediaStream>({
       openPeer: openSenderPeer,
       send: createSignalSender({ from: "phone", phoneId: id }),
@@ -111,7 +117,6 @@ export const usePhoneLink = (role: PhoneRole, stream: MediaStream | null): Phone
     sender.current = link;
     const stop = watchPhone({
       id,
-      role,
       getNumber: getSavedNumber,
       // Le flux se rouvre : la page OBS a lâché la liaison quand il s'est fermé, le serveur redira sa page et la liaison repart.
       onOpen: () => {
@@ -130,13 +135,22 @@ export const usePhoneLink = (role: PhoneRole, stream: MediaStream | null): Phone
       filming.current.isOpen = false;
       filming.current.send = null;
     };
-  }, [role]);
+  }, []);
 
   useEffect(() => {
-    filming.current.isFilming = stream !== null;
+    filming.current.isCamera = isCamera;
+    filming.current.isFilming = isCamera && stream !== null;
     sender.current?.setStream(stream);
     tellFilming(filming.current);
-  }, [stream]);
+  }, [isCamera, stream]);
+
+  // Arrêter de filmer : ce que le serveur disait de la caméra (à l'antenne, micro, plan) ne vaut plus ; il le redit au prochain Filmer.
+  useEffect(() => {
+    if (isCamera) return;
+    setOnAir(false);
+    setLiveMic(false);
+    setStanding(IDLE_STANDING);
+  }, [isCamera]);
 
   const updateNumber = useCallback(async (wanted: number): Promise<string | null> => {
     const answer = await updatePhoneNumber(phoneId.current, wanted);

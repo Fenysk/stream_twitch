@@ -9,11 +9,11 @@ import { ControlChat } from "./control-chat";
 import { ControlDock } from "./control-dock";
 import { ControlGrid } from "./control-grid";
 import { ControlKeyButton } from "./control-key";
-import { ControlRole } from "./control-role";
 import { ControlToast } from "./control-toast";
 import { LiveSheet } from "./live-sheet";
 import { MicMenu } from "./mic-menu";
 import { MonitorSheet } from "./monitor-sheet";
+import { PhoneScreen } from "./phone-screen";
 import { StopLiveSheet } from "./stop-live-sheet";
 import type { BannerMenuState } from "./use-banner-menu";
 import { ViewersSheet } from "./viewers-sheet";
@@ -57,9 +57,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("ControlRole", () => {
+describe("PhoneScreen : le téléphone ne filme pas", () => {
   it("montre de haut en bas le bandeau, le chat avec « Écrire », puis la grille de sons, avec le coin qui change de rôle", () => {
-    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const html = renderToStaticMarkup(<PhoneScreen initialFilm={null} onUpdateRole={noop} />);
     expect(html).toContain("control-role");
     const order = ["control-banner", "control-chat", "control-grid"].map((name) => html.indexOf(name));
     expect(order.every((position) => position > 0)).toBe(true);
@@ -68,14 +68,14 @@ describe("ControlRole", () => {
   });
 
   it("n'a aucun champ de saisie au départ : « Écrire » est un bouton, le champ n'existe qu'ouvert", () => {
-    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const html = renderToStaticMarkup(<PhoneScreen initialFilm={null} onUpdateRole={noop} />);
     expect(html).toContain("Écrire");
     expect(html).not.toContain('<input type="text"');
     expect(html).not.toContain("Envoyer");
   });
 
   it("garde les feuilles Antenne, Live et Micro fermées au départ, après la grille : le bandeau et la barre du bas les ouvrent", () => {
-    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const html = renderToStaticMarkup(<PhoneScreen initialFilm={null} onUpdateRole={noop} />);
     expect(html).toContain("Fermer l&#x27;antenne");
     expect(html).toContain("Fermer le menu des micros");
     expect(html).toContain("Fermer le live");
@@ -87,7 +87,7 @@ describe("ControlRole", () => {
   });
 
   it("dit tout sobrement avant le premier état du serveur : hors ligne, un tiret pour la scène, et « OBS non joint » nulle part (l'alerte le dit)", () => {
-    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const html = renderToStaticMarkup(<PhoneScreen initialFilm={null} onUpdateRole={noop} />);
     expect(html).toContain("Hors ligne");
     expect(html).not.toContain("OBS non joint");
     expect(html).not.toContain("OBS n&#x27;est pas connecté");
@@ -96,7 +96,7 @@ describe("ControlRole", () => {
   });
 
   it("met la vignette de l'antenne en tête du bandeau, avant « Hors ligne », sans aucun texte dedans avant le premier état", () => {
-    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const html = renderToStaticMarkup(<PhoneScreen initialFilm={null} onUpdateRole={noop} />);
     const banner = html.slice(html.indexOf("control-banner"), html.indexOf("control-chat"));
     expect(banner).toContain("monitor-thumbnail");
     expect(banner.indexOf("monitor-thumbnail")).toBeLessThan(banner.indexOf("Hors ligne"));
@@ -106,7 +106,7 @@ describe("ControlRole", () => {
   });
 
   it("n'a que deux éléments dans le bandeau : la vignette avec sa légende de deux lignes, et le coin qui change de rôle", () => {
-    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const html = renderToStaticMarkup(<PhoneScreen initialFilm={null} onUpdateRole={noop} />);
     const banner = html.slice(html.indexOf("control-banner"), html.indexOf("control-chat"));
     expect(banner.match(/<button/g)).toHaveLength(4);
     expect(banner.match(/banner-legend/g)).toHaveLength(1);
@@ -119,14 +119,14 @@ describe("ControlRole", () => {
   });
 
   it("garde la feuille de l'antenne fermée au départ, avec la vignette qui dit qu'elle l'est", () => {
-    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const html = renderToStaticMarkup(<PhoneScreen initialFilm={null} onUpdateRole={noop} />);
     expect(html).toContain("Fermer l&#x27;antenne");
     expect(html).toMatch(/class="monitor-thumbnail"[^>]*aria-expanded="false"/);
     expect(html).not.toContain('data-open="true"');
   });
 
   it("met sous le chat la barre du bas avec « Sons », un bouton primary que le tiroir fermé n'a pas encore ouvert", () => {
-    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const html = renderToStaticMarkup(<PhoneScreen initialFilm={null} onUpdateRole={noop} />);
     const order = ["control-banner", "control-chat", "control-bar", "control-drawer"].map((name) =>
       html.indexOf(name),
     );
@@ -139,7 +139,7 @@ describe("ControlRole", () => {
   });
 
   it("garde la grille de sons dans le tiroir « Sons », fermé, et plus à l'écran avant lui", () => {
-    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const html = renderToStaticMarkup(<PhoneScreen initialFilm={null} onUpdateRole={noop} />);
     const drawer = html.slice(html.indexOf('class="control-drawer"'), html.indexOf("Fermer l&#x27;antenne"));
     expect(drawer).toContain('data-open="false"');
     expect(drawer).toContain("Fermer les sons");
@@ -151,19 +151,20 @@ describe("ControlRole", () => {
     expect(html.indexOf("control-bar")).toBeLessThan(html.indexOf("control-grid"));
   });
 
-  it("met « Micro : – » en premier dans la barre du bas, avant « Sons », et plus de pastille micro dans le bandeau", () => {
-    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+  it("met « Micro : – » en premier dans la barre du bas, puis « Filmer », puis « Sons », et plus de pastille micro dans le bandeau", () => {
+    const html = renderToStaticMarkup(<PhoneScreen initialFilm={null} onUpdateRole={noop} />);
     const bar = html.slice(html.indexOf("control-bar"), html.indexOf("control-drawer"));
-    expect(bar.match(/<button/g)).toHaveLength(2);
+    expect(bar.match(/<button/g)).toHaveLength(3);
     expect(bar.indexOf("Micro : –")).toBeGreaterThan(0);
-    expect(bar.indexOf("Micro : –")).toBeLessThan(bar.indexOf("Sons"));
+    expect(bar.indexOf("Micro : –")).toBeLessThan(bar.indexOf("Filmer"));
+    expect(bar.indexOf("Filmer")).toBeLessThan(bar.indexOf("Sons"));
     const banner = html.slice(html.indexOf("control-banner"), html.indexOf("control-chat"));
     expect(banner).not.toContain("Micro");
     expect(html).not.toContain("Choisir le micro du live");
   });
 
   it("pose les feuilles du bandeau, l'antenne et le live compris, après le tiroir « Sons » : une feuille fixe dans l'autre serait rognée", () => {
-    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const html = renderToStaticMarkup(<PhoneScreen initialFilm={null} onUpdateRole={noop} />);
     const positions = [
       "Fermer les sons",
       "Fermer l&#x27;antenne",
