@@ -1,7 +1,7 @@
 {
   "obsAddress": "ws://127.0.0.1:4455",
-  "micName": "Mic/Aux",
-  "desktopName": "Audio du bureau",
+  "micName": "Micro PC",
+  "desktopName": "Audio PC",
   "mobileOrigin": "https://pcmasterrace.tail2d6b0a.ts.net",
   "cameraSlotScene": "Master - Webcam",
   "cameraBoostTarget": -17,
