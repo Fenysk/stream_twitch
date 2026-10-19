@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { type ControlState, IDLE_CONTROL } from "../../domain/control.schema";
-import type { PhoneEvent, PhoneRole } from "../../domain/phone.schema";
+import {
+  PHONE_KEEPALIVE_EVENT,
+  PHONE_KEEPALIVE_MS,
+  type PhoneEvent,
+  type PhoneRole,
+} from "../../domain/phone.schema";
 import { createControl, OBS_OFFLINE, type ObsControlState } from "../../usecase/control.usecase";
 import { createPhones } from "../../usecase/phone.usecase";
 import { openPhoneStream } from "./phone-stream";
@@ -39,6 +44,7 @@ const setup = (role: PhoneRole) => {
   const fake = createFakeControl();
   const received: string[] = [];
   const events: PhoneEvent[] = [];
+  const named: string[] = [];
   const close = openPhoneStream(
     { phones, control: fake.control },
     { id: "phone-0001", role },
@@ -46,8 +52,9 @@ const setup = (role: PhoneRole) => {
       events.push(event);
       received.push(describeEvent(event));
     },
+    (event) => named.push(event),
   );
-  return { phones, fake, received, events, close };
+  return { phones, fake, received, events, named, close };
 };
 
 describe("openPhoneStream", () => {
@@ -128,8 +135,11 @@ describe("openPhoneStream", () => {
       mics: [{ id: "camera-1", label: "Caméra 1", isOpen: true, isAvailable: true }],
     });
     const received: string[] = [];
-    openPhoneStream({ phones, control: fake.control }, { id: "phone-0001", role: "camera" }, (event) =>
-      received.push(describeEvent(event)),
+    openPhoneStream(
+      { phones, control: fake.control },
+      { id: "phone-0001", role: "camera" },
+      (event) => received.push(describeEvent(event)),
+      () => undefined,
     );
     expect(received.slice(0, 3)).toEqual(["number", "air false", "mic true"]);
   });
@@ -162,8 +172,11 @@ describe("openPhoneStream", () => {
     const fake = createFakeControl();
     fake.publish({ ...IDLE_CONTROL, onAir: [1] });
     const received: string[] = [];
-    openPhoneStream({ phones, control: fake.control }, { id: "phone-0001", role: "selfie" }, (event) =>
-      received.push(describeEvent(event)),
+    openPhoneStream(
+      { phones, control: fake.control },
+      { id: "phone-0001", role: "selfie" },
+      (event) => received.push(describeEvent(event)),
+      () => undefined,
     );
     expect(received.slice(0, 2)).toEqual(["number", "air true"]);
   });
@@ -303,8 +316,11 @@ describe("la régie réelle et les téléphones qui filment", () => {
     const { phones, control, received, change } = setupReal();
     control.start();
     await change([]);
-    openPhoneStream({ phones, control }, { id: "phone-0001", role: "camera" }, (event) =>
-      received.push(describeEvent(event)),
+    openPhoneStream(
+      { phones, control },
+      { id: "phone-0001", role: "camera" },
+      (event) => received.push(describeEvent(event)),
+      () => undefined,
     );
     await change([1]);
     await change([1, 2]);
@@ -315,13 +331,69 @@ describe("la régie réelle et les téléphones qui filment", () => {
   it("ne dit à l'antenne que la caméra du bon numéro : le Selfie 2 ne l'est pas quand seule la caméra 1 l'est", async () => {
     const { phones, control, received, change } = setupReal();
     control.start();
-    openPhoneStream({ phones, control }, { id: "phone-0001", role: "camera" }, () => undefined);
-    openPhoneStream({ phones, control }, { id: "phone-0002", role: "selfie" }, (event) =>
-      received.push(describeEvent(event)),
+    openPhoneStream(
+      { phones, control },
+      { id: "phone-0001", role: "camera" },
+      () => undefined,
+      () => undefined,
+    );
+    openPhoneStream(
+      { phones, control },
+      { id: "phone-0002", role: "selfie" },
+      (event) => received.push(describeEvent(event)),
+      () => undefined,
     );
     await change([1]);
     expect(received.filter((line) => line.startsWith("air"))).toEqual(["air false"]);
     await change([1, 2]);
     expect(received.filter((line) => line.startsWith("air"))).toEqual(["air false", "air true"]);
+  });
+});
+
+describe("le battement du flux d'un téléphone", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Quand le flux d'un téléphone est ouvert, le système doit y envoyer un évènement nommé keepalive toutes les 5 s, sans rien dire de plus", () => {
+    vi.useFakeTimers();
+    const { named, received } = setup("control");
+    expect(PHONE_KEEPALIVE_EVENT).toBe("keepalive");
+    expect(PHONE_KEEPALIVE_MS).toBe(5000);
+    expect(named).toEqual([]);
+    vi.advanceTimersByTime(PHONE_KEEPALIVE_MS - 1);
+    expect(named).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(named).toEqual(["keepalive"]);
+    vi.advanceTimersByTime(PHONE_KEEPALIVE_MS * 2);
+    expect(named).toEqual(["keepalive", "keepalive", "keepalive"]);
+    expect(received).toEqual(["number", "control null"]);
+  });
+
+  it("bat aussi pour la Caméra et le Selfie : tous les rôles voient un flux muet", () => {
+    vi.useFakeTimers();
+    for (const role of ["camera", "selfie"] satisfies PhoneRole[]) {
+      const { named } = setup(role);
+      vi.advanceTimersByTime(PHONE_KEEPALIVE_MS);
+      expect(named).toEqual(["keepalive"]);
+    }
+  });
+
+  it("bat même quand la régie ne dit rien, et ne passe pas par les messages sans nom", () => {
+    vi.useFakeTimers();
+    const { named, events } = setup("control");
+    vi.advanceTimersByTime(PHONE_KEEPALIVE_MS * 3);
+    expect(named).toHaveLength(3);
+    expect(events).toHaveLength(2);
+  });
+
+  it("Quand le flux se ferme, le système doit cesser de battre", () => {
+    vi.useFakeTimers();
+    const { named, close } = setup("control");
+    vi.advanceTimersByTime(PHONE_KEEPALIVE_MS);
+    close();
+    vi.advanceTimersByTime(PHONE_KEEPALIVE_MS * 4);
+    expect(named).toEqual(["keepalive"]);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

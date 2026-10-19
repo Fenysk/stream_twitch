@@ -56,6 +56,13 @@ export const PhoneEventSchema = z.discriminatedUnion("kind", [
 ]);
 export type PhoneEvent = z.infer<typeof PhoneEventSchema>;
 
+// Le battement du flux d'un téléphone : un évènement nommé `keepalive` (sans nom, il ne passerait pas par `onmessage`) toutes les 5 s. Le
+// téléphone tient le flux pour périmé après 15 s sans rien recevoir, soit trois battements perdus : assez pour une gigue du réseau, assez
+// court pour qu'un état vieux ne se montre pas comme vrai.
+export const PHONE_KEEPALIVE_EVENT = "keepalive";
+export const PHONE_KEEPALIVE_MS = 5000;
+export const PHONE_STALE_MS = 15_000;
+
 // Ce que le serveur dit à une page OBS : si son téléphone est là (et qu'elle est la page active de son numéro), et ses signaux.
 export const ScreenEventSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("phone"), isPresent: z.boolean() }),

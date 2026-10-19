@@ -1,7 +1,7 @@
 import { hasCamera, hasControl } from "../../domain/camera.rules";
 import { isLiveMicOf } from "../../domain/control.rules";
 import type { ControlState } from "../../domain/control.schema";
-import type { PhoneEvent } from "../../domain/phone.schema";
+import { PHONE_KEEPALIVE_EVENT, PHONE_KEEPALIVE_MS, type PhoneEvent } from "../../domain/phone.schema";
 import { toPictureStanding } from "../../domain/picture.rules";
 import type { Control } from "../../usecase/control.usecase";
 import type { PhoneOpening, Phones } from "../../usecase/phone.usecase";
@@ -9,8 +9,9 @@ import type { PhoneOpening, Phones } from "../../usecase/phone.usecase";
 // Le flux d'un téléphone : son numéro, la page OBS de son numéro et ses signaux (les téléphones) ; pour un téléphone qui a la régie,
 // l'état de la régie (OBS, viewers, live) sous le nom `control` ; pour un téléphone qui filme, `air` (sa caméra est-elle à l'antenne,
 // d'après les numéros que la régie dit à l'antenne), `mic` (son mic est-il celui du live, d'après les micros de la régie) et `picture` (est-il
-// à l'image, et qui l'est, d'après l'image de la régie). Tout dans ce même flux : la page n'a pas de connexion de plus. Rend de quoi fermer
-// le tout.
+// à l'image, et qui l'est, d'après l'image de la régie). Tout dans ce même flux : la page n'a pas de connexion de plus. Pour tous les rôles,
+// un évènement nommé `keepalive` toutes les 5 s (`sendNamed`) : le téléphone tient le flux pour périmé quand il n'en reçoit plus rien.
+// Rend de quoi fermer le tout.
 export function openPhoneStream(
   {
     phones,
@@ -18,6 +19,7 @@ export function openPhoneStream(
   }: { phones: Pick<Phones, "openPhone">; control: Pick<Control, "getState" | "subscribe"> },
   opening: PhoneOpening,
   send: (event: PhoneEvent) => void,
+  sendNamed: (event: string, payload: null) => void,
 ): () => void {
   const { role } = opening;
   // Le numéro du téléphone, appris des évènements que le serveur lui envoie (il peut le changer), et ce que `air`, `mic` et `picture` lui ont
@@ -57,7 +59,9 @@ export function openPhoneStream(
     if (hasCamera(role)) tellCamera(state);
     if (hasControl(role)) send({ kind: "control", state });
   });
+  const keepalive = setInterval(() => sendNamed(PHONE_KEEPALIVE_EVENT, null), PHONE_KEEPALIVE_MS);
   return () => {
+    clearInterval(keepalive);
     stop();
     closePhone();
   };

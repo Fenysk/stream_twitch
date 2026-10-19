@@ -1,3 +1,4 @@
+import { AlertLine } from "./alert-line";
 import { CameraBadge } from "./camera-badge";
 import { CameraControls } from "./camera-controls";
 import { isPreviewMirrored } from "./camera-media";
@@ -11,6 +12,7 @@ import { CutCameraButton } from "./cut-camera-button";
 import { CutNotice } from "./cut-notice";
 import { MonitorThumbnail } from "./monitor-thumbnail";
 import { RoleCorner } from "./role-corner";
+import { useAlert } from "./use-alert";
 import { useBannerMenu } from "./use-banner-menu";
 import { useCameraStream } from "./use-camera-stream";
 import { useCutCamera } from "./use-cut-camera";
@@ -20,7 +22,7 @@ import { useWakeLock } from "./use-wake-lock";
 
 // Le rôle Selfie, tenu en portrait, de haut en bas : l'aperçu de la caméra avant (en miroir pour toi, jamais pour OBS), avec la pastille du
 // numéro et la bascule de caméra par-dessus ; le bandeau de la régie (la vignette de l'antenne, un appui l'ouvre en grand, puis live, viewers,
-// scène, plan), toujours visible ; le chat, avec « Écrire » dans sa boîte ; et en bas, à portée du pouce, « Micro : X » (la feuille Micro) et
+// scène, plan), toujours visible, avec l'alerte en dessous quand il y en a une ; le chat, avec « Écrire » dans sa boîte ; et en bas, à portée du pouce, « Micro : X » (la feuille Micro) et
 // « Touches », qui ouvre dans un tiroir la grille de touches. Les feuilles s'ouvrent par-dessus tout, tiroir compris.
 // Un cadre rouge autour de l'aperçu dit que la caméra est à l'antenne. Un seul flux avec le serveur : la liaison de la caméra apporte
 // aussi l'état de la régie.
@@ -31,6 +33,12 @@ export const SelfieRole = ({ onUpdateRole }: { onUpdateRole: () => void }) => {
   const toast = useToast();
   const cutCamera = useCutCamera(link, toast.show);
   const menu = useBannerMenu(link.control.state.isLinked);
+  const alert = useAlert({
+    role: "selfie",
+    view: link.control,
+    film: { camera, link, onShow: cutCamera },
+    onToast: toast.show,
+  });
   return (
     <main className="control-role selfie-role">
       <section className="selfie-preview" aria-label="Aperçu de la caméra" data-on-air={link.isOnAir}>
@@ -58,19 +66,22 @@ export const SelfieRole = ({ onUpdateRole }: { onUpdateRole: () => void }) => {
         />
         {camera.status !== "live" && <CameraNotice status={camera.status} onRestart={camera.restart} />}
       </section>
-      <ControlBanner
-        view={link.control}
-        openMenu={menu.openMenu}
-        onOpenMenu={menu.onOpenMenu}
-        lead={
-          <MonitorThumbnail
-            url={menu.monitorUrl}
-            isLinked={link.control.state.isLinked}
-            isExpanded={menu.openMenu === "monitor"}
-            onPress={() => menu.onOpenMenu("monitor")}
-          />
-        }
-      />
+      <div className="control-top">
+        <ControlBanner
+          view={link.control}
+          openMenu={menu.openMenu}
+          onOpenMenu={menu.onOpenMenu}
+          lead={
+            <MonitorThumbnail
+              url={menu.monitorUrl}
+              isLinked={link.control.state.isLinked}
+              isExpanded={menu.openMenu === "monitor"}
+              onPress={() => menu.onOpenMenu("monitor")}
+            />
+          }
+        />
+        {alert && <AlertLine alert={alert} />}
+      </div>
       <ControlChat />
       <ControlDock state={link.control.state} menu={menu} ownNumber={link.number} onToast={toast.show} />
       <ControlToast message={toast.message} />

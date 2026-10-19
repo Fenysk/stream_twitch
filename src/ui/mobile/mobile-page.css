@@ -142,6 +142,14 @@ body {
   gap: var(--space-2);
 }
 
+/* L'alerte de la Caméra : sous la pastille du numéro, par-dessus l'aperçu */
+.camera-role .alert-line {
+  position: absolute;
+  top: calc(var(--space-4) + var(--control-size) + 3 * var(--space-2));
+  left: var(--space-4);
+  right: var(--space-4);
+}
+
 .camera-number-picker {
   align-items: center;
 }

@@ -85,7 +85,8 @@
     { "canonical": "scene",     "meaning": "Une scène d'OBS : celle du programme est à l'antenne (SetCurrentProgramScene) ; la régie en fait une key par scène.", "banned": [] },
     { "canonical": "key",       "meaning": "Une touche : celle d'un Stream Deck, ou celle de la grid de la régie (son libellé, active ou coupée, et le geste que son appui fait).", "banned": ["pad"] },
     { "canonical": "grid",      "meaning": "La grille de keys de la régie : 3 colonnes, une page à la fois (Scènes, Sons, Micros, Jean-Renard), générée seule, sans réglage.", "banned": ["matrix"] },
-    { "canonical": "monitor",   "meaning": "Le retour antenne : l'image de la scène du programme d'OBS (GetSourceScreenshot, JPEG), en vignette en tête du bandeau de la régie et en grand dans une feuille, redemandée par le téléphone tant qu'il la montre. Pas le monitoring audio d'OBS.", "banned": ["retour", "projector"] }
+    { "canonical": "monitor",   "meaning": "Le retour antenne : l'image de la scène du programme d'OBS (GetSourceScreenshot, JPEG), en vignette en tête du bandeau de la régie et en grand dans une feuille, redemandée par le téléphone tant qu'il la montre. Pas le monitoring audio d'OBS.", "banned": ["retour", "projector"] },
+    { "canonical": "alert",     "meaning": "La ligne orange de /mobile sous le bandeau : un état faux depuis 3 s et corrigeable depuis le téléphone, une seule à la fois, la plus prioritaire (connexion perdue, live arrêté, OBS non joint, muet, caméra arrêtée, micro ailleurs). Pas les phrases foxBalanceAlerts que dit le renard.", "banned": ["alerte"] }
   ],
 
   "verbs": [

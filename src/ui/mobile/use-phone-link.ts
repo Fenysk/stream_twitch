@@ -9,7 +9,7 @@ import { type CameraSender, createCameraSender, type LinkStatus } from "./camera
 import { getPhoneId, getSavedNumber, updateSavedNumber } from "./mobile-storage";
 import { openSenderPeer } from "./peer";
 import { createRandomId } from "./random-id";
-import { type ControlView, IDLE_VIEW } from "./use-control-state";
+import { type ControlView, IDLE_VIEW, toStaleView } from "./use-control-state";
 
 export type PhoneLink = {
   // `null` tant que le serveur n'a pas donné de numéro.
@@ -18,6 +18,7 @@ export type PhoneLink = {
   // Prend ce numéro de caméra : rend le refus du serveur à montrer, ou `null` quand c'est fait.
   updateNumber: (number: number) => Promise<string | null>;
   // L'état de la régie que le serveur donne au téléphone qui l'a (le Selfie) ; vide pour une Caméra, à qui il n'en envoie pas.
+  // Elle dit aussi si le flux est périmé (`staleAt`), pour tous les rôles : la Caméra n'a pas d'état de régie mais un flux qui bat.
   control: ControlView;
   // La caméra de ce téléphone est à l'antenne : une de ses sources est visible dans la scène du programme d'OBS.
   isOnAir: boolean;
@@ -61,7 +62,7 @@ const applyEvent = (
       link.receive(event.signal);
       return;
     case "control":
-      setControl({ state: event.state, receivedAt: Date.now() });
+      setControl({ state: event.state, receivedAt: Date.now(), staleAt: null });
       return;
     case "air":
       setOnAir(event.isOnAir);
@@ -118,6 +119,7 @@ export const usePhoneLink = (role: PhoneRole, stream: MediaStream | null): Phone
         link.setScreen(null);
         tellFilming(filming.current);
       },
+      onStale: (isStale) => setControl((previous) => toStaleView(previous, isStale, Date.now())),
       onEvent: (event) =>
         applyEvent(event, { link, setNumber, setControl, setOnAir, setLiveMic, setStanding }),
     });

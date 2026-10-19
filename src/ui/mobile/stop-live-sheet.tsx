@@ -3,6 +3,7 @@ import { Button } from "../design/button";
 import type { ToastTone } from "../design/toast-announcement";
 import { ControlDrawer } from "./control-drawer";
 import { toSentence } from "./control-keys";
+import { updateStopAskedAt } from "./stop-asked";
 
 type StopLiveSheetProps = {
   isOpen: boolean;
@@ -12,9 +13,11 @@ type StopLiveSheetProps = {
 };
 
 // La confirmation de l'arrêt du live, ouverte par la pastille « Live 1:42 » du bandeau : « Arrêter » (danger) envoie StopStream à OBS et
-// referme, « Annuler » referme sans rien faire. Une feuille comme les menus du bandeau, sœur du tiroir, après lui dans la page.
+// referme, « Annuler » referme sans rien faire. L'appui est retenu (`stop-asked.ts`) : l'arrêt qui suit n'est pas une alerte. Une feuille
+// comme les menus du bandeau, sœur du tiroir, après lui dans la page.
 export const StopLiveSheet = ({ isOpen, onClose, onToast }: StopLiveSheetProps) => {
   const stop = () => {
+    updateStopAskedAt(Date.now());
     void stopLive().then((answer) => {
       if (!answer.ok) onToast("error", toSentence(answer.message));
     });
