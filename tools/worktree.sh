@@ -5,7 +5,7 @@
 #   sh tools/worktree.sh status              les worktrees et les branches, et celles déjà sur main
 #   sh tools/worktree.sh remove feat/renard  le worktree et la branche, ici et sur le remote s'il y en a un, une fois sur main
 #
-# La base est origin/main si un remote `origin` existe, sinon `main` en local.
+# La base est `main` en local, même avec un remote : les squash y arrivent avant tout push.
 set -e
 
 root=$(git rev-parse --show-toplevel)
@@ -14,7 +14,8 @@ dir_of() { echo "$root/.claude/worktrees/$(echo "$1" | tr / -)"; }
 
 has_origin() { git remote get-url origin > /dev/null 2>&1; }
 
-if has_origin; then base=origin/main; else base=main; fi
+# origin/main en retard sur main faisait dire « en cours » aux branches déjà squashées, et partir les neuves d'un vieux main.
+base=main
 
 # Vrai si les changements de la branche sont déjà sur la base : la fusion squash en a fait un commit au contenu identique.
 is_on_main() {

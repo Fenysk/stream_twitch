@@ -19,7 +19,7 @@ import type { MicPort } from "../usecase/head.usecase";
 import type { MonitorPort, MonitorShot } from "../usecase/monitor.usecase";
 import type { ShowScenePort, ShowSceneResult } from "../usecase/show-director.usecase";
 
-// Les filtres que l'appli pose sur la source d'une caméra : un filtre de boost (réglé de 0 à 20 dB) et un limiteur vers -3 dB, après lui.
+// Les filtres que l'appli pose sur la source d'une caméra : un filtre de boost (réglé de 0 à 30 dB, `boost.rules.ts`) et un limiteur vers -3 dB, après lui.
 // Les noms disent qui les a posés ; un limiteur d'Alexis, quel que soit son nom, dispense de poser celui-ci.
 const BOOST_FILTER_NAME = "Gain (appli)";
 const BOOST_FILTER_KIND = "gain_filter";

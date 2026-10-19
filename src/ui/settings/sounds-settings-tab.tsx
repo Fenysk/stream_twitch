@@ -80,8 +80,8 @@ export const SoundsSettingsTab = () => {
         </div>
         <p className="lp-type-caption lp-muted">
           Un son est un fichier audio avec un titre et un volume. Il se joue dans la source navigateur OBS
-          /sounds (taille libre, aucune image), l'un après l'autre. Coche « Contrôler l'audio via OBS » pour
-          régler les sons dans le mélangeur.
+          /sounds (taille libre, aucune image), l'un après l'autre. Laisse « Contrôler l'audio via OBS »
+          décochée : le son sort par Windows, et OBS le capte une fois par « Audio PC ».
         </p>
         {notice && (
           <p

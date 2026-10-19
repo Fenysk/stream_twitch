@@ -1,7 +1,7 @@
 // La caméra et le mic du téléphone, sans le navigateur : démarrés par Filmer (l'objectif et le cadrage pris à l'appui), arrêtés quand le
 // téléphone arrête de filmer ou que Safari passe en arrière-plan, relancés d'un toucher. `Media` est le flux de la caméra (un MediaStream dans
 // le navigateur). Le flux change à chaque (re)démarrage et à chaque changement d'objectif : c'est ce qui part vers OBS. La piste audio n'est
-// jamais coupée sur le téléphone : c'est la coupure de la source dans OBS qui décide si ce mic est celui du live (`useLiveMic`). Rien ici ne
+// jamais coupée sur le téléphone : c'est la coupure de la source dans OBS qui décide si ce mic est celui du live. Rien ici ne
 // lit l'orientation du téléphone : elle ne relance ni ne change rien.
 
 import type { Facing, FilmStart, Orientation } from "../../domain/phone-layout.rules";

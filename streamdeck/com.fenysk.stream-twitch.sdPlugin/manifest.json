@@ -33,7 +33,7 @@
     {
       "UUID": "com.fenysk.stream-twitch.toggle",
       "Name": "Interrupteur",
-      "Tooltip": "Active ou coupe un réglage du serveur. La touche montre l'état réel, relu toutes les 10 s et après chaque appui.",
+      "Tooltip": "Active ou coupe un réglage du serveur. La touche montre l'état réel, suivi en direct et relu après chaque appui.",
       "Icon": "imgs/actions/toggle/icon",
       "Controllers": ["Keypad"],
       "PropertyInspectorPath": "ui/inspector.html",
@@ -61,7 +61,7 @@
     {
       "UUID": "com.fenysk.stream-twitch.cycle",
       "Name": "Cycle de valeurs",
-      "Tooltip": "Passe un réglage à la valeur suivante d'une liste. La touche montre la valeur réelle, relue toutes les 10 s et après chaque appui.",
+      "Tooltip": "Passe un réglage à la valeur suivante d'une liste. La touche montre la valeur réelle, suivie en direct et relue après chaque appui.",
       "Icon": "imgs/actions/cycle/icon",
       "Controllers": ["Keypad"],
       "PropertyInspectorPath": "ui/inspector.html",
