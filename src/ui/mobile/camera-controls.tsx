@@ -5,7 +5,7 @@ import { Button } from "../design/button";
 type CameraControlsProps = {
   isDisabled: boolean;
   onSwitchCamera: () => void;
-  // Le bouton micro (`LiveMicButton`) : dans la barre du rôle Caméra ; le Selfie le met en bas, à côté de « Régie ».
+  // Le bouton micro (`LiveMicButton`) : dans la barre du rôle Caméra ; le Selfie le met en bas, à côté de « Touches ».
   mic?: ReactNode;
   // Le bouton qui coupe ou montre la caméra à l'image (`CutCameraButton`) : juste avant le changement de caméra.
   cut?: ReactNode;

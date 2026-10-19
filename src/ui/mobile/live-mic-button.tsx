@@ -9,7 +9,7 @@ type LiveMicButtonProps = {
 };
 
 // Le bouton micro d'un téléphone qui filme : allumé, ce téléphone est le micro du live ; barré et rouge, c'en est un autre. Un toucher
-// prend le micro, ou le rend au micro du PC s'il l'est déjà (`useLiveMic`). Dans la barre du rôle Caméra, en bas à côté de « Régie » pour le
+// prend le micro, ou le rend au micro du PC s'il l'est déjà (`useLiveMic`). Dans la barre du rôle Caméra, en bas à côté de « Touches » pour le
 // Selfie, à portée du pouce.
 export const LiveMicButton = ({ isLiveMic, isDisabled, onPress }: LiveMicButtonProps) => (
   <Button

@@ -1,5 +1,5 @@
-/* Le rôle Régie de /mobile, en portrait : le bandeau, le chat, la grille de touches. Toutes les valeurs viennent des tokens du design
-   system ; les tailles de texte viennent de ses classes `lp-type-*`. */
+/* Le rôle Régie de /mobile, en portrait : le bandeau, le chat, la barre du bas (la grille de touches est dans son tiroir, control-drawer.css).
+   Toutes les valeurs viennent des tokens du design system ; les tailles de texte viennent de ses classes `lp-type-*`. */
 
 .control-role {
   position: fixed;
@@ -11,8 +11,8 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: var(--space-3);
   padding: var(--space-3);
-  /* La hauteur de la vignette du retour antenne : un tiers de la largeur du bandeau, en 16:9 */
-  --monitor-height: calc((100vw - 2 * var(--space-3) - 2 * var(--space-2)) * 3 / 16);
+  /* Où se pose le toast : sous la vignette du retour antenne, un tiers de la largeur du bandeau en 16:9 (le Selfie pose le sien) */
+  --toast-top: calc(var(--space-4) + (100vw - 2 * var(--space-3) - 2 * var(--space-2)) * 3 / 16);
   overflow: hidden;
   background: var(--void);
   color: var(--ink);
@@ -322,7 +322,15 @@
   min-width: 0;
 }
 
-/* La grille : le contrôle segmenté sur toute la largeur, puis 3 colonnes de touches */
+/* La barre du bas, à portée du pouce : ses boutons au centre, « Touches » en dernier (le mic du live avant lui au Selfie) */
+.control-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+/* La grille, dans le tiroir : le contrôle segmenté sur toute la largeur, puis 3 colonnes de touches */
 .control-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -380,11 +388,11 @@
   color: var(--on-accent);
 }
 
-/* Le toast : en haut, sous le bandeau, hors d'atteinte du clavier. Sur la Régie il passe sous la vignette du retour antenne ; les autres
-   rôles gardent la hauteur d'une pastille. */
+/* Le toast : en haut, hors d'atteinte du clavier, à la place que son rôle lui donne par `--toast-top` (sous la vignette du retour antenne
+   de la Régie, sous la pastille du numéro du Selfie) ; sans elle (la Caméra), à la hauteur d'une pastille. */
 .control-toast {
   position: fixed;
-  top: calc(var(--space-4) + var(--monitor-height, var(--control-size) + var(--space-3)));
+  top: var(--toast-top, calc(var(--space-4) + var(--control-size) + var(--space-3)));
   left: 50%;
   z-index: 10;
   width: auto;

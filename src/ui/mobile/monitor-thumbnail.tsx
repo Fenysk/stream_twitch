@@ -8,7 +8,8 @@ type MonitorThumbnailProps = {
   onPress: () => void;
 };
 
-// La vignette du retour antenne, en tête du bandeau de la régie : un bouton qui ouvre l'image en grand (MonitorSheet).
+// La vignette du retour antenne, en tête du bandeau de la Régie ou dans le coin de l'aperçu du Selfie : un bouton qui ouvre l'image en grand
+// (MonitorSheet).
 export const MonitorThumbnail = ({ url, isLinked, isExpanded, onPress }: MonitorThumbnailProps) => (
   <button
     type="button"

@@ -1,10 +1,12 @@
-/* Le rôle Selfie de /mobile, en portrait : l'aperçu, le bandeau, le chat, la rangée du bas, et le tiroir de la grille par-dessus. Il reprend
-   la mise en page de la Régie (control-role.css) et les commandes de la Caméra (mobile-page.css). Toutes les valeurs viennent des tokens
-   du design system. */
+/* Le rôle Selfie de /mobile, en portrait : l'aperçu (avec le retour antenne en vignette), le bandeau, le chat, la barre du bas. Il reprend
+   la mise en page de la Régie (control-role.css), le tiroir (control-drawer.css) et les commandes de la Caméra (mobile-page.css). Toutes
+   les valeurs viennent des tokens du design system. */
 
-/* Quatre rangées au lieu de trois : l'aperçu, le bandeau, le chat (qui prend la place qui reste), la rangée du bas */
+/* Quatre rangées au lieu de trois : l'aperçu, le bandeau, le chat (qui prend la place qui reste), la barre du bas */
 .selfie-role {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
+  /* Le toast se pose sous la pastille du numéro, dans l'aperçu : la marge de la page, celle de l'aperçu, la pastille et un espace */
+  --toast-top: calc(var(--space-3) + 4 * var(--space-2) + var(--control-size));
 }
 
 /* L'aperçu montre l'image entière, telle qu'OBS la reçoit : assez haut pour une image verticale, assez bas pour laisser la place au bandeau
@@ -34,72 +36,13 @@
   bottom: calc(var(--space-2) + var(--control-size) + var(--space-3));
 }
 
-/* La rangée du bas, à portée du pouce : le mic du live à côté de « Régie » */
-.selfie-open {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-}
-
-/* Le tiroir : sur toute la page, un voile et la feuille qui monte du bas. Fermé, il reste dans la page mais n'est ni vu ni touché
-   (`visibility` ne bascule qu'à la fin du glissement). */
-.control-drawer {
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-  visibility: hidden;
-  pointer-events: none;
-  transition: visibility 0s linear var(--lp-dur);
-}
-
-.control-drawer[data-open="true"] {
-  visibility: visible;
-  pointer-events: auto;
-  transition-delay: 0s;
-}
-
-.control-drawer-scrim {
+/* Le retour antenne : la vignette dans le coin bas droit de l'aperçu, par-dessus la caméra et ses avis. Elle reste assez étroite pour ne
+   pas toucher la barre de la caméra, centrée : la moitié de la largeur, moins la moitié de la barre (deux boutons, leurs marges) et deux
+   espaces. */
+.selfie-preview .monitor-thumbnail {
   position: absolute;
-  inset: 0;
-  padding: 0;
-  border: 0;
-  background: var(--scrim);
-  opacity: 0;
-  transition: opacity var(--lp-dur-fade) ease;
-}
-
-.control-drawer[data-open="true"] .control-drawer-scrim {
-  opacity: 1;
-}
-
-.control-drawer .control-drawer-sheet {
-  position: absolute;
-  inset: auto 0 0;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: none;
-  max-height: calc(100dvh - 48px);
-  border-radius: var(--lp-radius-box) var(--lp-radius-box) 0 0;
-  padding-bottom: env(safe-area-inset-bottom);
-  transform: translateY(100%);
-}
-
-.control-drawer[data-open="true"] .control-drawer-sheet {
-  transform: none;
-}
-
-.control-drawer .lp-grabber {
+  right: var(--space-2);
+  bottom: var(--space-2);
   flex: none;
-  margin-top: var(--space-1);
-}
-
-.control-drawer-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-3);
-  min-height: 0;
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  overflow-y: auto;
+  width: min(30%, calc(50% - var(--control-size) - var(--space-3) - 2 * var(--space-2)));
 }

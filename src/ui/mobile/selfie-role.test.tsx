@@ -6,17 +6,17 @@ import { SelfieRole } from "./selfie-role";
 const noop = () => undefined;
 
 describe("SelfieRole", () => {
-  it("montre de haut en bas l'aperçu, le chat avec « Écrire », le bouton « Régie », puis le tiroir fermé", () => {
+  it("montre de haut en bas l'aperçu, le chat avec « Écrire », le bouton « Touches », puis le tiroir fermé", () => {
     const html = renderToStaticMarkup(<SelfieRole onUpdateRole={noop} />);
     expect(html).toContain("selfie-role");
-    const order = ["selfie-preview", "control-banner", "control-chat", "selfie-open", "control-drawer"].map(
+    const order = ["selfie-preview", "control-banner", "control-chat", "control-bar", "control-drawer"].map(
       (name) => html.indexOf(name),
     );
     expect(order.every((position) => position > 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(html).toContain("Écrire");
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain(">Régie<");
+    expect(html).toContain(">Touches<");
     expect(html).toContain('data-open="false"');
   });
 
@@ -36,13 +36,13 @@ describe("SelfieRole", () => {
     expect(preview).not.toContain("Prendre le micro de ce téléphone pour le live");
   });
 
-  it("met le mic du live dans la rangée du bas, à côté de « Régie », à portée du pouce", () => {
+  it("met le mic du live dans la rangée du bas, à côté de « Touches », à portée du pouce", () => {
     const html = renderToStaticMarkup(<SelfieRole onUpdateRole={noop} />);
-    const row = html.slice(html.indexOf("selfie-open"), html.indexOf("control-drawer"));
+    const row = html.slice(html.indexOf("control-bar"), html.indexOf("control-drawer"));
     expect(row).toContain("Prendre le micro de ce téléphone pour le live");
-    expect(row).toContain(">Régie<");
-    expect(row.indexOf("Prendre le micro")).toBeLessThan(row.indexOf(">Régie<"));
-    expect(html.indexOf("control-chat")).toBeLessThan(html.indexOf("selfie-open"));
+    expect(row).toContain(">Touches<");
+    expect(row.indexOf("Prendre le micro")).toBeLessThan(row.indexOf(">Touches<"));
+    expect(html.indexOf("control-chat")).toBeLessThan(html.indexOf("control-bar"));
   });
 
   it("n'a aucun champ de saisie au départ, met le bandeau sous l'aperçu et garde dans le tiroir les deux pages de la grille", () => {
@@ -53,7 +53,7 @@ describe("SelfieRole", () => {
       expect(banner).toContain(text);
     }
     const drawer = html.slice(html.indexOf("control-drawer"));
-    for (const text of ["Sons", "Jean-Renard", "Fermer la régie"]) {
+    for (const text of ["Sons", "Jean-Renard", "Fermer les touches"]) {
       expect(drawer).toContain(text);
     }
     expect(html).not.toContain("Scènes");
@@ -71,9 +71,9 @@ describe("SelfieRole", () => {
     expect(html.match(/class="control-banner"/g)).toHaveLength(1);
   });
 
-  it("met les menus des scènes et des micros après le tiroir de la régie, pour qu'ils passent dessus, et les garde fermés", () => {
+  it("met les menus des scènes et des micros après le tiroir des touches, pour qu'ils passent dessus, et les garde fermés", () => {
     const html = renderToStaticMarkup(<SelfieRole onUpdateRole={noop} />);
-    const drawer = html.indexOf("Fermer la régie");
+    const drawer = html.indexOf("Fermer les touches");
     const scenes = html.indexOf("Fermer le menu des scènes");
     const mics = html.indexOf("Fermer le menu des micros");
     expect(drawer).toBeGreaterThan(0);
@@ -82,6 +82,38 @@ describe("SelfieRole", () => {
     expect(html).not.toContain('data-open="true"');
     expect(html).toContain("Choisir la scène à l&#x27;antenne");
     expect(html).toContain("Choisir le micro du live");
+  });
+
+  it("met le retour antenne en vignette dans l'aperçu, après la caméra et ses boutons pour rester touchable, avec « OBS non joint » avant le premier état", () => {
+    const html = renderToStaticMarkup(<SelfieRole onUpdateRole={noop} />);
+    const preview = html.slice(html.indexOf("selfie-preview"), html.indexOf("control-banner"));
+    expect(preview).toContain("monitor-thumbnail");
+    expect(preview).toContain("Voir le retour antenne en grand");
+    expect(preview).toMatch(/class="monitor-thumbnail"[^>]*>(?:(?!<\/button>)[\s\S])*OBS non joint/);
+    for (const text of ["Caméra…", "Changer de rôle", "Commandes de la caméra", "Démarrage de la caméra…"]) {
+      expect(preview.indexOf(text)).toBeLessThan(preview.indexOf("monitor-thumbnail"));
+    }
+  });
+
+  it("n'a la vignette du retour antenne qu'à un endroit, l'aperçu : le bandeau ne la porte pas", () => {
+    const html = renderToStaticMarkup(<SelfieRole onUpdateRole={noop} />);
+    expect(html.match(/class="monitor-thumbnail"/g)).toHaveLength(1);
+    const banner = html.slice(html.indexOf("control-banner"), html.indexOf("control-chat"));
+    expect(banner).not.toContain("monitor-thumbnail");
+  });
+
+  it("garde la feuille du retour antenne fermée au départ, après le tiroir des touches, avec la vignette qui dit qu'elle l'est", () => {
+    const html = renderToStaticMarkup(<SelfieRole onUpdateRole={noop} />);
+    expect(html).toMatch(/class="monitor-thumbnail"[^>]*aria-expanded="false"/);
+    expect(html).toContain("Fermer le retour antenne");
+    expect(html.indexOf("Fermer les touches")).toBeLessThan(html.indexOf("Fermer le retour antenne"));
+    expect(html).not.toContain('data-open="true"');
+  });
+
+  it("n'a que deux boutons dans la barre du bas, le mic du live puis « Touches »", () => {
+    const html = renderToStaticMarkup(<SelfieRole onUpdateRole={noop} />);
+    const bar = html.slice(html.indexOf("control-bar"), html.indexOf("control-drawer"));
+    expect(bar.match(/<button/g)).toHaveLength(2);
   });
 });
 

@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { MobileSearchSchema } from "../../domain/phone.schema";
 import chatCss from "../../ui/chat/chat.css?url";
 import designSystemCss from "../../ui/design/design-system.css?url";
+import controlDrawerCss from "../../ui/mobile/control-drawer.css?url";
 import controlRoleCss from "../../ui/mobile/control-role.css?url";
 import { MobilePage } from "../../ui/mobile/mobile-page";
 import mobilePageCss from "../../ui/mobile/mobile-page.css?url";
@@ -31,6 +32,7 @@ export const Route = createFileRoute("/mobile")({
       { rel: "stylesheet", href: chatCss },
       { rel: "stylesheet", href: mobilePageCss },
       { rel: "stylesheet", href: controlRoleCss },
+      { rel: "stylesheet", href: controlDrawerCss },
       { rel: "stylesheet", href: selfieRoleCss },
     ],
     scripts: [{ children: DARK_APPEARANCE_SCRIPT }],

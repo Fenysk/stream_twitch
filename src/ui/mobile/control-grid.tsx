@@ -20,7 +20,7 @@ type ControlGridProps = {
 
 // La grille de touches de la régie : un contrôle segmenté pour les trois pages (Sons, Micros, Jean-Renard), et 3 colonnes de touches
 // générées de l'état, sans réglage. Elle lit les sounds et exécute les gestes elle-même : la page qui la porte n'a rien à
-// câbler (le Selfie la met dans un tiroir).
+// câbler (la Régie et le Selfie la mettent dans le tiroir « Touches », `ControlDock`).
 export const ControlGrid = ({ state, onToast }: ControlGridProps) => {
   const [page, setPage] = useState<ControlPage>("sounds");
   const { sounds, refresh } = useSounds();

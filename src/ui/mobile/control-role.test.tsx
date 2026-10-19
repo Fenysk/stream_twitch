@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ControlState, IDLE_CONTROL } from "../../domain/control.schema";
@@ -6,6 +7,7 @@ import { ChatComposer } from "./chat-composer";
 import { ChatViewersPanel } from "./chat-viewers-panel";
 import { ControlBanner } from "./control-banner";
 import { ControlChat } from "./control-chat";
+import { ControlDock } from "./control-dock";
 import { ControlGrid } from "./control-grid";
 import { ControlKeyButton } from "./control-key";
 import { ControlRole } from "./control-role";
@@ -14,6 +16,7 @@ import { MicMenu } from "./mic-menu";
 import { PictureMenu } from "./picture-menu";
 import { SceneMenu } from "./scene-menu";
 import { StopLiveSheet } from "./stop-live-sheet";
+import type { BannerMenuState } from "./use-banner-menu";
 import { ViewersSheet } from "./viewers-sheet";
 
 const noop = () => undefined;
@@ -78,7 +81,7 @@ describe("ControlRole", () => {
     expect(html).toContain("Fermer le menu des micros");
     expect(html).toContain("Fermer le menu de l&#x27;image");
     expect(html).toContain('data-open="false"');
-    expect(html.indexOf("control-grid")).toBeLessThan(html.indexOf("control-drawer"));
+    expect(html.indexOf("control-grid")).toBeLessThan(html.indexOf("Fermer le menu des scènes"));
     expect(html).not.toContain('data-open="true"');
   });
 
@@ -103,6 +106,54 @@ describe("ControlRole", () => {
     expect(html).toContain("Fermer le retour antenne");
     expect(html).toMatch(/class="monitor-thumbnail"[^>]*aria-expanded="false"/);
     expect(html).not.toContain('data-open="true"');
+  });
+
+  it("met sous le chat la barre du bas avec « Touches », un bouton primary que le tiroir fermé n'a pas encore ouvert", () => {
+    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const order = ["control-banner", "control-chat", "control-bar", "control-drawer"].map((name) =>
+      html.indexOf(name),
+    );
+    expect(order.every((position) => position > 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    const bar = html.slice(html.indexOf("control-bar"), html.indexOf("control-drawer"));
+    expect(bar).toMatch(
+      /<button[^>]*lp-btn--primary[^>]*aria-expanded="false"[^>]*>(?:(?!<\/button>)[\s\S])*Touches</,
+    );
+  });
+
+  it("garde la grille de touches dans le tiroir « Touches », fermé, et plus à l'écran avant lui", () => {
+    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const drawer = html.slice(
+      html.indexOf('class="control-drawer"'),
+      html.indexOf("Fermer le menu des scènes"),
+    );
+    expect(drawer).toContain('data-open="false"');
+    expect(drawer).toContain("Fermer les touches");
+    for (const text of ["control-grid", "Sons", "Jean-Renard"]) {
+      expect(drawer).toContain(text);
+    }
+    expect(html.match(/class="control-grid"/g)).toHaveLength(1);
+    expect(html.indexOf("control-bar")).toBeLessThan(html.indexOf("control-grid"));
+  });
+
+  it("n'a aucun bouton micro dans la barre du bas : la pastille du bandeau choisit le micro, un seul endroit pour ce geste", () => {
+    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const bar = html.slice(html.indexOf("control-bar"), html.indexOf("control-drawer"));
+    expect(bar).not.toContain("micro");
+    expect(bar.match(/<button/g)).toHaveLength(1);
+    expect(html).toContain("Choisir le micro du live");
+  });
+
+  it("pose les feuilles du bandeau, retour antenne compris, après le tiroir « Touches » : une feuille fixe dans l'autre serait rognée", () => {
+    const html = renderToStaticMarkup(<ControlRole onUpdateRole={noop} />);
+    const positions = [
+      "Fermer les touches",
+      "Fermer le menu des scènes",
+      "Fermer le menu des micros",
+      "Fermer le retour antenne",
+    ].map((text) => html.indexOf(text));
+    expect(positions.every((position) => position > 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
 });
 
@@ -240,6 +291,49 @@ describe("ControlBanner", () => {
     expect(html).toContain("Hors ligne");
     expect(html).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*Hors ligne/);
     expect(html).not.toContain("Arrêter le live");
+  });
+});
+
+describe("ControlDock", () => {
+  const dock = (openMenu: BannerMenu | null = null, children?: ReactNode) => {
+    const menu: BannerMenuState = { openMenu, monitorUrl: null, onOpenMenu: noop, onCloseMenu: noop };
+    return renderToStaticMarkup(
+      <ControlDock state={STATE} menu={menu} onToast={noop}>
+        {children}
+      </ControlDock>,
+    );
+  };
+
+  it("met la barre, puis le tiroir « Touches » avec la grille, puis les feuilles du bandeau, toutes fermées au départ", () => {
+    const html = dock();
+    const order = [
+      "control-bar",
+      "control-drawer",
+      "control-grid",
+      "Fermer le menu des scènes",
+      "Fermer le retour antenne",
+    ].map((text) => html.indexOf(text));
+    expect(order.every((position) => position > 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(html).not.toContain('data-open="true"');
+    expect(html).not.toContain("style=");
+  });
+
+  it("met ses boutons dans la barre avant « Touches », et seulement « Touches » sans eux", () => {
+    const bar = (html: string) => html.slice(html.indexOf("control-bar"), html.indexOf("control-drawer"));
+    expect(bar(dock()).match(/<button/g)).toHaveLength(1);
+    const withMic = bar(dock(null, <button type="button">Micro</button>));
+    expect(withMic.match(/<button/g)).toHaveLength(2);
+    expect(withMic.indexOf("Micro")).toBeLessThan(withMic.indexOf("Touches"));
+  });
+
+  it("n'ouvre que la feuille que le menu dit ouverte, le retour antenne par exemple, et jamais le tiroir des touches avec elle", () => {
+    const html = dock("monitor");
+    expect(html.match(/data-open="true"/g)).toHaveLength(1);
+    expect(html).toMatch(/data-open="true"><button[^>]*aria-label="Fermer le retour antenne"/);
+    expect(html).toMatch(
+      /class="control-drawer" data-open="false"><button[^>]*aria-label="Fermer les touches"/,
+    );
   });
 });
 

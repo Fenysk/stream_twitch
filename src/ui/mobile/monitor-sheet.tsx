@@ -3,7 +3,8 @@ import { MonitorImage } from "./monitor-image";
 
 type MonitorSheetProps = { url: string | null; isLinked: boolean; isOpen: boolean; onClose: () => void };
 
-// Le retour antenne en grand, ouvert par sa vignette du bandeau : une feuille comme les menus du bandeau, sœur du tiroir, après lui dans la page.
+// Le retour antenne en grand, ouvert par sa vignette (le bandeau de la Régie, l'aperçu du Selfie) : une feuille comme les menus du bandeau,
+// sœur du tiroir, après lui dans la page.
 export const MonitorSheet = ({ url, isLinked, isOpen, onClose }: MonitorSheetProps) => (
   <ControlDrawer
     isOpen={isOpen}
