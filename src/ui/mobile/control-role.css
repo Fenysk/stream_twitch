@@ -215,6 +215,19 @@
   overflow-y: auto;
 }
 
+/* La feuille Micro : « Micro entendu » et sa colonne de micros, puis « Couper le micro » à part, sur toute la largeur, sous un filet */
+.control-mics {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.control-mute {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--chip-hover);
+}
+
 /* La feuille Antenne : l'image, puis les sections Scène et Plan, leurs touches sur deux colonnes (la feuille défile en entier) */
 .control-section {
   display: grid;

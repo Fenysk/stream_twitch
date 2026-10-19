@@ -5,7 +5,7 @@ import { MUTE_MIC_ID, toCameraMicId, toLiveMic, toProgramScenes } from "../../do
 import type { ControlState } from "../../domain/control.schema";
 import { END_STEP_MINUTES, type EndDirection } from "../../domain/hours.rules";
 import type { SoundSummary } from "../../domain/sound.schema";
-import { isMicMuted, MUTE_TEXT, toMicName } from "./control-view";
+import { isMicMuted, toMicName } from "./control-view";
 
 export type KeyAction =
   | { kind: "scene"; name: string }
@@ -49,15 +49,14 @@ export const toSoundKeys = (sounds: readonly SoundSummary[] | null): ControlKey[
     action: { kind: "sound", id },
   }));
 
-// Les touches du menu Micro (pas de la grille) : PC, chaque caméra connectée (« · ce téléphone » pour celle de ce téléphone,
-// `ownNumber`), puis Muet. Le micro choisi est clair, Muet quand aucun n'est ouvert, les autres neutres ; celui dont la source OBS manque est
-// grisé, avec ce qui lui manque. Sans micro connu (le serveur n'a rien dit), aucune touche : pas même Muet.
+// Les touches du menu Micro (pas de la grille) : PC, puis chaque caméra connectée (« · ce téléphone » pour celle de ce téléphone,
+// `ownNumber`). Le micro choisi est clair, les autres neutres, aucun quand tout est coupé ; celui dont la source OBS manque est grisé,
+// avec ce qui lui manque. Sans micro connu (le serveur n'a rien dit), aucune touche. Muet n'est pas dans la liste : `toMuteKey`.
 export const toMicKeys = (state: ControlState, ownNumber: number | null = null): ControlKey[] => {
   const { mics } = state;
-  if (mics.length === 0) return [];
   const live = toLiveMic(mics);
   const ownMicId = ownNumber === null ? null : toCameraMicId(ownNumber);
-  const keys: ControlKey[] = mics.map((mic) => ({
+  return mics.map((mic) => ({
     id: `mic:${mic.id}`,
     label: mic.id === ownMicId ? `${toMicName(mic)} · ce téléphone` : toMicName(mic),
     ...(mic.isAvailable ? {} : { note: "Source OBS introuvable" }),
@@ -65,16 +64,19 @@ export const toMicKeys = (state: ControlState, ownNumber: number | null = null):
     isDisabled: !mic.isAvailable,
     action: { kind: "mic", id: mic.id },
   }));
-  return [
-    ...keys,
-    {
-      id: `mic:${MUTE_MIC_ID}`,
-      label: MUTE_TEXT,
-      state: isMicMuted(state) ? "active" : "idle",
-      isDisabled: false,
-      action: { kind: "mic", id: MUTE_MIC_ID },
-    },
-  ];
+};
+
+// La touche à part du menu Micro, sous la liste : « Couper le micro » quand un micro est ouvert, « Micro coupé » (enfoncée) quand OBS est
+// joint et qu'aucun n'est ouvert. Même geste que le choix d'un micro, avec l'identifiant réservé de Muet : choisir un micro rallume.
+export const toMuteKey = (state: ControlState): ControlKey => {
+  const isMuted = isMicMuted(state);
+  return {
+    id: `mic:${MUTE_MIC_ID}`,
+    label: isMuted ? "Micro coupé" : "Couper le micro",
+    state: isMuted ? "active" : "idle",
+    isDisabled: false,
+    action: { kind: "mic", id: MUTE_MIC_ID },
+  };
 };
 
 // Les touches du plan, dans la feuille Antenne (pas de la grille) : PC, chaque caméra, puis Tête, dans l'ordre de la place. Le membre au plan est

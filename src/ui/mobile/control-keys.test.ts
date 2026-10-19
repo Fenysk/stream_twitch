@@ -6,6 +6,7 @@ import {
   toFoxKeys,
   toMicKeys,
   toMicsEmptyText,
+  toMuteKey,
   toPictureEmptyText,
   toPictureKeys,
   toSceneKeys,
@@ -110,26 +111,25 @@ describe("les touches des sons", () => {
 });
 
 describe("les touches du menu Micro", () => {
-  it("met le micro entendu en clair et les autres en neutre, PC avant les caméras, et Muet en dernier", () => {
+  it("met le micro entendu en clair et les autres en neutre, PC avant les caméras, sans Muet dans la liste", () => {
     const keys = toMicKeys(STATE);
     expect(keys.map(({ label, state }) => [label, state])).toEqual([
       ["PC", "idle"],
       ["Caméra 1", "active"],
       ["Caméra 2", "idle"],
-      ["Muet", "idle"],
     ]);
     expect(keys[1]?.action).toEqual({ kind: "mic", id: "camera-1" });
-    expect(keys[3]?.action).toEqual({ kind: "mic", id: MUTE_MIC_ID });
+    expect(keys.some(({ action }) => action.kind === "mic" && action.id === MUTE_MIC_ID)).toBe(false);
   });
 
-  it("met en clair PC quand c'est lui qui est entendu, et Muet quand aucun micro n'est ouvert", () => {
+  it("met en clair PC quand c'est lui qui est entendu, et aucun micro quand aucun n'est ouvert", () => {
     const pcOpen = toMicKeys({
       ...STATE,
       mics: STATE.mics.map((mic) => ({ ...mic, isOpen: mic.id === "pc" })),
     });
-    expect(pcOpen.map(({ state }) => state)).toEqual(["active", "idle", "idle", "idle"]);
+    expect(pcOpen.map(({ state }) => state)).toEqual(["active", "idle", "idle"]);
     const noneOpen = toMicKeys({ ...STATE, mics: STATE.mics.map((mic) => ({ ...mic, isOpen: false })) });
-    expect(noneOpen.map(({ state }) => state)).toEqual(["idle", "idle", "idle", "active"]);
+    expect(noneOpen.map(({ state }) => state)).toEqual(["idle", "idle", "idle"]);
   });
 
   it("écrit « · ce téléphone » après la caméra de ce téléphone, et rien après les autres", () => {
@@ -137,19 +137,18 @@ describe("les touches du menu Micro", () => {
       "PC",
       "Caméra 1 · ce téléphone",
       "Caméra 2",
-      "Muet",
     ]);
-    expect(toMicKeys(STATE, 3).map(({ label }) => label)).toEqual(["PC", "Caméra 1", "Caméra 2", "Muet"]);
-    expect(toMicKeys(STATE, null).map(({ label }) => label)).toEqual(["PC", "Caméra 1", "Caméra 2", "Muet"]);
+    expect(toMicKeys(STATE, 3).map(({ label }) => label)).toEqual(["PC", "Caméra 1", "Caméra 2"]);
+    expect(toMicKeys(STATE, null).map(({ label }) => label)).toEqual(["PC", "Caméra 1", "Caméra 2"]);
   });
 
-  it("ne met pas Muet en clair quand OBS n'est pas joint : on ne sait pas qu'aucun micro n'est ouvert", () => {
-    const offline = toMicKeys({
+  it("ne dit pas « Micro coupé » quand OBS n'est pas joint : on ne sait pas qu'aucun micro n'est ouvert", () => {
+    const offline = toMuteKey({
       ...STATE,
       isLinked: false,
       mics: STATE.mics.map((mic) => ({ ...mic, isOpen: false })),
     });
-    expect(offline.at(-1)).toMatchObject({ label: "Muet", state: "idle", isDisabled: false });
+    expect(offline).toMatchObject({ label: "Couper le micro", state: "idle", isDisabled: false });
   });
 
   it("grise le micro d'une caméra dont la source OBS n'existe pas, et dit ce qui manque", () => {
@@ -163,6 +162,30 @@ describe("les touches du menu Micro", () => {
   it("n'a aucune touche, pas même Muet, avant le premier état du serveur, qui donne toujours celui du PC, et le dit", () => {
     expect(toMicKeys(IDLE_CONTROL)).toEqual([]);
     expect(toMicsEmptyText()).toBe("En attente du serveur…");
+  });
+});
+
+describe("la touche Couper le micro, à part de la liste des micros", () => {
+  it("dit « Couper le micro », neutre, quand un micro est ouvert, et fait le geste Muet (l'identifiant réservé)", () => {
+    const key = toMuteKey(STATE);
+    expect(key).toMatchObject({
+      id: `mic:${MUTE_MIC_ID}`,
+      label: "Couper le micro",
+      state: "idle",
+      isDisabled: false,
+    });
+    expect(key.action).toEqual({ kind: "mic", id: MUTE_MIC_ID });
+    expect(key).not.toHaveProperty("note");
+  });
+
+  it("dit « Micro coupé », enfoncée, quand OBS est joint et qu'aucun micro n'est ouvert", () => {
+    const none = { ...STATE, mics: STATE.mics.map((mic) => ({ ...mic, isOpen: false })) };
+    expect(toMuteKey(none)).toMatchObject({ label: "Micro coupé", state: "active", isDisabled: false });
+    expect(toMuteKey(none).action).toEqual({ kind: "mic", id: MUTE_MIC_ID });
+  });
+
+  it("dit « Couper le micro » tant que le serveur n'a rien donné : rien n'est coupé qu'on sache", () => {
+    expect(toMuteKey(IDLE_CONTROL)).toMatchObject({ label: "Couper le micro", state: "idle" });
   });
 });
 

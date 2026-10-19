@@ -512,28 +512,47 @@ describe("MicMenu", () => {
     mics: MICS.map((mic) => ({ ...mic, isOpen: mic.id === open })),
   });
 
-  it("ouvre une feuille avec PC et chaque caméra connectée, puis Muet, le micro entendu clair", () => {
+  it("ouvre une feuille avec PC et chaque caméra connectée sous « Micro entendu », sans Muet dans la liste, le micro entendu clair", () => {
     const html = menu(withOpen("camera-1"));
     expect(html).toContain("control-menu-list");
+    expect(html).toContain(">Micro entendu<");
     expect(html).toMatch(/data-state="idle"[^>]*>(?:(?!<\/button>)[\s\S])*>PC</);
     expect(html).toMatch(/data-state="active"[^>]*>(?:(?!<\/button>)[\s\S])*Caméra 1/);
     expect(html).toMatch(/data-state="idle"[^>]*>(?:(?!<\/button>)[\s\S])*Caméra 2/);
-    expect(html).toMatch(/data-state="idle"[^>]*>(?:(?!<\/button>)[\s\S])*>Muet</);
+    expect(html).not.toContain(">Muet<");
     expect(html.match(/data-state="active"/g)).toHaveLength(1);
   });
 
-  it("met Muet en dernier, après PC et les caméras dans l'ordre", () => {
+  it("met « Couper le micro » hors de la liste, après PC et les caméras dans l'ordre", () => {
     const html = menu(withOpen("pc"));
-    const labels = ["PC", "Caméra 1", "Caméra 2", "Muet"].map((label) => html.indexOf(`>${label}<`));
+    const labels = ["PC", "Caméra 1", "Caméra 2", "Couper le micro"].map((label) =>
+      html.indexOf(`>${label}<`),
+    );
     expect(labels.every((position) => position > 0)).toBe(true);
     expect(labels).toEqual([...labels].sort((a, b) => a - b));
+    const listStart = html.indexOf("control-menu-list");
+    const listEnd = html.indexOf("</div>", listStart);
+    expect(html.slice(listStart, listEnd)).not.toContain("Couper le micro");
+    expect(html.indexOf("Couper le micro")).toBeGreaterThan(listEnd);
   });
 
-  it("met PC en clair quand c'est lui qui est entendu, et Muet quand tous les micros sont coupés", () => {
+  it("met PC en clair quand c'est lui qui est entendu, et « Micro coupé » enfoncé, sans micro coché, quand tous les micros sont coupés", () => {
     expect(menu(withOpen("pc"))).toMatch(/data-state="active"[^>]*>(?:(?!<\/button>)[\s\S])*>PC</);
+    expect(menu(withOpen("pc"))).toMatch(
+      /aria-pressed="false"[^>]*>(?:(?!<\/button>)[\s\S])*>Couper le micro</,
+    );
     const muted = menu(withOpen(null));
-    expect(muted.match(/data-state="active"/g)).toHaveLength(1);
-    expect(muted).toMatch(/data-state="active"[^>]*>(?:(?!<\/button>)[\s\S])*>Muet</);
+    expect(muted.match(/data-state="active"/g)).toBeNull();
+    expect(muted).toMatch(/aria-pressed="true"[^>]*>(?:(?!<\/button>)[\s\S])*>Micro coupé</);
+    expect(muted).not.toContain(">Couper le micro<");
+  });
+
+  it("dessine le bouton avec le micro barré, sans rouge ni orange : couper n'est ni « les viewers t'entendent » ni une alerte", () => {
+    for (const open of ["pc", null]) {
+      const html = menu(withOpen(open));
+      expect(html).toContain("lucide-mic-off");
+      expect(html).not.toMatch(/lp-btn--danger|lp-danger|lp-warning|lp-btn--primary/);
+    }
   });
 
   it("écrit « · ce téléphone » après la caméra du Selfie, et rien à la Régie", () => {
@@ -542,7 +561,7 @@ describe("MicMenu", () => {
     expect(menu(withOpen("pc"))).not.toContain("ce téléphone");
   });
 
-  it("grise le micro d'une caméra dont la source OBS manque, avec ce qui manque, mais pas Muet", () => {
+  it("grise le micro d'une caméra dont la source OBS manque, avec ce qui manque, mais pas « Couper le micro »", () => {
     const html = menu({
       ...STATE,
       mics: [{ id: "camera-3", label: "Caméra 3", isOpen: false, isAvailable: false }],
@@ -550,12 +569,14 @@ describe("MicMenu", () => {
     expect(html).toContain("Source OBS introuvable");
     expect(html.match(/disabled=""/g)).toHaveLength(1);
     expect(html).toMatch(/disabled=""[^>]*>(?:(?!<\/button>)[\s\S])*Caméra 3/);
+    expect(html).toContain(">Couper le micro<");
   });
 
-  it("dit d'attendre le serveur tant que la régie n'a rien donné", () => {
+  it("dit d'attendre le serveur tant que la régie n'a rien donné, sans « Couper le micro » : il n'y a rien à couper", () => {
     const html = menu(IDLE_CONTROL);
     expect(html).not.toContain("control-menu-list");
     expect(html).toContain("En attente du serveur…");
+    expect(html).not.toContain("Couper le micro");
   });
 
   it("se ferme par la poignée ou le voile, et dit s'il est ouvert", () => {
