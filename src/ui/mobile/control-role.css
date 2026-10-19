@@ -1,4 +1,4 @@
-/* Le rôle Régie de /mobile, en portrait : le bandeau, le chat, la barre du bas (la grille de touches est dans son tiroir, control-drawer.css).
+/* Le rôle Régie de /mobile, en portrait : le bandeau, le chat, la barre du bas (la grille des sons est dans son tiroir, control-drawer.css).
    Toutes les valeurs viennent des tokens du design system ; les tailles de texte viennent de ses classes `lp-type-*`. */
 
 .control-role {
@@ -11,8 +11,10 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: var(--space-3);
   padding: var(--space-3);
-  /* Où se pose le toast : sous la vignette de l'antenne, un tiers de la largeur du bandeau en 16:9 (le Selfie pose le sien) */
-  --toast-top: calc(var(--space-4) + (100vw - 2 * var(--space-3) - 2 * var(--space-2)) * 3 / 16);
+  /* La hauteur du bandeau : ses deux lignes de légende, d'une hauteur de contrôle chacune, et l'espace entre elles */
+  --banner-height: calc(2 * var(--control-size) + var(--space-1));
+  /* Où se pose le toast : sous le bandeau (le Selfie pose le sien) */
+  --toast-top: calc(var(--space-3) + var(--banner-height) + var(--space-2));
   overflow: hidden;
   background: var(--void);
   color: var(--ink);
@@ -26,11 +28,9 @@
   min-width: 0;
 }
 
-/* Le bandeau : des pastilles, d'une même hauteur de contrôle. Quand elles ne tiennent pas sur une ligne (le live, les viewers, la scène et
-   le plan), elles passent à la suivante. */
+/* Le bandeau : la vignette de l'antenne, sa légende de deux lignes qui prend la place qui reste, et le coin qui change de rôle (la Régie) */
 .control-banner {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
@@ -90,8 +90,8 @@
   height: 16px;
 }
 
-/* L'antenne : la vignette 16:9 d'un tiers du bandeau (un bouton qui ouvre la feuille), et la même image en grand dans la feuille.
-   Les pastilles passent à côté de la vignette, puis en dessous. */
+/* L'antenne : la vignette 16:9 d'un tiers du bandeau, centrée en face de la légende (un bouton qui ouvre la feuille), et la même image en
+   grand dans la feuille. La légende garde le reste : assez pour « Live 3:05:41 · 128 » à côté du coin de la Régie. */
 .monitor-thumbnail,
 .monitor-large {
   box-sizing: border-box;
@@ -103,8 +103,8 @@
 }
 
 .monitor-thumbnail {
-  flex: 0 0 calc((100% - 2 * var(--space-2)) / 3);
-  min-width: 0;
+  flex: none;
+  width: 36%;
   padding: 0;
   border: 0;
   cursor: pointer;
@@ -126,12 +126,11 @@
   object-fit: contain;
 }
 
+/* Sans OBS : un fond neutre, sans texte (l'alerte dit « OBS non joint ») */
 .monitor-empty {
-  display: grid;
-  place-items: center;
+  display: block;
   height: 100%;
-  padding: 0 var(--space-2);
-  text-align: center;
+  background: var(--chip);
 }
 
 /* Le squelette remplit la place de l'image, sans les 120 px de sa variante `area` */
@@ -142,29 +141,24 @@
   border-radius: 0;
 }
 
-/* La scène à l'antenne et le plan prennent la place qui reste, leur nom se coupe par des points. Ce sont des boutons (ils ouvrent le menu
-   des scènes et celui du plan) qui remplissent la pastille : elle garde la hauteur des autres, et la hauteur tactile du bouton. */
-.control-banner .control-menu-pill {
-  flex: 0 1 auto;
+/* La légende : deux boutons l'un sous l'autre, d'une hauteur de contrôle chacun, alignés à gauche. « Jeu · PC » ouvre la feuille Antenne,
+   « ● Live 1:42 · 12 » la feuille Live ; le texte se coupe par des points quand la place manque, les chiffres gardent leur largeur. */
+.banner-legend {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(2, var(--control-size));
+  gap: var(--space-1);
   min-width: 0;
 }
 
-.control-menu-pill .lp-pill-content {
-  width: auto;
-  max-width: 100%;
+.banner-legend .lp-btn {
+  justify-content: flex-start;
   min-width: 0;
+  font-variant-numeric: tabular-nums;
 }
 
-.control-banner .control-menu-content {
-  padding: 0;
-}
-
-.control-menu-pill .lp-btn {
-  max-width: 100%;
-  min-width: 0;
-}
-
-.control-menu-pill .lp-btn > span {
+.banner-legend .lp-btn > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -208,7 +202,7 @@
   justify-content: center;
 }
 
-/* Les menus du bandeau et de la barre du bas (scènes, micros, plan) : le titre de la feuille, puis une colonne de touches, qui défile quand il y en a beaucoup */
+/* Le menu Micro de la barre du bas : le titre de la feuille, puis une colonne de touches, qui défile quand il y en a beaucoup */
 .control-drawer-title {
   margin: 0;
 }
@@ -219,6 +213,38 @@
   gap: var(--space-2);
   max-height: 55dvh;
   overflow-y: auto;
+}
+
+/* La feuille Antenne : l'image, puis les sections Scène et Plan, leurs touches sur deux colonnes (la feuille défile en entier) */
+.control-section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.control-section-title {
+  margin: 0;
+}
+
+.control-section .control-menu-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* La feuille Live : « Fin prévue 23:40 » et les deux touches de fin sur une ligne, puis le bilan sur toute la largeur */
+.control-live-keys {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.control-live-end {
+  margin: 0;
+}
+
+.control-live-keys .control-key:last-child {
+  grid-column: 1 / -1;
 }
 
 .control-live-dot {
@@ -367,7 +393,7 @@
   min-width: 0;
 }
 
-/* La barre du bas, à portée du pouce : ses boutons au centre, « Micro : X » puis « Touches » */
+/* La barre du bas, à portée du pouce : ses boutons au centre, « Micro : X » puis « Sons » */
 .control-bar {
   display: flex;
   align-items: center;
@@ -375,26 +401,12 @@
   gap: var(--space-2);
 }
 
-/* La grille, dans le tiroir : le contrôle segmenté sur toute la largeur, puis 3 colonnes de touches */
+/* La grille, dans le tiroir : « Couper le son » sur toute la largeur, puis 3 colonnes de touches */
 .control-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
   min-width: 0;
-}
-
-.control-grid .lp-segmented {
-  box-sizing: border-box;
-  width: 100%;
-  justify-self: stretch;
-}
-
-/* Chaque page garde son nom sur une ligne et prend la place que son nom demande (« Jean-Renard » est le plus long) */
-.control-grid .lp-segmented-option {
-  flex: 1 1 auto;
-  justify-content: center;
-  padding: 0 var(--space-2);
-  white-space: nowrap;
 }
 
 .control-keys {

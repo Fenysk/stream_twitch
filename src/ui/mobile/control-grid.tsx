@@ -1,44 +1,37 @@
-import { useState } from "react";
-import { CONTROL_PAGES, type ControlPage, type ControlState } from "../../domain/control.schema";
-import { Segmented, type SegmentedOption } from "../design/segmented";
+import { VolumeX } from "lucide-react";
+import { useEffect } from "react";
+import { Button } from "../design/button";
 import type { ToastTone } from "../design/toast-announcement";
 import { useSounds } from "../settings/use-sounds";
 import { ControlKeyButton } from "./control-key";
-import { PAGE_LABELS, toEmptyText, toKeys } from "./control-keys";
+import { toSoundKeys, toSoundsEmptyText } from "./control-keys";
 import { useControlActions } from "./use-control-actions";
 
-const PAGE_CHOICES: readonly SegmentedOption<ControlPage>[] = CONTROL_PAGES.map((page) => ({
-  value: page,
-  label: PAGE_LABELS[page],
-}));
-
 type ControlGridProps = {
-  state: ControlState;
+  // Le tiroir qui la porte est ouvert : la liste des sons est relue à chaque ouverture, la soundboard a pu changer.
+  isOpen: boolean;
   // Un refus s'annonce par le toast de la page qui porte la grille.
   onToast: (tone: ToastTone, text: string) => void;
 };
 
-// La grille de touches de la régie : un contrôle segmenté pour les trois pages (Sons, Micros, Jean-Renard), et 3 colonnes de touches
-// générées de l'état, sans réglage. Elle lit les sounds et exécute les gestes elle-même : la page qui la porte n'a rien à
-// câbler (la Régie et le Selfie la mettent dans le tiroir « Touches », `ControlDock`).
-export const ControlGrid = ({ state, onToast }: ControlGridProps) => {
-  const [page, setPage] = useState<ControlPage>("sounds");
+// La grille de la régie, dans le tiroir « Sons » : « Couper le son » en tête, puis 3 colonnes de touches, une par son de la soundboard, générées
+// sans réglage. Elle lit les sounds et exécute les gestes elle-même : la page qui la porte n'a rien à câbler (la Régie et le Selfie la mettent
+// dans le tiroir, `ControlDock`). Un son joué ne referme pas le tiroir : on en enchaîne plusieurs.
+export const ControlGrid = ({ isOpen, onToast }: ControlGridProps) => {
   const { sounds, refresh } = useSounds();
   const press = useControlActions(onToast);
 
-  // La soundboard peut avoir changé depuis l'ouverture : sa liste est relue quand on ouvre la page des sons.
-  const select = (next: ControlPage) => {
-    setPage(next);
-    if (next === "sounds") void refresh();
-  };
+  useEffect(() => {
+    if (isOpen) void refresh();
+  }, [isOpen, refresh]);
 
-  const keys = toKeys(page, state, sounds);
+  const keys = toSoundKeys(sounds);
   return (
-    <section className="control-grid" aria-label="Touches">
-      <Segmented label="Page des touches" options={PAGE_CHOICES} value={page} onSelect={select} />
+    <section className="control-grid" aria-label="Sons">
+      <Button icon={VolumeX} label="Couper le son" onPress={() => press({ kind: "stop" })} />
       {keys.length === 0 ? (
         <p className="lp-type-body lp-muted control-empty" role="status">
-          {toEmptyText(page, sounds)}
+          {toSoundsEmptyText(sounds)}
         </p>
       ) : (
         <div className="control-keys">

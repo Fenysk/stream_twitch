@@ -12,7 +12,7 @@ type ControlDrawerProps = {
 
 const doNothing = (): void => undefined;
 
-// Une feuille qui monte du bas (le tiroir des touches, le menu des scènes), avec la poignée du design system (la glisser vers
+// Une feuille qui monte du bas (le tiroir des sons, les feuilles du bandeau), avec la poignée du design system (la glisser vers
 // le bas ou la toucher la ferme). Toucher le voile à côté la ferme aussi. Fermée, elle reste dans la page (son contenu garde son état)
 // sans être visible ni atteignable. Une feuille ne s'ouvre pas dans une autre : elles sont sœurs, la dernière dans la page est dessus.
 export const ControlDrawer = ({ isOpen, label, closeLabel, onClose, children }: ControlDrawerProps) => (

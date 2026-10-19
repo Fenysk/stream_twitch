@@ -18,7 +18,7 @@ type ControlDockProps = {
 };
 
 // Le bas de l'écran du téléphone, commun à la Régie et au Selfie : la barre centrée, à portée du pouce, avec « Micro : X » (il montre le micro
-// entendu et ouvre la feuille Micro) puis « Touches », qui ouvre le tiroir de la grille de touches ; viennent ensuite les feuilles du bandeau.
+// entendu et ouvre la feuille Micro) puis « Sons », qui ouvre le tiroir de la grille des sons ; viennent ensuite les feuilles du bandeau.
 // Le tiroir et les feuilles sont fixes et sœurs, les feuilles après lui dans la page : une feuille fixe dans une autre serait rognée par
 // son `backdrop-filter`.
 export const ControlDock = ({ state, menu, ownNumber, onToast }: ControlDockProps) => {
@@ -34,7 +34,7 @@ export const ControlDock = ({ state, menu, ownNumber, onToast }: ControlDockProp
           onPress={() => menu.onOpenMenu("mics")}
         />
         <Button
-          label="Touches"
+          label="Sons"
           icon={LayoutGrid}
           variant="primary"
           isExpanded={isDrawerOpen}
@@ -43,17 +43,18 @@ export const ControlDock = ({ state, menu, ownNumber, onToast }: ControlDockProp
       </div>
       <ControlDrawer
         isOpen={isDrawerOpen}
-        label="Touches"
-        closeLabel="Fermer les touches"
+        label="Sons"
+        closeLabel="Fermer les sons"
         onClose={() => setIsDrawerOpen(false)}
       >
-        <ControlGrid state={state} onToast={onToast} />
+        <ControlGrid isOpen={isDrawerOpen} onToast={onToast} />
       </ControlDrawer>
       <BannerMenus
         state={state}
         ownNumber={ownNumber}
         openMenu={menu.openMenu}
         monitorUrl={menu.monitorUrl}
+        onOpenMenu={menu.onOpenMenu}
         onClose={menu.onCloseMenu}
         onToast={onToast}
       />

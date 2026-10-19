@@ -3,9 +3,7 @@ import { MUTE_MIC_ID } from "../../domain/control.rules";
 import { type ControlState, IDLE_CONTROL } from "../../domain/control.schema";
 import type { SoundSummary } from "../../domain/sound.schema";
 import {
-  PAGE_LABELS,
-  toEmptyText,
-  toKeys,
+  toFoxKeys,
   toMicKeys,
   toMicsEmptyText,
   toPictureEmptyText,
@@ -13,6 +11,8 @@ import {
   toSceneKeys,
   toScenesEmptyText,
   toSentence,
+  toSoundKeys,
+  toSoundsEmptyText,
 } from "./control-keys";
 
 const STATE: ControlState = {
@@ -50,7 +50,7 @@ describe("les touches du menu des scènes", () => {
 
   it("n'a aucune touche quand OBS n'a pas de scène, et le dit selon qu'il est joint ou non", () => {
     expect(toSceneKeys(IDLE_CONTROL)).toEqual([]);
-    expect(toScenesEmptyText(IDLE_CONTROL)).toBe("OBS n'est pas connecté.");
+    expect(toScenesEmptyText(IDLE_CONTROL)).toBe("Aucune scène à choisir.");
     expect(toScenesEmptyText({ ...IDLE_CONTROL, isLinked: true })).toBe("Aucune scène dans OBS.");
   });
 
@@ -85,16 +85,16 @@ describe("les touches du menu des scènes", () => {
   });
 });
 
-describe("les pages de la grille", () => {
-  it("n'a plus de page des scènes ni des micros : ils ont leur menu, dans le bandeau", () => {
-    expect(Object.keys(PAGE_LABELS)).toEqual(["sounds", "fox"]);
-    expect(toEmptyText("sounds", null)).toBe("Chargement…");
+describe("la grille de la régie", () => {
+  it("n'a plus de page : ni les scènes ni les micros ni Jean-Renard, la grille n'a que les sons", () => {
+    expect(toSoundKeys(null)).toEqual([]);
+    expect(toSoundsEmptyText(null)).toBe("Chargement…");
   });
 });
 
 describe("les touches des sons", () => {
   it("fait une touche neutre par son de la soundboard, qui le joue dans OBS", () => {
-    const keys = toKeys("sounds", STATE, [sound("a1", "Applaudissements"), sound("b2", "Rire")]);
+    const keys = toSoundKeys([sound("a1", "Applaudissements"), sound("b2", "Rire")]);
     expect(keys.map(({ label, state }) => [label, state])).toEqual([
       ["Applaudissements", "idle"],
       ["Rire", "idle"],
@@ -103,9 +103,9 @@ describe("les touches des sons", () => {
   });
 
   it("dit « Chargement… » tant que la liste n'est pas là, puis où ajouter un son quand elle est vide", () => {
-    expect(toKeys("sounds", STATE, null)).toEqual([]);
-    expect(toEmptyText("sounds", null)).toBe("Chargement…");
-    expect(toEmptyText("sounds", [])).toBe("Aucun son : ajoute-en dans l'onglet Sons.");
+    expect(toSoundKeys(null)).toEqual([]);
+    expect(toSoundsEmptyText(null)).toBe("Chargement…");
+    expect(toSoundsEmptyText([])).toBe("Aucun son : ajoute-en dans l'onglet Sons.");
   });
 });
 
@@ -216,41 +216,40 @@ describe("les touches du menu de l'image", () => {
   });
 });
 
-describe("les touches de Jean-Renard", () => {
-  it("donne trois touches fixes dans cet ordre : le bilan, la fin du live moins dix, la fin du live plus dix", () => {
-    const keys = toKeys("fox", IDLE_CONTROL, null);
+describe("les touches de Jean-Renard, dans la feuille Live", () => {
+  it("donne trois touches fixes dans cet ordre : la fin du live moins dix, la fin du live plus dix, le bilan", () => {
+    const keys = toFoxKeys();
     expect(keys.map(({ label, action }) => [label, action])).toEqual([
-      ["Faire le bilan", { kind: "review" }],
-      ["Fin du live −10", { kind: "end", direction: "sooner" }],
-      ["Fin du live +10", { kind: "end", direction: "later" }],
+      ["−10 min", { kind: "end", direction: "sooner" }],
+      ["+10 min", { kind: "end", direction: "later" }],
+      ["Bilan", { kind: "review" }],
     ]);
     expect(keys.every(({ state, isDisabled }) => state === "idle" && !isDisabled)).toBe(true);
   });
 
-  it("écrit sous les deux touches de fin l'heure de la fin prévue, ou « --:-- » sans fin", () => {
-    const [, sooner, later] = toKeys("fox", IDLE_CONTROL, null);
-    expect(later?.note).toBe("--:--");
-    expect(sooner?.note).toBe("--:--");
-    const endAt = new Date(2026, 9, 19, 23, 40).getTime();
-    const withEnd = toKeys("fox", { ...IDLE_CONTROL, endAt }, null);
-    expect(withEnd[1]?.note).toBe("23:40");
-    expect(withEnd[2]?.note).toBe("23:40");
-    expect(withEnd[0]).not.toHaveProperty("note");
+  it("ne met aucune ligne sous les touches : l'heure de la fin prévue est dite à côté, une seule fois", () => {
+    const [sooner, later, review] = toFoxKeys();
+    expect(later).not.toHaveProperty("note");
+    expect(sooner).not.toHaveProperty("note");
+    expect(review).not.toHaveProperty("note");
+    expect(toFoxKeys().map(({ id }) => id)).toEqual(["fox:sooner", "fox:later", "fox:review"]);
   });
 
-  it("ne dit rien quand la page est vide : elle ne l'est jamais", () => {
-    expect(toEmptyText("fox", null)).toBe("");
+  it("met la fin plus tôt avant la fin plus tard, comme les touches du Stream Deck", () => {
+    const [sooner, later] = toFoxKeys();
+    expect(sooner?.action).toEqual({ kind: "end", direction: "sooner" });
+    expect(later?.action).toEqual({ kind: "end", direction: "later" });
   });
 });
 
-describe("toSentence et PAGE_LABELS", () => {
+describe("toSentence et les noms des touches", () => {
   it("met une majuscule au refus du serveur, sans toucher au reste", () => {
     expect(toSentence("la scène « Pause » n'existe pas")).toBe("La scène « Pause » n'existe pas");
     expect(toSentence("OBS n'est pas connecté")).toBe("OBS n'est pas connecté");
     expect(toSentence("")).toBe("");
   });
 
-  it("nomme les deux pages : Sons, Jean-Renard", () => {
-    expect(PAGE_LABELS).toEqual({ sounds: "Sons", fox: "Jean-Renard" });
+  it("nomme chaque touche de son par son titre, et garde son identifiant", () => {
+    expect(toSoundKeys([sound("a1", "Rire")])[0]).toMatchObject({ id: "sound:a1", label: "Rire" });
   });
 });

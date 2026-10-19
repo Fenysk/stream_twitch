@@ -3,12 +3,6 @@ import { END_DIRECTIONS } from "./hours.rules";
 import { IDLE_PICTURE, PictureStateSchema } from "./picture.schema";
 import { ViewersStateSchema } from "./viewers.schema";
 
-// Les deux pages de la grille de keys de la régie, dans cet ordre : une par sorte de touche. Les scènes et les micros ont leur menu, dans le
-// bandeau.
-export const CONTROL_PAGES = ["sounds", "fox"] as const;
-export const ControlPageSchema = z.enum(CONTROL_PAGES);
-export type ControlPage = z.infer<typeof ControlPageSchema>;
-
 // Un message que la régie envoie au chat : de 1 à 500 caractères (la limite de Twitch).
 export const CHAT_TEXT_MAX = 500;
 

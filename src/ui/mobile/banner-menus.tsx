@@ -1,15 +1,15 @@
 import type { ControlState } from "../../domain/control.schema";
 import type { ToastTone } from "../design/toast-announcement";
+import { LiveSheet } from "./live-sheet";
 import { MicMenu } from "./mic-menu";
 import { MonitorSheet } from "./monitor-sheet";
-import { PictureMenu } from "./picture-menu";
-import { SceneMenu } from "./scene-menu";
 import { StopLiveSheet } from "./stop-live-sheet";
 import { ViewersSheet } from "./viewers-sheet";
 
-// Les feuilles que le bandeau et la barre du bas ouvrent, une à la fois : le menu des scènes, la feuille Micro, le menu du plan, la
-// confirmation de l'arrêt du live, la liste des viewers, et l'antenne en grand (sa vignette est dans le bandeau).
-export type BannerMenu = "scenes" | "mics" | "picture" | "stop" | "viewers" | "monitor";
+// Les feuilles que le bandeau et la barre du bas ouvrent, une à la fois : l'antenne en grand avec les scènes et le plan (la vignette et la
+// première ligne), le live (la deuxième ligne), d'où s'ouvrent la liste des viewers et la confirmation de l'arrêt, et le micro (la barre
+// du bas).
+export type BannerMenu = "monitor" | "live" | "viewers" | "stop" | "mics";
 
 type BannerMenusProps = {
   state: ControlState;
@@ -18,36 +18,45 @@ type BannerMenusProps = {
   openMenu: BannerMenu | null;
   // L'image de l'antenne (`useBannerMenu`).
   monitorUrl: string | null;
+  onOpenMenu: (menu: BannerMenu) => void;
   onClose: () => void;
   onToast: (tone: ToastTone, text: string) => void;
 };
 
-// Les feuilles du bandeau, posées dans la page après tout ce qu'elles doivent recouvrir (le tiroir des touches compris).
+// Les feuilles du bandeau, posées dans la page après tout ce qu'elles doivent recouvrir (le tiroir des sons compris).
 export const BannerMenus = ({
   state,
   ownNumber,
   openMenu,
   monitorUrl,
+  onOpenMenu,
   onClose,
   onToast,
 }: BannerMenusProps) => (
   <>
-    <SceneMenu state={state} isOpen={openMenu === "scenes"} onClose={onClose} onToast={onToast} />
+    <MonitorSheet
+      url={monitorUrl}
+      state={state}
+      isOpen={openMenu === "monitor"}
+      onClose={onClose}
+      onToast={onToast}
+    />
+    <LiveSheet
+      state={state}
+      isOpen={openMenu === "live"}
+      onClose={onClose}
+      onOpenViewers={() => onOpenMenu("viewers")}
+      onOpenStop={() => onOpenMenu("stop")}
+      onToast={onToast}
+    />
+    <ViewersSheet isOpen={openMenu === "viewers"} onClose={onClose} />
+    <StopLiveSheet isOpen={openMenu === "stop"} onClose={onClose} onToast={onToast} />
     <MicMenu
       state={state}
       ownNumber={ownNumber}
       isOpen={openMenu === "mics"}
       onClose={onClose}
       onToast={onToast}
-    />
-    <PictureMenu state={state} isOpen={openMenu === "picture"} onClose={onClose} onToast={onToast} />
-    <StopLiveSheet isOpen={openMenu === "stop"} onClose={onClose} onToast={onToast} />
-    <ViewersSheet isOpen={openMenu === "viewers"} onClose={onClose} />
-    <MonitorSheet
-      url={monitorUrl}
-      isLinked={state.isLinked}
-      isOpen={openMenu === "monitor"}
-      onClose={onClose}
     />
   </>
 );

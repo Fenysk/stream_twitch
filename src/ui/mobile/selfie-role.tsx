@@ -21,9 +21,10 @@ import { useToast } from "./use-toast";
 import { useWakeLock } from "./use-wake-lock";
 
 // Le rôle Selfie, tenu en portrait, de haut en bas : l'aperçu de la caméra avant (en miroir pour toi, jamais pour OBS), avec la pastille du
-// numéro et la bascule de caméra par-dessus ; le bandeau de la régie (la vignette de l'antenne, un appui l'ouvre en grand, puis live, viewers,
-// scène, plan), toujours visible, avec l'alerte en dessous quand il y en a une ; le chat, avec « Écrire » dans sa boîte ; et en bas, à portée du pouce, « Micro : X » (la feuille Micro) et
-// « Touches », qui ouvre dans un tiroir la grille de touches. Les feuilles s'ouvrent par-dessus tout, tiroir compris.
+// numéro et la bascule de caméra par-dessus ; le bandeau de la régie (la vignette de l'antenne avec sa légende de deux lignes, qui ouvrent les
+// feuilles Antenne et Live), toujours visible, avec l'alerte en dessous quand il y en a une ; le chat, avec « Écrire » dans sa boîte ; et en
+// bas, à portée du pouce, « Micro : X » (la feuille Micro) et « Sons », qui ouvre dans un tiroir la grille des sons. Les feuilles s'ouvrent
+// par-dessus tout, tiroir compris.
 // Un cadre rouge autour de l'aperçu dit que la caméra est à l'antenne. Un seul flux avec le serveur : la liaison de la caméra apporte
 // aussi l'état de la régie.
 export const SelfieRole = ({ onUpdateRole }: { onUpdateRole: () => void }) => {

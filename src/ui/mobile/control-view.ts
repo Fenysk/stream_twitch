@@ -4,7 +4,9 @@
 import type { PhoneChatMark } from "../../domain/chat-phone.rules";
 import { isLiveMicOf, PC_MIC_ID, toDurationText, toLiveMic } from "../../domain/control.rules";
 import type { ControlMic, ControlState } from "../../domain/control.schema";
+import { toEndClock } from "../../domain/hours.rules";
 import type { ViewersState } from "../../domain/viewers.types";
+import { toViewersLine } from "../settings/live-states";
 
 const NO_VALUE = "–";
 
@@ -21,11 +23,9 @@ export const toViewersText = (viewers: ViewersState): { text: string; title: str
   };
 };
 
-// La scène à l'antenne ; OBS non joint ou sans scène, un tiret.
-export const toSceneText = ({ isLinked, scene }: ControlState): string => {
-  if (!isLinked) return "OBS non joint";
-  return scene ?? NO_VALUE;
-};
+// La scène à l'antenne ; sans scène, ou OBS non joint, un tiret : seule l'alerte dit « OBS non joint ».
+export const toSceneText = ({ isLinked, scene }: ControlState): string =>
+  isLinked ? (scene ?? NO_VALUE) : NO_VALUE;
 
 export const MUTE_TEXT = "Muet";
 
@@ -45,13 +45,32 @@ export const toMicText = (state: ControlState, ownNumber: number | null = null):
   return `Micro : ${isMicMuted(state) ? MUTE_TEXT : NO_VALUE}`;
 };
 
-// Le plan : « Plan : PC », « Plan : Caméra 1 », « Plan : Tête » ; aucun membre au plan, un tiret. Sans place caméra, la pastille n'est pas
-// montrée (voir `hasPicture`).
+// Le plan : « PC », « Caméra 1 », « Tête » ; aucun membre au plan, un tiret.
 export const toPictureText = ({ picture }: ControlState): string =>
-  `Plan : ${picture.members.find(({ id }) => id === picture.currentId)?.label ?? NO_VALUE}`;
+  picture.members.find(({ id }) => id === picture.currentId)?.label ?? NO_VALUE;
 
-// OBS a une place caméra à montrer : la pastille du plan n'existe que dans ce cas.
+// OBS a une place caméra à montrer : le plan n'existe que dans ce cas.
 export const hasPicture = ({ picture }: ControlState): boolean => picture.members.length > 0;
+
+// La première ligne du bandeau : « Jeu · PC » (la scène, puis le plan) ; sans place caméra, la scène seule.
+export const toAntennaText = (state: ControlState): string =>
+  hasPicture(state) ? `${toSceneText(state)} · ${toPictureText(state)}` : toSceneText(state);
+
+// La deuxième ligne du bandeau : « Live 1:42 · 12 » (la durée, puis les viewers) pendant la diffusion, « Hors ligne » seul sinon.
+export const toLiveLineText = (state: ControlState, elapsedMs: number): string =>
+  state.broadcast.isLive
+    ? `${toLiveText(state, elapsedMs)} · ${toViewersText(state.viewers).text}`
+    : toLiveText(state, elapsedMs);
+
+// La ligne des viewers de la feuille Live : « 12 viewers » ; sans nombre (hors ligne, Twitch muet), « Viewers » : elle ouvre la liste.
+export const toViewersLineText = (viewers: ViewersState): string =>
+  viewers.kind === "live" ? toViewersLine(viewers).text : "Viewers";
+
+const NO_END_CLOCK = "--:--";
+
+// La fin prévue de la feuille Live : « Fin prévue 23:40 », « Fin prévue --:-- » sans fin.
+export const toEndText = ({ endAt }: ControlState): string =>
+  `Fin prévue ${toEndClock(endAt) || NO_END_CLOCK}`;
 
 // Le nombre de personnes de la liste des viewers : « 0 personne », « 1 personne », « 12 personnes ».
 export const toChatViewersCountText = (count: number): string => `${count} personne${count > 1 ? "s" : ""}`;

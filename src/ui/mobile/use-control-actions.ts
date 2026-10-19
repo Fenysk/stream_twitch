@@ -3,10 +3,10 @@ import { updateEnd, updateMic, updatePicture, updateScene } from "../control-api
 import type { ToastTone } from "../design/toast-announcement";
 import type { Answer } from "../expressions-api";
 import { review } from "../fox-api";
-import { playSound } from "../sounds-api";
+import { playSound, stopSounds } from "../sounds-api";
 import { type KeyAction, toSentence } from "./control-keys";
 
-// Le geste d'une touche : la demande au serveur qui lui répond. Le bilan rend ce que Jean-Renard va dire : seul son refus compte ici.
+// Le geste d'une touche (ou de « Couper le son ») : la demande au serveur qui lui répond. Le bilan rend ce que Jean-Renard va dire : seul son refus compte ici.
 const send = async (action: KeyAction): Promise<Answer<true>> => {
   switch (action.kind) {
     case "scene":
@@ -19,6 +19,8 @@ const send = async (action: KeyAction): Promise<Answer<true>> => {
       return updatePicture(action.id);
     case "end":
       return updateEnd(action.direction);
+    case "stop":
+      return stopSounds();
     case "review": {
       const answer = await review();
       return answer.ok ? { ok: true, value: true } : answer;

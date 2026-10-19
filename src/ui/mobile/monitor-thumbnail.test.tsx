@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { IDLE_CONTROL } from "../../domain/control.schema";
 import { MonitorImage } from "./monitor-image";
 import { MonitorSheet } from "./monitor-sheet";
 import { MonitorThumbnail } from "./monitor-thumbnail";
@@ -33,12 +34,13 @@ describe("MonitorThumbnail", () => {
     expect(html).not.toContain("OBS non joint");
   });
 
-  it("écrit « OBS non joint » quand OBS ne l'est pas, sans image ni squelette", () => {
+  it("montre un fond neutre sans texte quand OBS ne l'est pas, sans image ni squelette : l'alerte dit « OBS non joint »", () => {
     const html = thumbnail(URL_OF_IMAGE, false);
     expect(html).toContain("monitor-empty");
-    expect(html).toContain("OBS non joint");
+    expect(html).not.toContain("OBS non joint");
     expect(html).not.toContain("<img");
     expect(html).not.toContain("lp-skeleton");
+    expect(html).toMatch(/<span class="monitor-empty"[^>]*><\/span>/);
   });
 });
 
@@ -53,7 +55,15 @@ describe("MonitorImage", () => {
 
 describe("MonitorSheet", () => {
   const sheet = (isOpen: boolean, url: string | null = URL_OF_IMAGE, isLinked = true) =>
-    renderToStaticMarkup(<MonitorSheet url={url} isLinked={isLinked} isOpen={isOpen} onClose={noop} />);
+    renderToStaticMarkup(
+      <MonitorSheet
+        url={url}
+        state={{ ...IDLE_CONTROL, isLinked }}
+        isOpen={isOpen}
+        onClose={noop}
+        onToast={noop}
+      />,
+    );
 
   it("est une feuille « Antenne » avec de quoi la fermer, ouverte ou non", () => {
     const html = sheet(false);
@@ -73,11 +83,39 @@ describe("MonitorSheet", () => {
     expect(html).not.toContain("style=");
   });
 
-  it("montre le squelette avant la première image, et « OBS non joint » sans OBS", () => {
+  it("montre le squelette avant la première image, et un fond neutre sans texte sans OBS", () => {
     expect(sheet(true, null)).toContain("lp-skeleton");
     expect(sheet(true, null)).not.toContain("<img");
     const offline = sheet(true, null, false);
-    expect(offline).toContain("OBS non joint");
+    expect(offline).not.toContain("OBS non joint");
+    expect(offline).toContain("monitor-empty");
     expect(offline).not.toContain("lp-skeleton");
+  });
+
+  it("garde l'image en tête, puis les scènes, puis le plan : les menus des scènes et du plan n'existent plus", () => {
+    const state = {
+      ...IDLE_CONTROL,
+      isLinked: true,
+      scene: "Jeu",
+      scenes: ["Jeu", "Master - Tchat", "Pause"],
+      picture: {
+        members: [
+          { id: "pc", label: "PC", isAvailable: true },
+          { id: "head", label: "Tête", isAvailable: true },
+        ],
+        currentId: "pc",
+      },
+    };
+    const html = renderToStaticMarkup(
+      <MonitorSheet url={URL_OF_IMAGE} state={state} isOpen onClose={noop} onToast={noop} />,
+    );
+    const order = ["monitor-large", ">Scène<", ">Jeu<", ">Pause<", ">Plan<", ">PC<", ">Tête<"].map((text) =>
+      html.indexOf(text),
+    );
+    expect(order.every((position) => position > 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(html).not.toMatch(/Master/i);
+    expect(html.match(/data-state="active"/g)).toHaveLength(2);
+    expect(html).not.toContain("style=");
   });
 });
