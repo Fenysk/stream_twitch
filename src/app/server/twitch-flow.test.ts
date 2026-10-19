@@ -577,7 +577,9 @@ const startSoundboard = async () => {
   const stack = startStack();
   await stack.connection.start();
   await stack.login();
-  await waitFor(() => countOf(REWARD_TYPE) === 1, "l'abonnement aux redemptions");
+  // Les trois abonnements, pas seulement celui des redemptions : un POST d'abonnement en retard faussait le compte des requêtes.
+  await waitFor(() => fake.subscriptions() === 3, "les trois abonnements");
+  expect(countOf(REWARD_TYPE)).toBe(1);
   const sound = stack.library.create(draft("Rire"));
   if (!sound.ok) throw new Error("le sound n'a pas été créé");
   const created = await stack.rewardLibrary.create(rewardFields("Rire", { sound: sound.value.id }));
