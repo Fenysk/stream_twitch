@@ -7,10 +7,10 @@ import type { PhoneOpening, Phones } from "../../usecase/phone.usecase";
 
 // Le flux d'un téléphone, le même qu'il filme ou non et jamais rouvert pour cela : à tout téléphone l'état de la régie (OBS, viewers, live)
 // sous le nom `control`, et un évènement nommé `keepalive` toutes les 5 s (`sendNamed`) : le téléphone tient le flux pour périmé quand il
-// n'en reçoit plus rien. Tant que le téléphone filme (il a un numéro), son numéro, la page OBS de son numéro et ses signaux (les
-// téléphones), `air` (sa caméra est-elle à l'antenne, d'après les numéros que la régie dit à l'antenne), `mic` (son mic est-il celui du
-// live, d'après les micros de la régie) et `picture` (est-il à l'image, et qui l'est, d'après l'image de la régie). Tout dans ce même flux :
-// la page n'a pas de connexion de plus. Rend de quoi fermer le tout.
+// n'en reçoit plus rien. Tant que le téléphone filme (il a un numéro), son numéro, la page OBS de son numéro pour chaque sorte (image, mic)
+// et leurs signaux (les téléphones), `air` (sa caméra est-elle à l'antenne, d'après les numéros que la régie dit à l'antenne), `mic` (son
+// mic est-il celui du live, d'après les micros de la régie) et `picture` (est-il à l'image, et qui l'est, d'après l'image de la régie).
+// Tout dans ce même flux : la page n'a pas de connexion de plus. Rend de quoi fermer le tout.
 export function openPhoneStream(
   {
     phones,

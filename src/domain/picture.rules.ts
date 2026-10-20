@@ -176,9 +176,9 @@ export const toPictureStanding = (
   shown: members.find(({ id }) => id === currentId)?.label ?? null,
 });
 
-// Le bouton qui coupe ou montre la caméra d'un téléphone. Ce téléphone n'est pas à l'image : il y passe et prend le micro du live. Il y est :
-// l'image passe à la tête, mais le micro reste à ce téléphone (Alexis n'est pas au PC : la tête bouge avec sa voix) ; c'est l'exception à
-// « choisir la tête rend le micro au PC », propre à ce bouton. `null` : le serveur n'a pas encore donné de numéro à ce téléphone.
+// Le bouton qui coupe ou montre la caméra d'un téléphone. Ce téléphone n'est pas à l'image : il y passe, et l'image décide du micro (il prend le
+// sien). Il y est : l'image passe à la tête et le micro reste à ce téléphone (Alexis n'est pas au PC : la tête bouge avec sa voix) ; la tête ne
+// touche plus au micro, `isMicKept` reste accepté. `null` : le serveur n'a pas encore donné de numéro à ce téléphone.
 export type CutRequest = { id: string; isMicKept: boolean };
 
 export const toCutRequest = (standing: PictureStanding, number: number | null): CutRequest | null => {
@@ -218,15 +218,18 @@ export const toLiveCameraMicId = (
   return cameras.some((camera) => camera.number === number && !camera.isMuted) ? previous : null;
 };
 
-// Le micro du live est celui d'une caméra dont le téléphone ne filme pas vers OBS (`receiving` : les numéros des caméras qui le font) :
-// rend l'identifiant de ce micro. Le PC, ou aucun micro de caméra au live, rend `null`.
-export const toLostMicId = (liveCameraId: string | null, receiving: readonly number[]): string | null => {
+// Le micro du live est celui d'une caméra dont le mic n'arrive pas dans OBS (`heard` : les numéros des caméras dont le mic y arrive, par
+// leur page mic) : rend l'identifiant de ce micro. Le PC, ou aucun micro de caméra au live, rend `null`.
+export const toLostMicId = (liveCameraId: string | null, heard: readonly number[]): string | null => {
   const number = liveCameraId === null ? null : toPictureCameraNumber(liveCameraId);
-  return number !== null && !receiving.includes(number) ? liveCameraId : null;
+  return number !== null && !heard.includes(number) ? liveCameraId : null;
 };
 
-// Le micro qui suit l'image : celui de la caméra choisie, sinon celui du PC.
-export const toPictureMicId = (id: string): string => (toPictureCameraNumber(id) === null ? PC_MIC_ID : id);
+// Le micro que l'image décide : celui de la caméra à l'image, celui du PC pour le PC, et aucun (`null`) pour la tête, qui ne touche plus au micro.
+export const toPictureMicId = (id: string): string | null => {
+  if (id === HEAD_PICTURE_ID) return null;
+  return toPictureCameraNumber(id) === null ? PC_MIC_ID : id;
+};
 
 // Le membre à l'image est-il une caméra qui ne filme plus ? Rend son identifiant, sinon `null`.
 export const toLostPictureId = ({ members, currentId }: PictureState): string | null =>

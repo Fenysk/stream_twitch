@@ -67,35 +67,68 @@ describe("l'onglet Mobile", () => {
     expect(card).not.toContain("<img");
   });
 
-  it("donne l'adresse de la prochaine caméra libre quand aucun téléphone n'est connecté, avec son bouton Copier", () => {
+  it("donne l'adresse de l'image et celle du mic de la prochaine caméra libre quand aucun téléphone n'est connecté, chacune avec son bouton Copier", () => {
     const card = toCard(render(), "Sources navigateur d'OBS");
-    expect(card).toContain("http://camera-1.localhost:4748/camera/1");
+    expect(card).toContain("http://camera-1.localhost:4748/camera/1<");
+    expect(card).toContain("http://camera-1.localhost:4748/camera/1/mic<");
     expect(card).toContain("Prochaine libre");
-    expect(card.match(/<span>Copier<\/span>/g)).toHaveLength(1);
+    expect(card.match(/<span>Copier<\/span>/g)).toHaveLength(2);
     expect(card).toContain("1920");
     expect(card).toContain("Contrôler l'audio via OBS");
   });
 
-  it("donne l'adresse de chaque caméra connectée, puis celle de la prochaine libre", () => {
+  it("dit où poser chaque source : l'image dans « Master - Webcam » sans son, le mic dans « Master - Micros » avec « Contrôler l'audio via OBS »", () => {
+    const card = toCard(render(), "Sources navigateur d'OBS");
+    expect(card).toContain("Master - Webcam");
+    expect(card).toContain("Master - Micros");
+    expect(card).toContain("monitoring");
+    expect(card).toContain("toutes les scènes");
+  });
+
+  it("donne l'adresse de l'image puis celle du mic de chaque caméra connectée, puis celles de la prochaine libre", () => {
     state.mobile = {
       origin: ORIGIN,
       phones: [
-        { id: "phone-aaaa-0001", number: 1, hasScreen: true, isReceiving: true },
-        { id: "phone-bbbb-0002", number: 2, hasScreen: false, isReceiving: false },
-        { id: "phone-cccc-0003", number: null, hasScreen: false, isReceiving: false },
+        {
+          id: "phone-aaaa-0001",
+          number: 1,
+          hasScreen: true,
+          hasMicScreen: true,
+          isReceiving: true,
+          isHeard: true,
+        },
+        {
+          id: "phone-bbbb-0002",
+          number: 2,
+          hasScreen: false,
+          hasMicScreen: false,
+          isReceiving: false,
+          isHeard: false,
+        },
+        {
+          id: "phone-cccc-0003",
+          number: null,
+          hasScreen: false,
+          hasMicScreen: false,
+          isReceiving: false,
+          isHeard: false,
+        },
       ],
     };
     const card = toCard(render(), "Sources navigateur d'OBS");
-    const addresses = [...card.matchAll(/http:\/\/camera-\d+\.localhost:4748\/camera\/\d+/g)].map(
+    const addresses = [...card.matchAll(/http:\/\/camera-\d+\.localhost:4748\/camera\/\d+(?:\/mic)?/g)].map(
       ([text]) => text,
     );
     expect(addresses).toEqual([
       "http://camera-1.localhost:4748/camera/1",
+      "http://camera-1.localhost:4748/camera/1/mic",
       "http://camera-2.localhost:4748/camera/2",
+      "http://camera-2.localhost:4748/camera/2/mic",
       "http://camera-3.localhost:4748/camera/3",
+      "http://camera-3.localhost:4748/camera/3/mic",
     ]);
     expect(card.match(/Prochaine libre/g)).toHaveLength(1);
-    expect(card.match(/<span>Copier<\/span>/g)).toHaveLength(3);
+    expect(card.match(/<span>Copier<\/span>/g)).toHaveLength(6);
   });
 
   it("dit qu'aucun téléphone n'est connecté", () => {
@@ -106,9 +139,30 @@ describe("l'onglet Mobile", () => {
     state.mobile = {
       origin: ORIGIN,
       phones: [
-        { id: "phone-aaaa-0001", number: 1, hasScreen: true, isReceiving: true },
-        { id: "phone-bbbb-0002", number: 2, hasScreen: false, isReceiving: false },
-        { id: "phone-cccc-0003", number: null, hasScreen: false, isReceiving: false },
+        {
+          id: "phone-aaaa-0001",
+          number: 1,
+          hasScreen: true,
+          hasMicScreen: true,
+          isReceiving: true,
+          isHeard: true,
+        },
+        {
+          id: "phone-bbbb-0002",
+          number: 2,
+          hasScreen: false,
+          hasMicScreen: false,
+          isReceiving: false,
+          isHeard: false,
+        },
+        {
+          id: "phone-cccc-0003",
+          number: null,
+          hasScreen: false,
+          hasMicScreen: false,
+          isReceiving: false,
+          isHeard: false,
+        },
       ],
     };
     const card = toCard(render(), "Téléphones connectés");
@@ -122,5 +176,40 @@ describe("l'onglet Mobile", () => {
     expect(card).toContain("Régie");
     expect(card).toContain("Ne filme pas · téléphone phon");
     expect(card.match(/Source OBS connectée|Pas de source OBS/g)).toHaveLength(2);
+  });
+
+  it("dit aussi, pour chaque caméra, si sa source mic est connectée", () => {
+    state.mobile = {
+      origin: ORIGIN,
+      phones: [
+        {
+          id: "phone-aaaa-0001",
+          number: 1,
+          hasScreen: true,
+          hasMicScreen: false,
+          isReceiving: true,
+          isHeard: false,
+        },
+        {
+          id: "phone-bbbb-0002",
+          number: 2,
+          hasScreen: true,
+          hasMicScreen: true,
+          isReceiving: true,
+          isHeard: true,
+        },
+        {
+          id: "phone-cccc-0003",
+          number: null,
+          hasScreen: false,
+          hasMicScreen: false,
+          isReceiving: false,
+          isHeard: false,
+        },
+      ],
+    };
+    const card = toCard(render(), "Téléphones connectés");
+    expect(card.match(/Mic OBS connecté/g)).toHaveLength(1);
+    expect(card.match(/Pas de mic OBS/g)).toHaveLength(1);
   });
 });

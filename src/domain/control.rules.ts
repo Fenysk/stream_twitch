@@ -1,8 +1,8 @@
 import { toCameraName } from "./camera.rules";
 import type { ControlMic } from "./control.schema";
 
-// Ce qu'OBS dit des micros de la régie : la coupure du mic du PC (`null` : OBS ne connaît pas cette entrée), et la source navigateur
-// de chaque caméra, avec sa coupure. Une caméra sans source dans OBS n'y est pas.
+// Ce qu'OBS dit des micros de la régie : la coupure du mic du PC (`null` : OBS ne connaît pas cette entrée), et la source navigateur mic
+// (`/camera/<n>/mic`) de chaque caméra, avec sa coupure. Une caméra sans source mic dans OBS n'y est pas.
 export type ObsMics = {
   isPcMuted: boolean | null;
   cameras: readonly { number: number; input: string; isMuted: boolean }[];
@@ -57,21 +57,27 @@ export const toControlMics = (sources: readonly MicSource[]): ControlMic[] =>
 export const toLiveMic = (mics: readonly ControlMic[]): ControlMic | null =>
   mics.find(({ isOpen }) => isOpen) ?? null;
 
-// Le bouton micro d'un téléphone qui filme : allumé, ce téléphone est le micro du live ; le toucher le prend, et s'il l'est déjà, le rend au
-// micro du PC. Rend le micro à ouvrir (`pc` ou `camera-3`), ou `null` quand le téléphone n'a pas de numéro (le serveur ne l'a pas encore donné).
-export const toMicToggle = (isLiveMic: boolean, number: number | null): string | null => {
-  if (isLiveMic) return PC_MIC_ID;
-  return number === null ? null : toCameraMicId(number);
-};
+// Le bouton micro d'un téléphone qui filme prend le micro et ne le rend jamais (le menu des micros de la régie le rend au PC) : un toucher
+// demande toujours le micro de sa caméra, même s'il est déjà celui du live (la demande est sans effet de bord et corrige un état périmé).
+// Rend le micro à ouvrir (`camera-3`), ou `null` quand le téléphone n'a pas de numéro (le serveur ne l'a pas encore donné).
+export const toTakenMicId = (number: number | null): string | null =>
+  number === null ? null : toCameraMicId(number);
 
 // Ce téléphone, de ce numéro, est-il le micro du live ?
 export const isLiveMicOf = (mics: readonly ControlMic[], number: number | null): boolean =>
   number !== null && toLiveMic(mics)?.id === toCameraMicId(number);
 
-// L'entrée que la tête et Jean-Renard écoutent : celle du premier micro ouvert, celui du PC avant les caméras. Aucun ouvert : celle
-// du PC, dont le silence dit que Fenysk est muet.
-export const toListenedInput = (sources: readonly MicSource[], pcName: string): string =>
-  sources.find(({ input, isMuted }) => input !== null && !isMuted)?.input ?? pcName;
+// L'entrée que la tête et Jean-Renard écoutent : celle du premier micro ouvert, celui du PC avant les caméras. Sinon la source mic encore
+// ouverte dans OBS d'un téléphone qui vient de se déconnecter (`cameras` : toutes les sources mic d'OBS, listées ou non). Aucun ouvert :
+// celle du PC, dont le silence dit que Fenysk est muet.
+export const toListenedInput = (
+  sources: readonly MicSource[],
+  pcName: string,
+  cameras: ObsMics["cameras"],
+): string =>
+  sources.find(({ input, isMuted }) => input !== null && !isMuted)?.input ??
+  cameras.find(({ isMuted }) => !isMuted)?.input ??
+  pcName;
 
 // Choisir un micro : inconnu de la régie, sans entrée dans OBS (`unavailable`, avec son nom), à ouvrir en coupant les autres entrées
 // encore ouvertes, ou Muet (`mute`) : toutes les entrées ouvertes se coupent, aucune ne s'ouvre.

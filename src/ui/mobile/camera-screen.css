@@ -1,4 +1,5 @@
-/* /camera/<numéro> : une source OBS de 1920 × 1080, sans marge et transparente tant que le téléphone n'envoie rien. */
+/* /camera/<numéro> : une source OBS de 1920 × 1080, sans marge et transparente tant que le téléphone n'envoie rien. /camera/<numéro>/mic
+   partage la page transparente : elle n'a que du son, rien à dessiner. */
 
 html,
 body {

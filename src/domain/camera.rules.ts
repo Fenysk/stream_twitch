@@ -1,4 +1,4 @@
-import { CameraNumberSchema, type PhoneRole, PhoneRoleSchema } from "./phone.schema";
+import { CameraNumberSchema, type PhoneRole, PhoneRoleSchema, type ScreenKind } from "./phone.schema";
 
 // Les rôles d'une adresse `?role=` qui font filmer le téléphone dès l'ouverture : la Caméra (arrière) et le Selfie (avant). La Régie non.
 export const hasCamera = (role: PhoneRole): boolean => role === "camera" || role === "selfie";
@@ -21,19 +21,39 @@ export const toCameraNumber = (text: string): number | null => {
 
 export const toCameraName = (number: number): string => `Caméra ${number}`;
 
-// L'adresse de la source navigateur d'OBS : un hôte par caméra, car toutes les sources d'OBS se partagent 6 connexions par hôte.
+// L'adresse de la source navigateur d'OBS qui porte l'image : un hôte par caméra, car toutes les sources d'OBS se partagent 6 connexions
+// par hôte.
 export const toCameraAddress = (number: number, port: string): string =>
   `http://camera-${number}.localhost:${port}/camera/${number}`;
 
-// Le numéro d'une source navigateur d'OBS d'après son adresse, l'inverse de `toCameraAddress` : le chemin `/camera/<numéro>` sur l'hôte
-// de cette caméra (`camera-<numéro>.<hôte du serveur>`) ou sur un hôte du serveur ; `null` pour toute autre adresse.
-export const toCameraOfAddress = (address: string | undefined, hosts: readonly string[]): number | null => {
+// L'adresse de la source navigateur d'OBS qui ne porte que le son de la caméra, sur le même hôte : OBS ne mixe pas le son d'une source
+// cachée, le mic a donc sa propre source, dans une scène présente partout.
+export const toCameraMicAddress = (number: number, port: string): string =>
+  `${toCameraAddress(number, port)}/mic`;
+
+export type ScreenOfAddress = { number: number; kind: ScreenKind };
+
+// Le numéro et la sorte d'une source navigateur d'OBS d'après son adresse, l'inverse de `toCameraAddress` et `toCameraMicAddress` : le
+// chemin `/camera/<numéro>` (image) ou `/camera/<numéro>/mic` (mic) sur l'hôte de cette caméra (`camera-<numéro>.<hôte du serveur>`) ou sur
+// un hôte du serveur ; `null` pour toute autre adresse.
+export const toScreenOfAddress = (
+  address: string | undefined,
+  hosts: readonly string[],
+): ScreenOfAddress | null => {
   if (address === undefined || !URL.canParse(address)) return null;
   const { host, pathname } = new URL(address);
-  const captured = /^\/camera\/([^/]+)\/?$/.exec(pathname)?.[1];
-  const number = captured === undefined ? null : toCameraNumber(captured);
-  if (number === null) return null;
-  return hosts.some((own) => host === own || host === `camera-${number}.${own}`) ? number : null;
+  const matched = /^\/camera\/([^/]+)(\/mic)?\/?$/.exec(pathname);
+  const number = matched === null ? null : toCameraNumber(matched[1] ?? "");
+  if (number === null || !hosts.some((own) => host === own || host === `camera-${number}.${own}`))
+    return null;
+  return { number, kind: matched?.[2] === undefined ? "image" : "mic" };
+};
+
+// Le numéro d'une source navigateur d'OBS qui est la page image d'une caméra (`/camera/<numéro>`) ; `null` pour toute autre adresse, une
+// page mic comprise.
+export const toCameraOfAddress = (address: string | undefined, hosts: readonly string[]): number | null => {
+  const screen = toScreenOfAddress(address, hosts);
+  return screen?.kind === "image" ? screen.number : null;
 };
 
 // L'adresse que porte le QR code d'un rôle : /mobile ouvre ce rôle sans le demander.

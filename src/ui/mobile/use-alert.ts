@@ -18,7 +18,7 @@ import {
   toReopenMicId,
   toStopMemory,
 } from "../../domain/alert.rules";
-import { toLiveMic, toMicToggle } from "../../domain/control.rules";
+import { toLiveMic, toTakenMicId } from "../../domain/control.rules";
 import type { ControlMic, ControlState } from "../../domain/control.schema";
 import type { PhoneRole } from "../../domain/phone.schema";
 import { IDLE_STANDING, type PictureStanding } from "../../domain/picture.schema";
@@ -166,7 +166,7 @@ const toShownAlert = (
     "camera-stopped": film?.camera.restart ?? null,
     "camera-ready": film?.onShow ?? null,
     "mic-away": () => {
-      const id = toMicToggle(false, film?.link.number ?? null);
+      const id = toTakenMicId(film?.link.number ?? null);
       if (id !== null) onOpenMic(id);
     },
   };

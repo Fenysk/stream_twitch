@@ -157,11 +157,20 @@ describe("watchPhone : un flux muet devient périmé", () => {
 
   it("n'a pas de péremption pour un flux sans battement : la page OBS d'une caméra reste ouverte, muette, sans être rouverte", () => {
     const events: ScreenEvent[] = [];
-    const stop = watchScreen("screen-0001", 1, (event) => events.push(event));
+    const stop = watchScreen("screen-0001", 1, "image", (event) => events.push(event));
     vi.advanceTimersByTime(PHONE_STALE_MS * 4);
     expect(FakeEventSource.instances).toHaveLength(1);
     expect(lastSource().isClosed).toBe(false);
     stop();
+  });
+
+  it("ouvre le flux d'une page OBS avec son numéro et sa sorte : image ou mic", () => {
+    const stopImage = watchScreen("screen-0001", 3, "image", () => undefined);
+    expect(lastSource().url).toBe("/api/mobile/screen?id=screen-0001&number=3&kind=image");
+    const stopMic = watchScreen("screen-0002", 3, "mic", () => undefined);
+    expect(lastSource().url).toBe("/api/mobile/screen?id=screen-0002&number=3&kind=mic");
+    stopImage();
+    stopMic();
   });
 });
 

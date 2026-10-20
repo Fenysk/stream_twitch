@@ -1,5 +1,5 @@
-// L'onglet « Mobile » : les QR codes qui ouvrent chaque rôle sur le téléphone, l'adresse de la source OBS de chaque caméra, et les
-// téléphones connectés en direct. Le téléphone ne règle rien : tout se règle ici.
+// L'onglet « Mobile » : les QR codes qui ouvrent chaque rôle sur le téléphone, l'adresse des sources OBS de chaque caméra (image et mic),
+// et les téléphones connectés en direct. Le téléphone ne règle rien : tout se règle ici.
 
 import { toCameraName, toRoleLabel, toRoleUrl } from "../../domain/camera.rules";
 import { PHONE_ROLES, type PhoneSummary } from "../../domain/phone.schema";
@@ -43,6 +43,14 @@ const RoleCodes = ({ origin }: { origin: string | null }) => (
   </SettingsCard>
 );
 
+// L'état des deux sources OBS d'une caméra : son image et son mic.
+const SourceBadges = ({ hasScreen, hasMicScreen }: Pick<PhoneSummary, "hasScreen" | "hasMicScreen">) => (
+  <>
+    <Badge label={hasScreen ? "Source OBS connectée" : "Pas de source OBS"} />
+    <Badge label={hasMicScreen ? "Mic OBS connecté" : "Pas de mic OBS"} />
+  </>
+);
+
 const PhoneList = ({ phones }: { phones: readonly PhoneSummary[] }) => (
   <SettingsCard title="Téléphones connectés">
     {phones.length === 0 ? (
@@ -51,13 +59,13 @@ const PhoneList = ({ phones }: { phones: readonly PhoneSummary[] }) => (
       </p>
     ) : (
       <ul className="mobile-list" aria-live="polite">
-        {phones.map(({ id, number, hasScreen }) => (
+        {phones.map(({ id, number, hasScreen, hasMicScreen }) => (
           <li key={id} className="mobile-phone">
             <span className="lp-type-body">{number === null ? NO_CAMERA_LABEL : toCameraName(number)}</span>
             <span className="lp-type-caption lp-muted">
               {number === null ? "Ne filme pas" : "Filme"} · téléphone {id.slice(0, 4)}
             </span>
-            {number !== null && <Badge label={hasScreen ? "Source OBS connectée" : "Pas de source OBS"} />}
+            {number !== null && <SourceBadges hasScreen={hasScreen} hasMicScreen={hasMicScreen} />}
           </li>
         ))}
       </ul>

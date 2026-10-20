@@ -17,14 +17,30 @@ L'adresse est `mobileOrigin` + `/mobile`, par exemple `https://pcmasterrace.tail
 
 Testé avec Safari sur iPhone. Android n'est pas testé.
 
+## Un seul onglet par téléphone
+
+Tous les onglets Safari d'un même téléphone partagent son identifiant. Un seul onglet est actif à la fois.
+
+- Le dernier onglet ouvert, ou ramené au premier plan, prend la main.
+- Les autres arrêtent leur caméra, leur flux avec le serveur et leurs liaisons WebRTC.
+- Ils affichent « Ouvert dans un autre onglet », avec le bouton « Reprendre ici ».
+- Un onglet ouvert en arrière-plan ne prend pas la main avant d'être au premier plan.
+
+Le navigateur choisit le mécanisme (`src/ui/mobile/active-tab.ts`) :
+
+1. Web Locks, réservé aux contextes sécurisés (HTTPS).
+2. Sinon un `BroadcastChannel` : chaque prise de main est annoncée, la plus récente gagne.
+3. Sinon rien : l'onglet reste actif.
+
 ## Où ça se règle
 
 Le téléphone ne règle rien : tout se règle sur le PC, dans l'onglet Mobile.
 
 - Les QR codes qui ouvrent chaque rôle.
-- L'adresse de la source OBS de chaque caméra connectée et de la prochaine libre, avec « Copier ».
+- Les adresses des deux sources OBS (image et mic) de chaque caméra connectée et de la prochaine libre, avec « Copier ».
 - Les téléphones connectés : « Caméra N · Filme » ou « Régie · Ne filme pas ».
-- Pour chaque caméra : « Source OBS connectée » ou « Pas de source OBS ».
+- Pour chaque caméra, la source image : « Source OBS connectée » ou « Pas de source OBS ».
+- Pour chaque caméra, la source mic : « Mic OBS connecté » ou « Pas de mic OBS ».
 
 ## Le rôle
 
@@ -89,22 +105,38 @@ La pastille « Caméra N » ouvre la feuille Caméra :
 
 - « En attente d'OBS » puis « Connexion à OBS… » pendant la mise en relation.
 - « Prête » : OBS reçoit la caméra, mais elle n'est pas à l'antenne.
-- « À l'antenne », avec un point rouge : une source de cette caméra est visible dans la scène du programme. Les scènes imbriquées et les groupes comptent.
+- « À l'antenne », avec un point rouge : une source image de cette caméra est visible dans la scène du programme. Les scènes imbriquées et les groupes comptent.
 
 L'écran noir (paysage) couvre l'écran de noir pur, pour économiser l'OLED. La caméra et le son continuent. Un toucher n'importe où rallume l'écran. Un petit point rouge dit que la caméra est à l'antenne.
 
-## La source OBS d'une caméra
+## Les deux sources OBS d'une caméra
 
-Chaque caméra a sa source navigateur dans OBS.
+Chaque caméra a deux sources navigateur dans OBS : l'image et le mic. OBS ne mixe pas le son d'un élément de scène caché, ni celui d'une scène absente du programme. Le mic a donc sa propre source, dans une scène présente partout.
+
+L'image :
 
 - Adresse : `http://camera-N.localhost:4747/camera/N`, taille 1920 × 1080, fond transparent.
+- Elle va dans la scène « Master - Webcam », la place caméra.
 - L'image est centrée en entier dans la source (`object-fit: contain`). Fenysk la place et la dimensionne dans OBS.
+- La page ne joue aucun son. La case « Contrôler l'audio via OBS » y est inutile.
+
+Le mic :
+
+- Adresse : `http://camera-N.localhost:4747/camera/N/mic`. La page est vide et transparente, et joue la piste audio du téléphone.
+- Elle va dans une scène « Master - Micros », ajoutée à chaque scène.
 - La case « Contrôler l'audio via OBS » est cochée, et le monitoring audio est désactivé ([obs](obs.md)).
-- Un hôte par caméra, car OBS limite les connexions par hôte.
+- Le micro entendu s'entend dans toutes les scènes, que la caméra soit visible ou cachée.
+- Chaque caméra a son curseur dans le mélangeur d'OBS, sous le nom de sa source mic.
 
-L'image et le son vont du téléphone à la page OBS en WebRTC, sur le réseau local, sans serveur STUN ni TURN. H.264 passe en premier. L'image est plafonnée à 6 Mb/s. Le serveur ne fait que mettre les deux en relation.
+Un hôte par caméra, partagé par ses deux pages, car OBS limite les connexions par hôte. Chaque page ouvre un seul flux SSE.
 
-Deux pages OBS sur le même numéro : la dernière ouverte reçoit l'image.
+Le téléphone envoie sa piste vidéo à la page image et sa piste audio à la page mic. Ce sont deux liaisons WebRTC tirées du même flux `getUserMedia`. Changer d'objectif remplace la piste vidéo sans toucher à la liaison du mic.
+
+Les liaisons passent par le réseau local, sans serveur STUN ni TURN. H.264 passe en premier. L'image est plafonnée à 6 Mb/s. Le serveur ne fait que mettre le téléphone et ses pages en relation.
+
+Deux pages OBS de la même sorte sur le même numéro : la dernière ouverte reçoit l'image, ou le son.
+
+Sans source mic dans OBS, le mic de la caméra est grisé dans la feuille Micro : « Source OBS introuvable ». Le refus dit où la créer.
 
 ## Antenne
 
@@ -112,7 +144,7 @@ La feuille Antenne s'ouvre par la vignette ou par la ligne 1 de la légende. Ell
 
 - « Scène » : une touche par scène d'OBS, dans l'ordre d'OBS. Les scènes dont le nom commence par « Master » sont des scènes imbriquées : elles n'y sont pas.
 - « Plan » : PC, chaque caméra, Tête. Cette section n'existe que si OBS a une place caméra.
-- Un toucher sur une autre touche fait le changement. La feuille reste ouverte pour voir l'antenne changer.
+- Un toucher sur une autre touche fait le changement, et le Plan décide du micro (voir « Le micro »). La feuille reste ouverte pour voir l'antenne changer.
 - Une caméra dont le téléphone ne filme pas vers OBS est grisée : « Le téléphone ne filme pas vers OBS ».
 
 La vignette est une image de l'antenne, 640 px de large. Elle est relue 1 fois par seconde, et 4 fois par seconde quand la feuille est ouverte. Une seule capture est partagée entre tous les téléphones.
@@ -138,37 +170,46 @@ La feuille Micro :
 
 - Sous « Micro entendu », la liste : PC, puis chaque caméra connectée. Le micro entendu est en clair.
 - Un toucher sur un micro l'ouvre dans OBS et coupe tous les autres.
-- Un micro dont la source OBS manque est grisé : « Source OBS introuvable ».
+- Un micro dont la source OBS manque est grisé : « Source OBS introuvable ». Pour une caméra, c'est sa source mic (`/camera/N/mic`).
 - « Couper le micro » les coupe tous. Quand tout est coupé, le bouton devient « Micro coupé ». Choisir un micro le rallume.
+
+Le micro d'une caméra est l'entrée OBS de sa source mic. Sa coupure, l'écoute de la tête et de Jean-Renard, et le boost de la voix suivent cette source.
 
 Les règles :
 
 1. Un seul micro est ouvert à la fois.
 2. La tête et Jean-Renard écoutent le micro ouvert, celui du PC avant les caméras.
-3. Choisir le Plan choisit le micro : Caméra N prend son micro, PC et Tête rendent le micro au PC.
-4. « Cacher » est l'exception : la Tête prend le Plan et le micro reste au téléphone.
-5. Un micro ouvert ou coupé à la main dans OBS est suivi. Si plusieurs sont ouverts, la tête écoute le premier : le PC avant les caméras.
+3. Le Plan décide du micro. Une caméra au Plan prend son micro, le PC au Plan prend celui du PC, la Tête au Plan n'y touche pas.
+4. Un Plan changé à la main dans OBS décide du micro de la même façon, sauf si ce micro est déjà ouvert. Rien ne change au démarrage du serveur, ni à la première lecture d'OBS qui suit une coupure.
+5. Un téléphone ne fait que prendre le micro. Le bouton « Prendre » de l'alerte « Le micro est au PC » redemande celui de sa caméra. Aucun bouton du téléphone ne rend le micro au PC. Le rendre passe par le choix « PC » de la feuille Micro.
+6. Un micro ouvert ou coupé à la main dans OBS est suivi. Si plusieurs sont ouverts, la tête écoute le premier : le PC avant les caméras.
+7. Un téléphone qui se déconnecte laisse sa source mic ouverte dans OBS. La tête continue de l'écouter tant qu'elle est ouverte, jusqu'au repli du micro (voir « Le Plan »).
 
 ## Le Plan
 
 Le Plan est ce qui occupe la place caméra d'OBS : PC, Caméra N ou Tête.
 
-- La place est la scène imbriquée `cameraSlotScene` (« Master - Webcam »). Sans elle, il n'y a pas de Plan à choisir.
-- Les membres se reconnaissent à ce qu'ils sont. Une capture vidéo est « PC ». Une source navigateur vers `/head` est « Tête ». Une source navigateur vers `/camera/N` est « Caméra N ». Le reste de la place n'est jamais touché.
+- La place est la scène imbriquée `cameraSlotScene` (« Master - Webcam »). Sans elle, il n'y a pas de Plan à choisir. Le serveur la suit par son identifiant OBS ([obs](obs.md)).
+- Les membres se reconnaissent à ce qu'ils sont. Une capture vidéo est « PC ». Une source navigateur vers `/head` est « Tête ». Une source navigateur vers `/camera/N`, la page image, est « Caméra N ». Le reste de la place n'est jamais touché, la source mic `/camera/N/mic` comprise.
 - L'application affiche un seul membre à la fois. Elle relit OBS à chaque évènement : si Fenysk change une visibilité à la main, le Plan suit.
-- Une caméra n'est disponible que si son téléphone est connecté, filme, et si la page OBS de son numéro a une liaison vive. Le PC et la Tête sont toujours disponibles.
-- Si la source OBS du micro d'une caméra manque, le Plan change quand même. Le refus le dit ensuite : « l'image est passée à … ».
+- Une caméra n'est disponible que si son téléphone est connecté, filme, et si la page image OBS de son numéro a une liaison vive. Le PC et la Tête sont toujours disponibles.
+- Si la source mic d'une caméra manque dans OBS, le Plan change quand même. Le refus le dit ensuite : « l'image est passée à … ».
 
 « Montrer » et « Cacher » sont les boutons du téléphone qui filme :
 
-- « Montrer » met cette caméra au Plan et lui donne le micro.
-- « Cacher » rend le Plan à la Tête. Le micro reste au téléphone. Le téléphone continue d'envoyer son image, et l'aperçu écrit « Caméra cachée · Tête au plan ».
+- « Montrer » met cette caméra au Plan. Le Plan décide du micro : elle prend le sien.
+- « Cacher » rend le Plan à la Tête. La Tête ne touche pas au micro : il reste au téléphone, dont la source mic reste entendue caméra cachée.
+- Le téléphone continue d'envoyer son image, et l'aperçu écrit « Caméra cachée · Tête au plan ».
 - Le bouton suit l'état réel d'OBS, quel que soit le geste qui a changé le Plan.
 
-Repli automatique, au bout de 3 s :
+Repli automatique, au bout de 3 s. Chaque repli suit sa propre liaison : l'image pour le Plan, le mic pour le micro.
 
-- Une caméra au Plan qui ne filme plus passe le Plan à la Tête (à défaut au PC) et le micro au PC.
-- Un micro de caméra dont le téléphone ne filme plus revient au PC.
+- Une caméra au Plan dont l'image n'arrive plus dans OBS passe le Plan à la Tête (à défaut au PC). La Tête ne déplace pas le micro.
+- Un micro de caméra dont le mic n'arrive plus dans OBS revient au PC. C'est le cas d'un téléphone déconnecté, d'une caméra arrêtée ou d'une liaison mic perdue.
+- Une liaison image perdue alors que le mic arrive encore ne déplace donc pas le micro.
+- Une caméra au Plan et au micro qui ne filme plus déclenche deux demandes : le Plan vers la Tête, le micro vers le PC.
+- Faute de Tête dans la place, le Plan se replie vers le PC. Une seule demande part : le PC prend son micro avec le Plan.
+- La source mic d'un téléphone parti est coupée à l'ouverture du PC. Une source coupée à la main dans OBS, ou un autre micro ouvert, annule l'attente.
 - Rien ne revient tout seul quand le téléphone revient. Fenysk reprend le Plan avec « Montrer ».
 
 ## Les sons
@@ -207,6 +248,7 @@ Une ligne orange sous le bandeau, une seule à la fois, la plus prioritaire. Ell
 | Le micro est au PC (ou sur Caméra 2) | Ce téléphone a le Plan, le micro entendu n'est pas le sien. | Prendre |
 
 - « Rallumer » rouvre le dernier micro vu ouvert sur ce téléphone, sinon le PC.
+- « Prendre » ouvre le micro de la caméra de ce téléphone, même s'il est déjà ouvert.
 - Le téléphone ne filme pas : les quatre premières alertes.
 - Il filme en portrait : les sept.
 - Il filme en paysage : seulement « Connexion perdue » et « Ta caméra est prête », car l'avis de caméra arrêtée couvre déjà l'aperçu.
@@ -218,19 +260,17 @@ Le serveur envoie un battement toutes les 5 s. Le téléphone tient le flux pour
 
 Quand le micro entendu est une caméra, le serveur remonte sa voix si elle arrive trop faible.
 
-- Il suit les crêtes de la voix de Fenysk sur l'entrée OBS de cette caméra. Les silences et le bruit de fond sont écartés.
-- Si les crêtes sont sous `cameraBoostTarget` (-17 dB), il monte le filtre « Gain (appli) » posé sur la source de cette caméra. Un cran toutes les 2 s, de la moitié de l'écart et de 6 dB au plus, de 0 à +30 dB.
+- Il suit les crêtes de la voix de Fenysk sur l'entrée OBS de la source mic de cette caméra. Les silences et le bruit de fond sont écartés.
+- Si les crêtes sont sous `cameraBoostTarget` (-17 dB), il monte le filtre « Gain (appli) » posé sur la source mic de cette caméra. Un cran toutes les 2 s, de la moitié de l'écart et de 6 dB au plus, de 0 à +30 dB.
 - Il ne baisse jamais le boost posé. Un filtre « Limiteur (appli) » vers -3 dB tient les crêtes. Un limiteur déjà là n'est jamais écrasé.
 - Le micro du PC n'est jamais touché.
 
 ## Limites connues
 
-- Sur `main`, le son d'un téléphone ne s'entend que si sa caméra est à l'image : il passe par la source image. Après « Cacher », le micro reste au téléphone, mais la source est cachée et OBS ne l'entend plus.
-- La branche `feat/mic-rules`, en test, donne à chaque caméra une source son à part (`/camera/N/mic`).
 - L'interface dit « Muet » dans le bouton « Micro : Muet » et dans l'alerte « Muet depuis m:ss ». Elle dit « Micro coupé » dans la feuille Micro. C'est le même état.
 - Le tchat du téléphone ne se rouvre pas seul quand le serveur répond une erreur, par exemple pendant un redémarrage. Recharger la page.
-- Deux onglets Safari ouverts sur `/mobile` partagent l'identifiant du téléphone et se connectent tous les deux. Fermer l'autre onglet.
-- Après une relance du serveur, la caméra au Plan doit rouvrir sa liaison en moins de 3 s. Sinon le Plan se replie sur la Tête.
+- Après une relance du serveur, la caméra au Plan doit rouvrir sa liaison image en moins de 3 s. Sinon le Plan se replie sur la Tête.
+- Après une relance du serveur, le micro d'une caméra doit rouvrir sa liaison mic en moins de 3 s. Sinon le micro revient au PC.
 - Hors du Wi-Fi de la maison, la liaison n'est pas prouvée : le transport n'utilise aucun serveur STUN ni TURN.
 
 ## Pour coder
@@ -239,18 +279,21 @@ Fichiers clés :
 
 - `src/ui/mobile/phone-screen.tsx`, `phone-bodies.tsx`, `use-phone-screen.ts` : l'écran et ses trois dispositions.
 - `src/ui/mobile/control-keys.ts`, `control-view.ts`, `alert-text.ts` : les libellés.
-- `src/domain/control.rules.ts`, `picture.rules.ts`, `alert.rules.ts`, `phone-layout.rules.ts`, `boost.rules.ts` : les règles pures.
-- `src/usecase/phone.usecase.ts` : les téléphones et la mise en relation.
+- `src/domain/control.rules.ts`, `picture.rules.ts`, `fallback.rules.ts`, `alert.rules.ts`, `phone-layout.rules.ts`, `boost.rules.ts` : les règles pures.
+- `src/domain/camera.rules.ts` : les adresses des deux sources d'une caméra (`toCameraAddress`, `toCameraMicAddress`).
+- `src/usecase/phone.usecase.ts` : les téléphones et la mise en relation (`isReceiving` pour l'image, `isHeard` pour le mic).
 - `src/usecase/control.usecase.ts` : la régie (scène, micro, Plan, repli, fin du live).
 - `src/usecase/camera-boost.usecase.ts`, `monitor.usecase.ts`.
 - `src/app/server/phone-stream.ts` : ce que le flux envoie à un téléphone.
+- `src/app/routes/camera/$number/index.tsx` et `mic.tsx` : les deux pages OBS d'une caméra. `src/ui/mobile/camera-screen.tsx` et `camera-mic-screen.tsx` les dessinent.
+- `src/ui/mobile/active-tab.ts`, `use-active-tab.ts`, `other-tab.tsx` : l'onglet unique.
 - `src/ui/settings/mobile-settings-tab.tsx`, `camera-sources.tsx` : l'onglet Mobile.
 
 Routes utiles :
 
 - `GET /api/mobile/phone` : le flux d'un téléphone (régie, numéro, signaux, battement).
-- `GET /api/mobile/screen` : le flux d'une page OBS de caméra.
-- `POST /api/mobile/link` : le téléphone dit s'il filme, la page OBS dit si sa liaison est vive.
+- `GET /api/mobile/screen` : le flux d'une page OBS de caméra. Le paramètre `kind` vaut `image` ou `mic`.
+- `POST /api/mobile/link` : le téléphone dit s'il filme, chaque page OBS dit si sa liaison est vive.
 - `POST /api/obs/scene`, `/api/obs/mic`, `/api/obs/picture`, `/api/obs/stream/stop` : les gestes de la régie.
 - `GET /api/obs/monitor` : l'image de l'antenne.
 - `POST /api/fox/end`, `/api/fox/review`, `/api/chat/send`, `GET /api/chat/viewers`.

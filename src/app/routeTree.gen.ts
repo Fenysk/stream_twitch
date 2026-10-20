@@ -18,7 +18,6 @@ import { Route as MobileRouteImport } from './routes/mobile'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ShowRouteImport } from './routes/show'
 import { Route as SoundsRouteImport } from './routes/sounds'
-import { Route as CameraNumberRouteImport } from './routes/camera/$number'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsChatRouteImport } from './routes/settings.chat'
 import { Route as SettingsCutRouteImport } from './routes/settings.cut'
@@ -29,6 +28,8 @@ import { Route as SettingsRewardsRouteImport } from './routes/settings.rewards'
 import { Route as SettingsShowRouteImport } from './routes/settings.show'
 import { Route as SettingsSoundsRouteImport } from './routes/settings.sounds'
 import { Route as SettingsTwitchRouteImport } from './routes/settings.twitch'
+import { Route as CameraNumberIndexRouteImport } from './routes/camera/$number/index'
+import { Route as CameraNumberMicRouteImport } from './routes/camera/$number/mic'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -73,11 +74,6 @@ const ShowRoute = ShowRouteImport.update({
 const SoundsRoute = SoundsRouteImport.update({
   id: '/sounds',
   path: '/sounds',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CameraNumberRoute = CameraNumberRouteImport.update({
-  id: '/camera/$number',
-  path: '/camera/$number',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
@@ -130,6 +126,16 @@ const SettingsTwitchRoute = SettingsTwitchRouteImport.update({
   path: '/twitch',
   getParentRoute: () => SettingsRoute,
 } as any)
+const CameraNumberIndexRoute = CameraNumberIndexRouteImport.update({
+  id: '/camera/$number/',
+  path: '/camera/$number/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CameraNumberMicRoute = CameraNumberMicRouteImport.update({
+  id: '/camera/$number/mic',
+  path: '/camera/$number/mic',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -141,7 +147,6 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRouteWithChildren
   '/show': typeof ShowRoute
   '/sounds': typeof SoundsRoute
-  '/camera/$number': typeof CameraNumberRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
@@ -152,6 +157,8 @@ export interface FileRoutesByFullPath {
   '/settings/sounds': typeof SettingsSoundsRoute
   '/settings/twitch': typeof SettingsTwitchRoute
   '/settings/': typeof SettingsIndexRoute
+  '/camera/$number/mic': typeof CameraNumberMicRoute
+  '/camera/$number/': typeof CameraNumberIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -162,7 +169,6 @@ export interface FileRoutesByTo {
   '/mobile': typeof MobileRoute
   '/show': typeof ShowRoute
   '/sounds': typeof SoundsRoute
-  '/camera/$number': typeof CameraNumberRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
@@ -173,6 +179,8 @@ export interface FileRoutesByTo {
   '/settings/sounds': typeof SettingsSoundsRoute
   '/settings/twitch': typeof SettingsTwitchRoute
   '/settings': typeof SettingsIndexRoute
+  '/camera/$number/mic': typeof CameraNumberMicRoute
+  '/camera/$number': typeof CameraNumberIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -185,7 +193,6 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRouteWithChildren
   '/show': typeof ShowRoute
   '/sounds': typeof SoundsRoute
-  '/camera/$number': typeof CameraNumberRoute
   '/settings/chat': typeof SettingsChatRoute
   '/settings/cut': typeof SettingsCutRoute
   '/settings/fox': typeof SettingsFoxRoute
@@ -196,6 +203,8 @@ export interface FileRoutesById {
   '/settings/sounds': typeof SettingsSoundsRoute
   '/settings/twitch': typeof SettingsTwitchRoute
   '/settings/': typeof SettingsIndexRoute
+  '/camera/$number/mic': typeof CameraNumberMicRoute
+  '/camera/$number/': typeof CameraNumberIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -209,7 +218,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/show'
     | '/sounds'
-    | '/camera/$number'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
@@ -220,6 +228,8 @@ export interface FileRouteTypes {
     | '/settings/sounds'
     | '/settings/twitch'
     | '/settings/'
+    | '/camera/$number/mic'
+    | '/camera/$number/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -230,7 +240,6 @@ export interface FileRouteTypes {
     | '/mobile'
     | '/show'
     | '/sounds'
-    | '/camera/$number'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
@@ -241,6 +250,8 @@ export interface FileRouteTypes {
     | '/settings/sounds'
     | '/settings/twitch'
     | '/settings'
+    | '/camera/$number/mic'
+    | '/camera/$number'
   id:
     | '__root__'
     | '/'
@@ -252,7 +263,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/show'
     | '/sounds'
-    | '/camera/$number'
     | '/settings/chat'
     | '/settings/cut'
     | '/settings/fox'
@@ -263,6 +273,8 @@ export interface FileRouteTypes {
     | '/settings/sounds'
     | '/settings/twitch'
     | '/settings/'
+    | '/camera/$number/mic'
+    | '/camera/$number/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -275,7 +287,8 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRouteWithChildren
   ShowRoute: typeof ShowRoute
   SoundsRoute: typeof SoundsRoute
-  CameraNumberRoute: typeof CameraNumberRoute
+  CameraNumberMicRoute: typeof CameraNumberMicRoute
+  CameraNumberIndexRoute: typeof CameraNumberIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -341,13 +354,6 @@ declare module '@tanstack/react-router' {
       path: '/sounds'
       fullPath: '/sounds'
       preLoaderRoute: typeof SoundsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/camera/$number': {
-      id: '/camera/$number'
-      path: '/camera/$number'
-      fullPath: '/camera/$number'
-      preLoaderRoute: typeof CameraNumberRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/': {
@@ -420,6 +426,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsTwitchRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/camera/$number/': {
+      id: '/camera/$number/'
+      path: '/camera/$number'
+      fullPath: '/camera/$number/'
+      preLoaderRoute: typeof CameraNumberIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/camera/$number/mic': {
+      id: '/camera/$number/mic'
+      path: '/camera/$number/mic'
+      fullPath: '/camera/$number/mic'
+      preLoaderRoute: typeof CameraNumberMicRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -463,7 +483,8 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRouteWithChildren,
   ShowRoute: ShowRoute,
   SoundsRoute: SoundsRoute,
-  CameraNumberRoute: CameraNumberRoute,
+  CameraNumberMicRoute: CameraNumberMicRoute,
+  CameraNumberIndexRoute: CameraNumberIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

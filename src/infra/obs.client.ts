@@ -1,7 +1,9 @@
 import OBSWebSocket, { EventSubscription, OBSWebSocketError } from "obs-websocket-js/json";
 import { z } from "zod";
-import { toCameraOfAddress } from "../domain/camera.rules";
+import { toScreenOfAddress } from "../domain/camera.rules";
 import { toLevel } from "../domain/mic.rules";
+import type { ObsIdentity, ObsRenamed } from "../domain/obs-ids.rules";
+import type { ScreenKind } from "../domain/phone.schema";
 import {
   type ObsPictureMember,
   type PictureItem,
@@ -17,6 +19,7 @@ import type { DesktopPort } from "../usecase/fox-balance.usecase";
 import type { Broadcast, BroadcastPort } from "../usecase/fox-hours.usecase";
 import type { MicPort } from "../usecase/head.usecase";
 import type { MonitorPort, MonitorShot } from "../usecase/monitor.usecase";
+import type { ObsIds } from "../usecase/obs-ids.usecase";
 import type { ShowScenePort, ShowSceneResult } from "../usecase/show-director.usecase";
 
 // Les filtres que l'appli pose sur la source d'une caméra : un filtre de boost (réglé de 0 à 30 dB, `boost.rules.ts`) et un limiteur vers -3 dB, après lui.
@@ -60,6 +63,12 @@ export type ObsSocket = {
   getProgramScene(): Promise<string>;
   // Les noms des scènes, dans l'ordre d'OBS.
   listScenes(): Promise<string[]>;
+  // Les entrées et les scènes d'OBS avec leur identifiant (GetInputList, GetSceneList), qui ne change pas quand on les renomme ; un OBS
+  // qui ne les donne pas fait échouer la demande.
+  listInputIdentities(): Promise<ObsIdentity[]>;
+  listSceneIdentities(): Promise<ObsIdentity[]>;
+  // Une entrée ou une scène change de nom (InputNameChanged, SceneNameChanged).
+  onRenamed(listener: (renamed: ObsRenamed) => void): void;
   // La scène du programme devient celle-ci (SetCurrentProgramScene, aussi en mode studio) ; une scène inconnue fait échouer la demande.
   updateProgramScene(name: string): Promise<void>;
   // Les éléments d'une scène, ou d'un groupe (`isGroup`), tels qu'OBS les range.
@@ -148,6 +157,22 @@ const SceneItemsSchema = z.object({
     }),
   ),
 });
+// GetInputList : l'identifiant de chaque entrée (obs-websocket 5.4+). GetSceneList : celui de chaque scène.
+const InputIdentitiesSchema = z.array(z.object({ inputName: z.string(), inputUuid: z.string() }));
+const SceneIdentitiesSchema = z.object({
+  scenes: z.array(z.object({ sceneName: z.string(), sceneUuid: z.string() })),
+});
+// InputNameChanged et SceneNameChanged : l'ancien nom, le nouveau, et l'identifiant de ce qui change de nom.
+const InputRenamedSchema = z.object({
+  inputUuid: z.string(),
+  oldInputName: z.string(),
+  inputName: z.string(),
+});
+const SceneRenamedSchema = z.object({
+  sceneUuid: z.string(),
+  oldSceneName: z.string(),
+  sceneName: z.string(),
+});
 const SCENE_SOURCE_TYPE = "OBS_SOURCE_TYPE_SCENE";
 // GetSourceFilterList : le nom, le genre et les réglages de chaque filtre.
 const FiltersSchema = z.object({
@@ -229,6 +254,33 @@ export function createObsSocket(options: {
     },
     async listScenes() {
       return toSceneNames(await obs.call("GetSceneList"));
+    },
+    async listInputIdentities() {
+      const { inputs } = await obs.call("GetInputList");
+      return InputIdentitiesSchema.parse(inputs).map(({ inputName, inputUuid }) => ({
+        uuid: inputUuid,
+        name: inputName,
+      }));
+    },
+    async listSceneIdentities() {
+      const { scenes } = SceneIdentitiesSchema.parse(await obs.call("GetSceneList"));
+      return scenes.map(({ sceneName, sceneUuid }) => ({ uuid: sceneUuid, name: sceneName }));
+    },
+    onRenamed(listener) {
+      obs.on("InputNameChanged", (data) => {
+        const parsed = InputRenamedSchema.safeParse(data);
+        if (parsed.success) {
+          const { inputUuid, oldInputName, inputName } = parsed.data;
+          listener({ kind: "input", uuid: inputUuid, from: oldInputName, to: inputName });
+        }
+      });
+      obs.on("SceneNameChanged", (data) => {
+        const parsed = SceneRenamedSchema.safeParse(data);
+        if (parsed.success) {
+          const { sceneUuid, oldSceneName, sceneName } = parsed.data;
+          listener({ kind: "scene", uuid: sceneUuid, from: oldSceneName, to: sceneName });
+        }
+      });
     },
     async updateProgramScene(name) {
       await obs.call("SetCurrentProgramScene", { sceneName: name });
@@ -377,18 +429,22 @@ export function isShowPage(url: string | undefined, hosts: string[]): boolean {
 
 type CameraSource = { number: number; input: string };
 
-// Toutes les sources navigateur qui sont la page d'une caméra (`/camera/<numéro>` sur l'hôte de cette caméra) : leur numéro et le nom
-// de l'entrée d'OBS. Un numéro peut avoir plusieurs sources.
-export function toCameraSources(pages: readonly ObsPage[], hosts: string[]): CameraSource[] {
+// Toutes les sources navigateur qui sont la page d'une sorte d'une caméra (`/camera/<numéro>` pour l'image, `/camera/<numéro>/mic` pour
+// le mic, sur l'hôte de cette caméra) : leur numéro et le nom de l'entrée d'OBS. Un numéro peut avoir plusieurs sources.
+export function toCameraSources(
+  pages: readonly ObsPage[],
+  hosts: string[],
+  kind: ScreenKind,
+): CameraSource[] {
   return pages.flatMap(({ name, url }) => {
-    const number = toCameraOfAddress(url, hosts);
-    return number === null ? [] : [{ number, input: name }];
+    const screen = toScreenOfAddress(url, hosts);
+    return screen?.kind === kind ? [{ number: screen.number, input: name }] : [];
   });
 }
 
-// Les mêmes, la première source de chaque numéro : c'est son entrée audio.
-export function toCameraPages(pages: readonly ObsPage[], hosts: string[]): CameraSource[] {
-  const found = toCameraSources(pages, hosts);
+// Les mêmes, la première source de chaque numéro : pour le mic, c'est son entrée audio.
+export function toCameraPages(pages: readonly ObsPage[], hosts: string[], kind: ScreenKind): CameraSource[] {
+  const found = toCameraSources(pages, hosts, kind);
   return found.filter(({ number }, index) => found.findIndex((other) => other.number === number) === index);
 }
 
@@ -419,11 +475,9 @@ async function hasVisibleSource(
 
 export type ObsClientDeps = {
   address: string;
-  micName: string;
-  // La source du son du PC ; absente, il n'est pas suivi.
-  desktopName?: string | undefined;
-  // La scène d'OBS qui est la place caméra (`cameraSlotScene`) ; absente, il n'y a pas d'image à choisir.
-  cameraSlotScene?: string | undefined;
+  // Les noms d'OBS du mic du PC (`micName`), de la source du son du PC (`desktopName`, absente : il n'est pas suivi) et de la place
+  // caméra (`cameraSlotScene`, absente : il n'y a pas d'image à choisir), tels que le suivi des identifiants les donne.
+  ids: ObsIds;
   pageHosts: string[];
   log: (message: string) => void;
   onExit: (reason: string) => void;
@@ -452,8 +506,8 @@ export type ObsClient = {
   listScenes(): Promise<ObsSceneList>;
   start(): void;
   stop(): void;
+  // L'entrée que la tête et Jean-Renard écoutent devient celle-ci (le mic du PC, ou la source mic d'une caméra).
   updateMicName(name: string): void;
-  updateDesktopName(name: string | undefined): void;
   getStatus(): ObsStatus;
 };
 
@@ -538,6 +592,7 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
         for (const listener of listeners) listener(level);
       },
       mute,
+      getName: () => name,
       rename(next: string | undefined) {
         if (next === name) return;
         name = next;
@@ -553,8 +608,15 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
       },
     };
   };
-  const mic = watch("du micro", deps.micName);
-  const desktop = watch("du son du PC", deps.desktopName);
+  const { ids } = deps;
+  const mic = watch("du micro", ids.getNames().micName);
+  const desktop = watch("du son du PC", ids.getNames().desktopName);
+  // Le suivi des identifiants change un nom : le son du PC suit, l'entrée écoutée seulement si elle était sur le mic du PC (la tête
+  // peut écouter la source mic d'une caméra, que la régie choisit).
+  ids.subscribe(({ key, from, to }) => {
+    if (key === "desktopName") desktop.rename(to);
+    else if (key === "micName" && to !== undefined && mic.getName() === from) mic.rename(to);
+  });
 
   // La diffusion : son état part aux abonnés à la connexion (le serveur peut démarrer en plein live), puis à chaque démarrage
   // ou arrêt.
@@ -667,7 +729,7 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
   // Une place illisible (la scène n'existe pas, OBS refuse) n'ôte rien d'autre à la régie : pas d'image à choisir, dit une seule fois.
   let isPictureFailureLogged = false;
   const getPicture = async (pages: readonly ObsPage[]): Promise<ObsPictureMember[]> => {
-    const scene = deps.cameraSlotScene;
+    const scene = ids.getNames().cameraSlotScene;
     if (scene === undefined) return [];
     try {
       return toObsPicture(await listPictureSources(scene, pages));
@@ -687,8 +749,9 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
         socket.listScenes(),
         socket.listPages(),
       ]);
-      const found = toCameraPages(pages, pageHosts);
-      const onAir = await listOnAir(scene, toCameraSources(pages, pageHosts));
+      // Le mic d'une caméra est sa source mic, l'antenne se juge sur ses sources image : OBS ne mixe pas le son d'une source cachée.
+      const found = toCameraPages(pages, pageHosts, "mic");
+      const onAir = await listOnAir(scene, toCameraSources(pages, pageHosts, "image"));
       const picture = await getPicture(pages);
       const [isPcMuted = null, ...mutes] = await Promise.all([
         getMute(pcMic),
@@ -723,7 +786,7 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
   // Le membre est seul à l'image : OBS relit la place, les éléments de ce membre qui sont cachés se montrent d'abord (aucun instant sans
   // image), puis ceux des autres membres qui sont visibles se cachent. Rien d'autre dans la scène n'est touché.
   const updatePicture = async (id: string): Promise<ShowSceneResult> => {
-    const scene = deps.cameraSlotScene;
+    const scene = ids.getNames().cameraSlotScene;
     if (!isLinked) return { ok: false, reason: "OBS n'est pas connecté" };
     if (scene === undefined)
       return { ok: false, reason: "cameraSlotScene n'est pas réglé dans settings.json" };
@@ -831,6 +894,8 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
     log(`Connecté à OBS ${address} (obs-websocket ${version}).`);
     mic.arm();
     desktop.arm();
+    // Les sources renommées ou supprimées depuis la dernière connexion : leur nouveau nom arrive par `ids.subscribe`.
+    void ids.resolve();
     void refreshBroadcast();
     void refreshPages();
     scheduleShowRefresh();
@@ -945,7 +1010,6 @@ export function createObsClient(deps: ObsClientDeps, socket: ObsSocket): ObsClie
     monitor: { getImage: getMonitorImage },
     listScenes,
     updateMicName: mic.rename,
-    updateDesktopName: desktop.rename,
     getStatus: () => ({ isLinked, inputNames: [...namesSeen].sort() }),
     start() {
       void connect();

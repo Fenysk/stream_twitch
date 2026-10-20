@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { toChatChannel } from "../../domain/chat-settings.rules";
 import type { ExpressionRef } from "../../domain/head.types";
 import { toInstant } from "../../domain/instant.rules";
+import { toNamedSettings } from "../../domain/obs-ids.rules";
 import type { Settings } from "../../domain/settings.schema";
 import { toClipCounts } from "../../domain/sound.rules";
 import { isFlinchReward, isFoxReward } from "../../domain/thanks.rules";
@@ -21,6 +22,7 @@ import {
   upgradeLocalSettings,
 } from "../../infra/local-settings.repository";
 import { createObsClient, createObsSocket, type ObsClient } from "../../infra/obs.client";
+import { createObsIdsStore } from "../../infra/obs-ids.repository";
 import { createRegularsStore } from "../../infra/regulars.repository";
 import { createRewardStore } from "../../infra/reward.repository";
 import { createRewardPhraseStore } from "../../infra/reward-phrase.repository";
@@ -63,6 +65,7 @@ import { createFoxThanks, type FoxThanks } from "../../usecase/fox-thanks.usecas
 import { createFoxTunnel } from "../../usecase/fox-tunnel.usecase";
 import { createHeadLoop, type HeadFeed } from "../../usecase/head.usecase";
 import { createMonitor, type Monitor } from "../../usecase/monitor.usecase";
+import { createObsIds } from "../../usecase/obs-ids.usecase";
 import { createPhones, type Phones } from "../../usecase/phone.usecase";
 import { createRewardLibrary, type RewardLibrary } from "../../usecase/reward.usecase";
 import { createRewardPhraseLibrary, type RewardPhraseLibrary } from "../../usecase/reward-phrase.usecase";
@@ -76,6 +79,7 @@ import { createTimetable } from "../../usecase/timetable.usecase";
 import { createTwitchConnection, type TwitchConnection } from "../../usecase/twitch-connection.usecase";
 import { createViewers, type Viewers, type ViewersPort } from "../../usecase/viewers.usecase";
 import { toEndPort } from "./control-end";
+import { followObsNames } from "./obs-names";
 import { log } from "./server-log";
 import { getTwitchApp } from "./twitch-app";
 
@@ -194,10 +198,13 @@ export function startRuntime(): Runtime {
     onChange: (effective: Settings) => {
       loop.update(effective);
       applyExpression(effective);
-      // Le nom du mic du PC et la fin prévue vont à la régie : elle garde l'entrée écoutée sur le mic ouvert, caméra comprise.
-      control.update(effective);
-      cameraBoost.update(effective);
-      obs.updateDesktopName(effective.desktopName);
+      // Les noms des sources et scènes que les réglages désignent vont d'abord au suivi des identifiants (un nom changé à la main l'emporte) ;
+      // ceux qui les lisent reçoivent les noms qu'OBS leur donne. Le nom du mic du PC et la fin prévue vont à la régie : elle garde l'entrée
+      // écoutée sur le mic ouvert, caméra comprise.
+      ids.update(effective);
+      const current = named(effective);
+      control.update(current);
+      cameraBoost.update(current);
       fox.update(effective);
       mode.update(effective);
       queue.update(effective);
@@ -216,7 +223,7 @@ export function startRuntime(): Runtime {
       foxChat.update(effective);
       clips.update(effective);
       clipChat.update(effective);
-      director.update(effective);
+      director.update(current);
       showVoice.update(effective);
     },
     log,
@@ -243,19 +250,31 @@ export function startRuntime(): Runtime {
   });
   // La liste des voix se lit au démarrage : l'onglet Renard l'affiche sans attendre PowerShell.
   void fox.listVoices();
+  // Le mot de passe vient de .env (OBS_PASSWORD) ; absent ou vide = connexion sans mot de passe.
+  const obsSocket = createObsSocket({
+    address: initial.obsAddress,
+    password: process.env.OBS_PASSWORD || undefined,
+    log,
+  });
+  // Les entrées et scènes que les réglages nomment (micName, desktopName, cameraSlotScene, showEndScene) sont suivies par leur identifiant
+  // d'OBS, retenu dans data/obs-ids.json (hors de git) : renommées dans OBS, elles restent trouvées.
+  const ids = createObsIds({
+    source: obsSocket,
+    store: createObsIdsStore(join(root, "data", "obs-ids.json"), log),
+    settings: initial,
+    log,
+  });
+  const named = (effective: Settings): Settings => toNamedSettings(effective, ids.getNames());
   const obs = createObsClient(
     {
       address: initial.obsAddress,
-      micName: initial.micName,
-      desktopName: initial.desktopName,
-      cameraSlotScene: initial.cameraSlotScene,
+      ids,
       // Seules les sources qui pointent vers CE port sont rafraîchies : un serveur d'essai sur un autre port ne touche pas à celle du stream.
       pageHosts: [`localhost:${port}`, `127.0.0.1:${port}`],
       log,
       onExit: (reason) => void shutdown(reason),
     },
-    // Le mot de passe vient de .env (OBS_PASSWORD) ; absent ou vide = connexion sans mot de passe.
-    createObsSocket({ address: initial.obsAddress, password: process.env.OBS_PASSWORD || undefined, log }),
+    obsSocket,
   );
   const loop = createHeadLoop({
     mic: obs.mic,
@@ -597,7 +616,7 @@ export function startRuntime(): Runtime {
     clock: Date.now,
     voice: showVoice,
     sounds,
-    settings: initial,
+    settings: named(initial),
     random: Math.random,
     createId: () => randomBytes(8).toString("hex"),
     schedule,
@@ -610,7 +629,7 @@ export function startRuntime(): Runtime {
   const cameraBoost = createCameraBoost({
     levels: obs.levels,
     port: obs.boost,
-    settings: initial,
+    settings: named(initial),
     schedule,
     log,
   });
@@ -633,7 +652,7 @@ export function startRuntime(): Runtime {
       getReader: (isForced) => twitch.getChatViewersReader(isForced),
     }),
     end: toEndPort(settings),
-    settings: initial,
+    settings: named(initial),
     // L'entrée écoutée est celle du micro du live : la tête et Jean-Renard la suivent, et le boost aussi quand c'est une caméra.
     listen: (input) => {
       obs.updateMicName(input);
@@ -650,6 +669,7 @@ export function startRuntime(): Runtime {
     clock: Date.now,
     schedule,
   });
+  followObsNames({ ids, settings, boost: cameraBoost, control, director, log });
   log(`Renard : liste d'insultes chargée (${insults.parts.length + insults.words.size} entrées).`);
   shown = start.head.expression;
   loop.start();
@@ -682,7 +702,9 @@ export function startRuntime(): Runtime {
     `Serveur démarré : http://localhost:${port}/head, /chat, /fox, /sounds et /show (réglages : http://localhost:${port}/)`,
   );
   log(`Sons : ${sounds.list().length} dans data/sounds/.`);
-  log(`Réglages : micro « ${initial.micName} », seuil ${initial.threshold} dB, délai ${initial.delay} ms.`);
+  log(
+    `Réglages : micro « ${named(initial).micName} », seuil ${initial.threshold} dB, délai ${initial.delay} ms.`,
+  );
   current = {
     feed: loop.feed,
     expressions,

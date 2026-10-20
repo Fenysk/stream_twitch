@@ -5,12 +5,15 @@ import {
   PC_MIC_ID,
   toControlMics,
   toListenedInput,
+  toLiveMic,
   toMicPlan,
   toMicSources,
 } from "../domain/control.rules";
 import type { ControlState } from "../domain/control.schema";
+import { isMicCoveredByPicture, toDirectMicId } from "../domain/fallback.rules";
 import { type EndDirection, toEndClock, toSteppedEndAt } from "../domain/hours.rules";
 import { toInstant } from "../domain/instant.rules";
+import type { PhoneSummary } from "../domain/phone.schema";
 import {
   type ObsPictureMember,
   PICTURE_FALLBACK_MS,
@@ -121,8 +124,8 @@ export type Control = {
   listChatViewers(): Promise<ChatViewersResult>;
   // Arrête le live dans OBS : refusé (409) quand il n'est pas en cours, ou qu'OBS refuse.
   stopLive(): Promise<ControlResult>;
-  // Ce membre de la place caméra (`pc`, `head`, `camera-3`) passe à l'image, les autres sont cachés, et le micro le suit : celui de la
-  // caméra choisie, sinon celui du PC ; avec `isMicKept`, le micro du live reste où il est (le bouton qui coupe la caméra d'un téléphone).
+  // Ce membre de la place caméra (`pc`, `head`, `camera-3`) passe à l'image, les autres sont cachés, et l'image décide du micro : la caméra
+  // à l'image prend le sien, le PC prend celui du PC, la tête n'y touche pas ; avec `isMicKept`, le micro du live reste où il est.
   // Refusé : 404 membre inconnu, 409 caméra dont le téléphone ne filme pas vers OBS, ou OBS refuse.
   updatePicture(id: string, keep?: MicKeep): Promise<ControlResult>;
   // Le membre suivant sur la touche du Stream Deck : PC, les caméras disponibles par numéro, la tête, puis PC.
@@ -136,11 +139,12 @@ const refuse = (status: number, message: string): ControlResult => ({ ok: false,
 
 const toReason = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-// Ce que la touche d'un micro sans entrée dans OBS dit : celui du PC vient des réglages, celui d'une caméra de sa source navigateur.
+// Ce que la touche d'un micro sans entrée dans OBS dit : celui du PC vient des réglages, celui d'une caméra de sa source navigateur mic
+// (la page `/camera/<n>/mic`), qui se pose dans une scène présente partout pour que son son passe quelle que soit la scène.
 const toUnavailableText = (id: string, label: string, pcName: string): string =>
   id === PC_MIC_ID
     ? `l'entrée « ${pcName} » est introuvable dans OBS : vérifie micName dans settings.json`
-    : `la source OBS de ${label} est introuvable : crée-la avec l'adresse de l'onglet Mobile, « Contrôler l'audio via OBS » cochée`;
+    : `la source mic de ${label} est introuvable : crée-la avec son adresse mic de l'onglet Mobile (celle qui finit par /mic), « Contrôler l'audio via OBS » cochée, dans une scène « Master - Micros » ajoutée à chaque scène`;
 
 const toOpenedLine = (label: string, muted: number): string =>
   `Régie : micro « ${label} » ouvert, ${muted} entrée${muted > 1 ? "s" : ""} coupée${muted > 1 ? "s" : ""}.`;
@@ -175,6 +179,10 @@ export function createControl({
   // téléphone qui ne filme plus a programmé.
   let liveCameraId: string | null = null;
   let lostMic: { id: string; cancel: () => void } | null = null;
+  // L'image vue à la dernière lecture d'OBS (`undefined` : aucune lecture, ou OBS sans place) et celle que l'appli vient de demander : un
+  // changement d'image que l'appli n'a pas demandé vient d'OBS, et l'image décide du micro comme pour un choix de l'appli.
+  let seenPictureId: string | null | undefined;
+  let askedPictureId: string | null = null;
   const listeners = new Set<(state: ControlState) => void>();
   const unsubscribes: (() => void)[] = [];
 
@@ -190,9 +198,14 @@ export function createControl({
     return { isLive, durationMs: isLive ? lastBroadcast.duration + (clock() - lastBroadcast.at) : 0 };
   };
 
-  // Les caméras dont l'image arrive dans OBS : le téléphone est connecté, filme, et sa page OBS a une liaison vive.
-  const getReceiving = (): number[] =>
-    phones.getState().flatMap(({ number, isReceiving }) => (number !== null && isReceiving ? [number] : []));
+  const listNumbers = (isMatching: (phone: PhoneSummary) => boolean): number[] =>
+    phones.getState().flatMap((phone) => (phone.number !== null && isMatching(phone) ? [phone.number] : []));
+
+  // Les caméras dont l'image arrive dans OBS : le téléphone est connecté, filme, et sa page image a une liaison vive.
+  const getReceiving = (): number[] => listNumbers(({ isReceiving }) => isReceiving);
+
+  // Les caméras dont le mic arrive dans OBS : de même avec la page mic. Le repli du micro suit cette liaison, celui de l'image la précédente.
+  const getHeard = (): number[] => listNumbers(({ isHeard }) => isHeard);
 
   const getPicture = (): PictureState => toPictureState(obsState.picture, getReceiving());
 
@@ -211,7 +224,7 @@ export function createControl({
   // L'entrée écoutée suit le mic ouvert d'OBS, qu'on l'ait ouvert d'ici ou à la main : la tête et Jean-Renard n'entendent pas
   // Fenysk parler dans le téléphone si elle reste sur le mic du PC, coupé, et croient alors qu'il est parti.
   const follow = () => {
-    const next = toListenedInput(getSources(), settings.micName);
+    const next = toListenedInput(getSources(), settings.micName, obsState.cameras);
     if (next === listened) return;
     listened = next;
     listen(next);
@@ -223,6 +236,7 @@ export function createControl({
     const state = getState();
     watchPicture(state.picture);
     watchMic(state);
+    followPicture(state);
     for (const listener of listeners) listener(state);
   };
 
@@ -290,31 +304,40 @@ export function createControl({
     return result;
   };
 
-  // Le membre passe seul à l'image dans OBS, puis le micro le suit. Le micro qui refuse (la source audio d'une caméra manque) laisse l'image
-  // où elle est : le refus le dit.
-  const updatePicture = async (id: string, keep: MicKeep = {}): Promise<ControlResult> => {
+  // Le refus d'un choix d'image sans rien demander à OBS (pas de place, membre inconnu, caméra qui ne filme pas), ou `null` : il peut passer.
+  const toPictureRefusal = (id: string): ControlResult | null => {
     const { members } = getPicture();
     const member = members.find((candidate) => candidate.id === id);
     if (members.length === 0)
       return refuse(409, "OBS n'a pas de place caméra : vérifie cameraSlotScene dans settings.json");
     if (!member) return refuse(404, `${toPictureLabel(id)} n'est pas dans la place caméra d'OBS`);
-    if (!member.isAvailable)
-      return refuse(409, `${member.label} n'est pas disponible : son téléphone ne filme pas vers OBS`);
-    const shown = await obs.updatePicture(id);
-    if (!shown.ok) {
-      log(`Régie : l'image ne passe pas à ${member.label} (${shown.reason}).`);
-      return refuse(409, shown.reason);
-    }
-    log(`Régie : ${member.label} est à l'image.`);
-    if (keep.isMicKept) return { ok: true };
-    const heard = await updateMic(toPictureMicId(id));
-    return heard.ok
-      ? heard
-      : refuse(heard.status, `l'image est passée à ${member.label}, mais ${heard.message}`);
+    return member.isAvailable
+      ? null
+      : refuse(409, `${member.label} n'est pas disponible : son téléphone ne filme pas vers OBS`);
   };
 
-  // Le téléphone de la caméra à l'image ne filme plus depuis assez longtemps : l'image passe à la tête et le micro au PC. Rien ne la
-  // ramène ensuite à cette caméra quand son téléphone revient.
+  // Le membre passe seul à l'image dans OBS, puis l'image décide du micro : la caméra prend le sien, le PC celui du PC, la tête n'y touche
+  // pas. Le micro qui refuse (la source mic d'une caméra manque) laisse l'image où elle est : le refus le dit.
+  const updatePicture = async (id: string, keep: MicKeep = {}): Promise<ControlResult> => {
+    const refusal = toPictureRefusal(id);
+    if (refusal) return refusal;
+    const label = toPictureLabel(id);
+    askedPictureId = id;
+    const shown = await obs.updatePicture(id);
+    if (!shown.ok) {
+      askedPictureId = null;
+      log(`Régie : l'image ne passe pas à ${label} (${shown.reason}).`);
+      return refuse(409, shown.reason);
+    }
+    log(`Régie : ${label} est à l'image.`);
+    const micId = toPictureMicId(id);
+    if (keep.isMicKept || micId === null) return { ok: true };
+    const heard = await updateMic(micId);
+    return heard.ok ? heard : refuse(heard.status, `l'image est passée à ${label}, mais ${heard.message}`);
+  };
+
+  // Le téléphone de la caméra à l'image ne filme plus depuis assez longtemps : l'image passe à la tête (à défaut, au PC). La tête ne touche
+  // pas au micro (son repli est `fallBackMic`), le PC prend celui du PC. Rien ne la ramène ensuite à cette caméra quand son téléphone revient.
   const fallBackPicture = async (id: string): Promise<void> => {
     const picture = getPicture();
     if (toLostPictureId(picture) !== id) return;
@@ -335,10 +358,10 @@ export function createControl({
     lost = id === null ? null : { id, cancel: schedule(() => void fallBackPicture(id), PICTURE_FALLBACK_MS) };
   };
 
-  // Le micro du live est celui d'une caméra dont le téléphone ne filme plus depuis assez longtemps : il revient au PC. Quand cette caméra est
-  // aussi à l'image, c'est le repli de l'image qui le rend (avec l'image) : une seule demande.
+  // Le micro du live est celui d'une caméra dont le mic n'arrive plus dans OBS depuis assez longtemps : il passe explicitement au PC (la tête
+  // ne le déplace plus). Quand le repli de l'image va vers le PC, c'est lui qui le fait (avec l'image) : une seule demande.
   const fallBackMic = async (id: string): Promise<void> => {
-    if (toLostMicId(liveCameraId, getReceiving()) !== id) return;
+    if (toLostMicId(liveCameraId, getHeard()) !== id) return;
     const label = toPictureLabel(id);
     log(
       `Régie : le micro de ${label} ne filme plus vers OBS depuis ${PICTURE_FALLBACK_MS / 1000} s, il revient au PC.`,
@@ -351,14 +374,40 @@ export function createControl({
   // que le micro change, et une seule fois par caméra tant qu'elle garde le micro sans filmer.
   const watchMic = (state: ControlState): void => {
     liveCameraId = toLiveCameraMicId(state.mics, obsState.cameras, liveCameraId);
-    const id = toLostMicId(liveCameraId, getReceiving());
-    const next = id !== null && toLostPictureId(state.picture) === id ? null : id;
+    const id = toLostMicId(liveCameraId, getHeard());
+    const next = id !== null && isMicCoveredByPicture(id, state.picture) ? null : id;
     if (lostMic?.id === next) return;
     lostMic?.cancel();
     lostMic =
       next === null
         ? null
         : { id: next, cancel: schedule(() => void fallBackMic(next), PICTURE_FALLBACK_MS) };
+  };
+
+  // Le micro du live : celui qu'une caméra encore ouverte dans OBS garde même si son téléphone est parti.
+  const getLiveId = (mics: ControlState["mics"]): string | null => toLiveMic(mics)?.id ?? liveCameraId;
+
+  // Une image que l'appli n'a pas demandée vient d'OBS (l'œil d'un élément de la place) : elle décide du micro comme un choix de l'appli.
+  // Rien à la première lecture d'OBS ni à la première après une coupure (l'image a pu changer entre-temps), ni quand le micro voulu est
+  // déjà celui du live.
+  const followPicture = ({ picture, mics }: ControlState): void => {
+    if (!obsState.isLinked || picture.members.length === 0) {
+      seenPictureId = undefined;
+      return;
+    }
+    const previous = seenPictureId;
+    const { currentId } = picture;
+    seenPictureId = currentId;
+    if (previous === undefined || previous === currentId) return;
+    const isAsked = askedPictureId === currentId;
+    askedPictureId = null;
+    if (isAsked || currentId === null) return;
+    const wanted = toDirectMicId(currentId, getLiveId(mics));
+    if (wanted === null) return;
+    log(`Régie : ${toPictureLabel(currentId)} est passé à l'image dans OBS, son micro suit.`);
+    void updateMic(wanted).then((result) => {
+      if (!result.ok) log(`Régie : le micro de l'image n'est pas ouvert (${result.message}).`);
+    });
   };
 
   return {

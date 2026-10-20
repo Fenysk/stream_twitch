@@ -1,9 +1,10 @@
 // La liaison d'un téléphone avec le serveur : son flux, ouvert une fois qu'il filme ou non (l'état de la régie, puis, quand il filme, son
-// numéro, la page OBS de ce numéro et ses signaux) et l'envoi de sa caméra à la page OBS de son numéro. Le numéro pris est gardé sur le
-// téléphone pour le retrouver à la prochaine ouverture.
+// numéro, les pages OBS de ce numéro et leurs signaux) et l'envoi de sa caméra à OBS en deux liaisons WebRTC : la piste vidéo à la page image
+// de son numéro, la piste audio à sa page mic (OBS ne mixe pas le son d'une source cachée : le mic a sa propre source). Le numéro pris est
+// gardé sur le téléphone pour le retrouver à la prochaine ouverture.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PhoneEvent } from "../../domain/phone.schema";
+import type { PhoneEvent, ScreenKind } from "../../domain/phone.schema";
 import { IDLE_STANDING, type PictureStanding } from "../../domain/picture.schema";
 import {
   createFilmReporter,
@@ -17,10 +18,12 @@ import { type ControlView, IDLE_VIEW, toStaleView } from "./control-view";
 import { getPhoneId, getSavedNumber, updateSavedNumber } from "./mobile-storage";
 import { openSenderPeer } from "./peer";
 import { createRandomId } from "./random-id";
+import { createTrackStreams } from "./track-streams";
 
 export type PhoneLink = {
   // `null` tant que le serveur n'a pas donné de numéro : il en donne un au premier Filmer, et le reprend quand le téléphone arrête de filmer.
   number: number | null;
+  // Où en est la liaison de l'image avec OBS (celle que la pastille du numéro montre).
   status: LinkStatus;
   // Prend ce numéro de caméra : rend le refus du serveur à montrer, ou `null` quand c'est fait.
   updateNumber: (number: number) => Promise<string | null>;
@@ -41,8 +44,27 @@ const schedule = (callback: () => void, ms: number): (() => void) => {
   return () => clearTimeout(timer);
 };
 
+// Une liaison par sorte de page OBS : l'image et le mic.
+type Links = Record<ScreenKind, CameraSender<MediaStream>>;
+
+const ignoreStatus = (): void => undefined;
+
+const createLink = (
+  phoneId: string,
+  screenKind: ScreenKind,
+  onStatus: (status: LinkStatus) => void,
+): CameraSender<MediaStream> =>
+  createCameraSender<MediaStream>({
+    openPeer: openSenderPeer,
+    send: createSignalSender({ from: "phone", phoneId, screenKind }),
+    schedule,
+    createId: createRandomId,
+    onStatus,
+    log: (message) => console.warn(message),
+  });
+
 type EventTargets = {
-  link: CameraSender<MediaStream>;
+  links: Links;
   setNumber: (number: number | null) => void;
   setControl: (view: ControlView) => void;
   setOnAir: (isOnAir: boolean) => void;
@@ -50,11 +72,11 @@ type EventTargets = {
   setStanding: (standing: PictureStanding) => void;
 };
 
-// Ce que le serveur dit à un téléphone : l'état de la régie, et, quand il filme, son numéro (gardé), la page OBS de ce numéro, les signaux
-// de cette page, si sa caméra est à l'antenne et si son mic est celui du live.
+// Ce que le serveur dit à un téléphone : l'état de la régie, et, quand il filme, son numéro (gardé), la page OBS de ce numéro pour chaque
+// sorte, les signaux de ces pages, si sa caméra est à l'antenne et si son mic est celui du live.
 const applyEvent = (
   event: PhoneEvent,
-  { link, setNumber, setControl, setOnAir, setLiveMic, setStanding }: EventTargets,
+  { links, setNumber, setControl, setOnAir, setLiveMic, setStanding }: EventTargets,
 ): void => {
   switch (event.kind) {
     case "number":
@@ -62,10 +84,10 @@ const applyEvent = (
       if (event.number !== null) updateSavedNumber(event.number);
       return;
     case "screen":
-      link.setScreen(event.screenId);
+      links[event.screenKind].setScreen(event.screenId);
       return;
     case "signal":
-      link.receive(event.signal);
+      links[event.screenKind].receive(event.signal);
       return;
     case "control":
       setControl({ state: event.state, receivedAt: Date.now(), staleAt: null });
@@ -98,40 +120,45 @@ export const usePhoneLink = (isCamera: boolean, stream: MediaStream | null): Pho
   const [isOnAir, setOnAir] = useState(false);
   const [isLiveMic, setLiveMic] = useState(false);
   const [standing, setStanding] = useState<PictureStanding>(IDLE_STANDING);
-  const sender = useRef<CameraSender<MediaStream> | null>(null);
+  const links = useRef<Links | null>(null);
   const phoneId = useRef("");
   const filming = useRef<FilmingReport>({ isOpen: false, isCamera, isFilming: false, send: null });
+  // La vidéo seule pour l'image et l'audio seul pour le mic : le même flux tant que la piste ne change pas, pour ne pas relancer une liaison.
+  const [toTrackStreams] = useState(() =>
+    createTrackStreams((track: MediaStreamTrack) => new MediaStream([track])),
+  );
+  const { image, mic } = toTrackStreams(
+    stream?.getVideoTracks()[0] ?? null,
+    stream?.getAudioTracks()[0] ?? null,
+  );
 
   useEffect(() => {
     const id = getPhoneId();
     phoneId.current = id;
     filming.current.send = createFilmReporter(id);
-    const link = createCameraSender<MediaStream>({
-      openPeer: openSenderPeer,
-      send: createSignalSender({ from: "phone", phoneId: id }),
-      schedule,
-      createId: createRandomId,
-      onStatus: setStatus,
-      log: (message) => console.warn(message),
-    });
-    sender.current = link;
+    const opened: Links = {
+      image: createLink(id, "image", setStatus),
+      mic: createLink(id, "mic", ignoreStatus),
+    };
+    links.current = opened;
     const stop = watchPhone({
       id,
       getNumber: getSavedNumber,
-      // Le flux se rouvre : la page OBS a lâché la liaison quand il s'est fermé, le serveur redira sa page et la liaison repart.
+      // Le flux se rouvre : les pages OBS ont lâché la liaison quand il s'est fermé, le serveur redira leurs identifiants et les liaisons
+      // repartent.
       onOpen: () => {
         filming.current.isOpen = true;
-        link.setScreen(null);
+        for (const link of Object.values(opened)) link.setScreen(null);
         tellFilming(filming.current);
       },
       onStale: (isStale) => setControl((previous) => toStaleView(previous, isStale, Date.now())),
       onEvent: (event) =>
-        applyEvent(event, { link, setNumber, setControl, setOnAir, setLiveMic, setStanding }),
+        applyEvent(event, { links: opened, setNumber, setControl, setOnAir, setLiveMic, setStanding }),
     });
     return () => {
       stop();
-      link.close();
-      sender.current = null;
+      for (const link of Object.values(opened)) link.close();
+      links.current = null;
       filming.current.isOpen = false;
       filming.current.send = null;
     };
@@ -140,9 +167,16 @@ export const usePhoneLink = (isCamera: boolean, stream: MediaStream | null): Pho
   useEffect(() => {
     filming.current.isCamera = isCamera;
     filming.current.isFilming = isCamera && stream !== null;
-    sender.current?.setStream(stream);
     tellFilming(filming.current);
   }, [isCamera, stream]);
+
+  useEffect(() => {
+    links.current?.image.setStream(image);
+  }, [image]);
+
+  useEffect(() => {
+    links.current?.mic.setStream(mic);
+  }, [mic]);
 
   // Arrêter de filmer : ce que le serveur disait de la caméra (à l'antenne, micro, plan) ne vaut plus ; il le redit au prochain Filmer.
   useEffect(() => {

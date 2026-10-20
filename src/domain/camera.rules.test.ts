@@ -3,6 +3,7 @@ import {
   hasCamera,
   hasControl,
   toCameraAddress,
+  toCameraMicAddress,
   toCameraName,
   toCameraNumber,
   toCameraOfAddress,
@@ -10,6 +11,7 @@ import {
   toRoleLabel,
   toRoleUrl,
   toSavedRole,
+  toScreenOfAddress,
 } from "./camera.rules";
 
 describe("hasCamera", () => {
@@ -51,6 +53,43 @@ describe("toCameraOfAddress", () => {
     expect(toCameraOfAddress("https://www.twitch.tv/camera/1", hosts)).toBeNull();
     expect(toCameraOfAddress("pas une adresse", hosts)).toBeNull();
     expect(toCameraOfAddress(undefined, hosts)).toBeNull();
+  });
+});
+
+describe("la page mic d'une caméra", () => {
+  const hosts = ["localhost:4747", "127.0.0.1:4747"];
+
+  it("donne à la page mic l'adresse de la page image suivie de /mic, sur le même hôte", () => {
+    expect(toCameraMicAddress(1, "4747")).toBe("http://camera-1.localhost:4747/camera/1/mic");
+    expect(toCameraMicAddress(12, "4748")).toBe("http://camera-12.localhost:4748/camera/12/mic");
+  });
+
+  it("Quand une adresse est celle d'une page mic, le système ne doit pas la prendre pour une page image", () => {
+    expect(toCameraOfAddress(toCameraMicAddress(1, "4747"), hosts)).toBeNull();
+    expect(toCameraOfAddress("http://localhost:4747/camera/3/mic", hosts)).toBeNull();
+    expect(toCameraOfAddress("http://camera-3.localhost:4747/camera/3/mic/", hosts)).toBeNull();
+  });
+
+  it("lit la sorte et le numéro d'une page, comme `toCameraAddress` et `toCameraMicAddress` l'écrivent", () => {
+    expect(toScreenOfAddress(toCameraAddress(2, "4747"), hosts)).toEqual({ number: 2, kind: "image" });
+    expect(toScreenOfAddress(toCameraMicAddress(2, "4747"), hosts)).toEqual({ number: 2, kind: "mic" });
+    expect(toScreenOfAddress("http://localhost:4747/camera/3/mic", hosts)).toEqual({
+      number: 3,
+      kind: "mic",
+    });
+    expect(toScreenOfAddress("http://127.0.0.1:4747/camera/3/mic/", hosts)).toEqual({
+      number: 3,
+      kind: "mic",
+    });
+  });
+
+  it("refuse, pour une page mic, un autre port, l'hôte d'un autre numéro, un chemin plus long et un numéro qui n'en est pas un", () => {
+    expect(toScreenOfAddress("http://camera-1.localhost:4748/camera/1/mic", hosts)).toBeNull();
+    expect(toScreenOfAddress("http://camera-2.localhost:4747/camera/1/mic", hosts)).toBeNull();
+    expect(toScreenOfAddress("http://localhost:4747/camera/1/mic/extra", hosts)).toBeNull();
+    expect(toScreenOfAddress("http://localhost:4747/camera/abc/mic", hosts)).toBeNull();
+    expect(toScreenOfAddress("http://localhost:4747/camera/mic", hosts)).toBeNull();
+    expect(toScreenOfAddress(undefined, hosts)).toBeNull();
   });
 });
 

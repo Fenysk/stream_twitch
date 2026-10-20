@@ -12,7 +12,7 @@ La tête est une image coupée en deux moitiés. La moitié haute s'ouvre quand 
 - Plus la voix est forte, plus la bouche s'ouvre et plus la tête s'incline (`voiceEffect`).
 - Au repos, la tête change de pose toutes les 2 à 5 s : neutre, penchée à gauche ou à droite, levée.
 - Quand Fenysk parle, elle change de pose toutes les 0,6 à 1,5 s, sauf si « Penché en parlant » est à 0°.
-- La tête écoute le micro ouvert dans OBS : « Micro PC », ou la caméra d'un téléphone si Fenysk l'a choisie (voir [telephone](telephone.md)).
+- La tête écoute le micro ouvert dans OBS : « Micro PC », ou le micro d'une caméra de téléphone quand le Plan ou la feuille Micro le choisit (voir [telephone](telephone.md)).
 
 ## Régler la tête
 

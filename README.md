@@ -29,11 +29,13 @@ Chaque source est une source navigateur. L'adresse est exacte, hôte compris.
 | Soundboard | `http://localhost:4747/sounds` | décochée |
 | Show | `http://127.0.0.1:4747/show` | décochée |
 | Countdown | `http://countdown.localhost:4747/countdown` | décochée |
-| Caméra N | `http://camera-N.localhost:4747/camera/N` | cochée |
+| Image caméra N | `http://camera-N.localhost:4747/camera/N` | décochée |
+| Micro caméra N | `http://camera-N.localhost:4747/camera/N/mic` | cochée |
 
 - Une page qui joue un son (Jean-Renard, sons, émission) a la case décochée. Le son sort par Windows, et OBS le capte une fois par « Audio PC ».
-- Les caméras de téléphone ont la case cochée : le serveur coupe et rouvre leur son.
-- OBS ouvre 6 connexions au plus vers un même hôte. `127.0.0.1`, `countdown.localhost` et `camera-N.localhost` comptent comme d'autres hôtes. Toute nouvelle page OBS ouvre un seul flux SSE.
+- L'image d'une caméra va dans la scène « Master - Webcam ». Elle ne joue aucun son : la case reste décochée.
+- Le micro d'une caméra va dans la scène « Master - Micros », ajoutée à chaque scène. La case est cochée, le monitoring audio désactivé : le serveur coupe et rouvre son son.
+- OBS ouvre 6 connexions au plus vers un même hôte. `127.0.0.1`, `countdown.localhost` et `camera-N.localhost` comptent comme d'autres hôtes. Les deux pages d'une caméra partagent son hôte. Toute nouvelle page OBS ouvre un seul flux SSE.
 
 ## Où se règle quoi
 
@@ -62,7 +64,7 @@ Chaque ligne donne un symptôme et le geste à faire. Le détail est dans [docs/
 |---|---|
 | Pages OBS blanches, touches « Serveur éteint », téléphone qui « n'arrive pas à se connecter » | Le serveur est arrêté, souvent car OBS a été fermé. Rouvrir OBS, puis lire la fin de `server.log`. Pour relancer sans fermer OBS : voir `docs/obs.md`. |
 | Touches « Serveur à relancer » | Le serveur sur 4747 ne connaît pas une route ou un réglage du plugin. Le relancer depuis `main` ([stream-deck](docs/stream-deck.md)). |
-| La tête et Jean-Renard ne réagissent plus à la voix | Le serveur n'entend plus « Micro PC » : entrée renommée ou coupée dans OBS. Remettre le nom exact, puis relancer le serveur. |
+| La tête et Jean-Renard ne réagissent plus à la voix | Le serveur n'entend plus « Micro PC » : entrée coupée ou supprimée dans OBS. La rouvrir ou recréer une entrée à ce nom, puis relancer le serveur. |
 | Une page OBS reste figée ou vide | Actualiser la page de la source dans OBS. Si elle reste vide, la passer de `localhost` à `127.0.0.1`. |
 | Le téléphone affiche « Connexion perdue » ou « OBS non joint » | Vérifier Tailscale sur le téléphone, qu'OBS est ouvert, et `OBS_PASSWORD`. |
 | Son en double, coupé au casque ou absent | Vérifier la case « Contrôler l'audio via OBS » de chaque source, et l'entrée « Audio PC ». |

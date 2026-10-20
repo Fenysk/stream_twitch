@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PhoneEvent, PhoneRole, ScreenEvent, Signal } from "../domain/phone.schema";
+import type { PhoneEvent, PhoneRole, ScreenEvent, ScreenKind, Signal } from "../domain/phone.schema";
 import { createPhones } from "./phone.usecase";
 
 const OFFER: Signal = { kind: "offer", session: "session-0001", description: "v=0" };
@@ -23,9 +23,9 @@ const setup = () => {
     if (role !== "control") updateFilm(id, true);
     return phone;
   };
-  const connectScreen = (id: string, number: number) => {
+  const connectScreen = (id: string, number: number, kind: ScreenKind = "image") => {
     const events: ScreenEvent[] = [];
-    const close = phones.openScreen({ id, number }, (event) => events.push(event));
+    const close = phones.openScreen({ id, number, kind }, (event) => events.push(event));
     return { events, close };
   };
   return { phones, logs, openPhone, updateFilm, connectPhone, connectScreen };
@@ -33,6 +33,12 @@ const setup = () => {
 
 const numbersOf = (events: PhoneEvent[]): (number | null)[] =>
   events.flatMap((event) => (event.kind === "number" ? [event.number] : []));
+
+// Ce que le téléphone a appris de la page active d'une sorte, dans l'ordre.
+const screensOf = (events: PhoneEvent[], screenKind: ScreenKind): (string | null)[] =>
+  events.flatMap((event) =>
+    event.kind === "screen" && event.screenKind === screenKind ? [event.screenId] : [],
+  );
 
 describe("Les numéros de caméra", () => {
   it("Quand un premier téléphone Caméra se connecte sans numéro, le système doit lui donner le 1", () => {
@@ -128,9 +134,9 @@ describe("Le changement de numéro", () => {
       { kind: "phone", isPresent: false },
       { kind: "phone", isPresent: true },
     ]);
-    expect(phone.events.filter((event) => event.kind === "screen")).toEqual([
-      { kind: "screen", screenId: "screen-0001" },
-      { kind: "screen", screenId: "screen-0007" },
+    expect(phone.events.filter((event) => event.kind === "screen" && event.screenKind === "image")).toEqual([
+      { kind: "screen", screenKind: "image", screenId: "screen-0001" },
+      { kind: "screen", screenKind: "image", screenId: "screen-0007" },
     ]);
   });
 });
@@ -143,7 +149,8 @@ describe("La mise en relation d'un téléphone et de la page OBS de son numéro"
     const phone = connectPhone("phone-aaaa");
     expect(phone.events).toEqual([
       { kind: "number", number: 1 },
-      { kind: "screen", screenId: "screen-0001" },
+      { kind: "screen", screenKind: "image", screenId: "screen-0001" },
+      { kind: "screen", screenKind: "mic", screenId: null },
     ]);
     expect(screen.events).toEqual([
       { kind: "phone", isPresent: false },
@@ -156,11 +163,12 @@ describe("La mise en relation d'un téléphone et de la page OBS de son numéro"
     const phone = connectPhone("phone-aaaa");
     expect(phone.events).toEqual([
       { kind: "number", number: 1 },
-      { kind: "screen", screenId: null },
+      { kind: "screen", screenKind: "image", screenId: null },
+      { kind: "screen", screenKind: "mic", screenId: null },
     ]);
     const screen = connectScreen("screen-0001", 1);
     expect(screen.events).toEqual([{ kind: "phone", isPresent: true }]);
-    expect(phone.events.at(-1)).toEqual({ kind: "screen", screenId: "screen-0001" });
+    expect(phone.events.at(-1)).toEqual({ kind: "screen", screenKind: "image", screenId: "screen-0001" });
   });
 
   it("Quand le téléphone se ferme, la page OBS doit apprendre qu'il est parti ; quand la page se ferme, le téléphone doit l'apprendre", () => {
@@ -171,7 +179,7 @@ describe("La mise en relation d'un téléphone et de la page OBS de son numéro"
     expect(screen.events.at(-1)).toEqual({ kind: "phone", isPresent: false });
     const again = connectPhone("phone-aaaa", "camera", 1);
     screen.close();
-    expect(again.events.at(-1)).toEqual({ kind: "screen", screenId: null });
+    expect(again.events.at(-1)).toEqual({ kind: "screen", screenKind: "image", screenId: null });
   });
 
   it("n'envoie rien à ceux qu'un autre numéro concerne, ni deux fois la même chose", () => {
@@ -180,7 +188,7 @@ describe("La mise en relation d'un téléphone et de la page OBS de son numéro"
     const phone = connectPhone("phone-aaaa");
     connectScreen("screen-0003", 3);
     expect(other.events).toEqual([{ kind: "phone", isPresent: false }]);
-    expect(phone.events).toHaveLength(2);
+    expect(phone.events).toHaveLength(3);
   });
 
   it("Quand deux pages OBS ont le même numéro, le système doit garder la dernière ouverte active, et rendre la place à l'ancienne quand elle se ferme", () => {
@@ -188,11 +196,11 @@ describe("La mise en relation d'un téléphone et de la page OBS de son numéro"
     const oldest = connectScreen("screen-0001", 1);
     const phone = connectPhone("phone-aaaa");
     const newest = connectScreen("screen-0002", 1);
-    expect(phone.events.at(-1)).toEqual({ kind: "screen", screenId: "screen-0002" });
+    expect(phone.events.at(-1)).toEqual({ kind: "screen", screenKind: "image", screenId: "screen-0002" });
     expect(oldest.events.at(-1)).toEqual({ kind: "phone", isPresent: false });
     expect(newest.events.at(-1)).toEqual({ kind: "phone", isPresent: true });
     newest.close();
-    expect(phone.events.at(-1)).toEqual({ kind: "screen", screenId: "screen-0001" });
+    expect(phone.events.at(-1)).toEqual({ kind: "screen", screenKind: "image", screenId: "screen-0001" });
     expect(oldest.events.at(-1)).toEqual({ kind: "phone", isPresent: true });
   });
 
@@ -213,7 +221,9 @@ describe("Le passage des signaux", () => {
     const oldest = connectScreen("screen-0001", 1);
     const active = connectScreen("screen-0002", 1);
     connectPhone("phone-aaaa");
-    expect(phones.relay({ from: "phone", phoneId: "phone-aaaa", signal: OFFER })).toEqual({
+    expect(
+      phones.relay({ from: "phone", phoneId: "phone-aaaa", screenKind: "image", signal: OFFER }),
+    ).toEqual({
       ok: true,
       isDelivered: true,
     });
@@ -229,13 +239,15 @@ describe("Le passage des signaux", () => {
       ok: true,
       isDelivered: true,
     });
-    expect(phone.events.at(-1)).toEqual({ kind: "signal", signal: ANSWER });
+    expect(phone.events.at(-1)).toEqual({ kind: "signal", screenKind: "image", signal: ANSWER });
   });
 
   it("Si la page OBS n'est pas là, alors le signal du téléphone est perdu sans erreur", () => {
     const { phones, connectPhone } = setup();
     connectPhone("phone-aaaa");
-    expect(phones.relay({ from: "phone", phoneId: "phone-aaaa", signal: OFFER })).toEqual({
+    expect(
+      phones.relay({ from: "phone", phoneId: "phone-aaaa", screenKind: "image", signal: OFFER }),
+    ).toEqual({
       ok: true,
       isDelivered: false,
     });
@@ -250,12 +262,14 @@ describe("Le passage des signaux", () => {
       ok: true,
       isDelivered: false,
     });
-    expect(phone.events).not.toContainEqual({ kind: "signal", signal: ANSWER });
+    expect(phone.events).not.toContainEqual({ kind: "signal", screenKind: "image", signal: ANSWER });
   });
 
   it("Si l'envoyeur est inconnu, alors le système doit refuser (404)", () => {
     const { phones } = setup();
-    expect(phones.relay({ from: "phone", phoneId: "phone-zzzz", signal: OFFER })).toMatchObject({
+    expect(
+      phones.relay({ from: "phone", phoneId: "phone-zzzz", screenKind: "image", signal: OFFER }),
+    ).toMatchObject({
       ok: false,
       status: 404,
     });
@@ -268,7 +282,9 @@ describe("Le passage des signaux", () => {
   it("ne fait rien passer pour une régie, qui n'a pas de caméra", () => {
     const { phones, connectPhone } = setup();
     connectPhone("phone-aaaa", "control");
-    expect(phones.relay({ from: "phone", phoneId: "phone-aaaa", signal: OFFER })).toEqual({
+    expect(
+      phones.relay({ from: "phone", phoneId: "phone-aaaa", screenKind: "image", signal: OFFER }),
+    ).toEqual({
       ok: true,
       isDelivered: false,
     });
@@ -283,9 +299,30 @@ describe("Les téléphones connectés", () => {
     connectPhone("phone-aaaa", "camera", 1);
     connectScreen("screen-0001", 1);
     expect(phones.getState()).toEqual([
-      { id: "phone-aaaa", number: 1, hasScreen: true, isReceiving: false },
-      { id: "phone-bbbb", number: 2, hasScreen: false, isReceiving: false },
-      { id: "phone-cccc", number: null, hasScreen: false, isReceiving: false },
+      {
+        id: "phone-aaaa",
+        number: 1,
+        hasScreen: true,
+        hasMicScreen: false,
+        isReceiving: false,
+        isHeard: false,
+      },
+      {
+        id: "phone-bbbb",
+        number: 2,
+        hasScreen: false,
+        hasMicScreen: false,
+        isReceiving: false,
+        isHeard: false,
+      },
+      {
+        id: "phone-cccc",
+        number: null,
+        hasScreen: false,
+        hasMicScreen: false,
+        isReceiving: false,
+        isHeard: false,
+      },
     ]);
   });
 
@@ -428,7 +465,14 @@ describe("Filmer : un téléphone, un seul flux qui filme ou non", () => {
     const phone = openPhone("phone-aaaa");
     expect(phone.events).toEqual([]);
     expect(phones.getState()).toEqual([
-      { id: "phone-aaaa", number: null, hasScreen: false, isReceiving: false },
+      {
+        id: "phone-aaaa",
+        number: null,
+        hasScreen: false,
+        hasMicScreen: false,
+        isReceiving: false,
+        isHeard: false,
+      },
     ]);
   });
 
@@ -451,7 +495,8 @@ describe("Filmer : un téléphone, un seul flux qui filme ou non", () => {
     updateFilm("phone-aaaa", true, false);
     expect(phone.events).toEqual([
       { kind: "number", number: 1 },
-      { kind: "screen", screenId: "screen-0001" },
+      { kind: "screen", screenKind: "image", screenId: "screen-0001" },
+      { kind: "screen", screenKind: "mic", screenId: null },
     ]);
   });
 
@@ -473,7 +518,14 @@ describe("Filmer : un téléphone, un seul flux qui filme ou non", () => {
     expect(phone.events.at(-1)).toEqual({ kind: "number", number: null });
     expect(screen.events.at(-1)).toEqual({ kind: "phone", isPresent: false });
     expect(phones.getState()).toEqual([
-      { id: "phone-aaaa", number: null, hasScreen: false, isReceiving: false },
+      {
+        id: "phone-aaaa",
+        number: null,
+        hasScreen: false,
+        hasMicScreen: false,
+        isReceiving: false,
+        isHeard: false,
+      },
     ]);
   });
 
@@ -536,5 +588,205 @@ describe("Filmer : un téléphone, un seul flux qui filme ou non", () => {
       "Téléphone phon filme : caméra 1.",
       "Téléphone phon ne filme plus (caméra 1 rendue).",
     ]);
+  });
+});
+
+describe("La page mic d'une caméra : une sorte de page à part", () => {
+  it("Quand la page mic s'ouvre, le système doit le dire au téléphone sous la sorte mic, sans toucher à la page image", () => {
+    const { connectPhone, connectScreen } = setup();
+    const image = connectScreen("screen-0001", 1);
+    const phone = connectPhone("phone-aaaa");
+    const mic = connectScreen("screen-0002", 1, "mic");
+    expect(screensOf(phone.events, "image")).toEqual(["screen-0001"]);
+    expect(screensOf(phone.events, "mic")).toEqual([null, "screen-0002"]);
+    expect(mic.events).toEqual([{ kind: "phone", isPresent: true }]);
+    expect(image.events).toEqual([
+      { kind: "phone", isPresent: false },
+      { kind: "phone", isPresent: true },
+    ]);
+  });
+
+  it("garde une page active par sorte : une page image ne remplace pas la page mic, et deux pages mic se relaient", () => {
+    const { connectPhone, connectScreen } = setup();
+    const phone = connectPhone("phone-aaaa");
+    const firstMic = connectScreen("screen-0001", 1, "mic");
+    connectScreen("screen-0002", 1);
+    const secondMic = connectScreen("screen-0003", 1, "mic");
+    expect(screensOf(phone.events, "mic")).toEqual([null, "screen-0001", "screen-0003"]);
+    expect(screensOf(phone.events, "image")).toEqual([null, "screen-0002"]);
+    expect(firstMic.events.at(-1)).toEqual({ kind: "phone", isPresent: false });
+    secondMic.close();
+    expect(screensOf(phone.events, "mic").at(-1)).toBe("screen-0001");
+    expect(firstMic.events.at(-1)).toEqual({ kind: "phone", isPresent: true });
+  });
+
+  it("Quand le téléphone change de numéro, la page mic de l'ancien numéro doit apprendre qu'il est parti et celle du nouveau qu'il est là", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    const firstMic = connectScreen("screen-0001", 1, "mic");
+    const movedMic = connectScreen("screen-0007", 7, "mic");
+    const phone = connectPhone("phone-aaaa");
+    phones.updateNumber("phone-aaaa", 7);
+    expect(firstMic.events).toEqual([
+      { kind: "phone", isPresent: false },
+      { kind: "phone", isPresent: true },
+      { kind: "phone", isPresent: false },
+    ]);
+    expect(movedMic.events).toEqual([
+      { kind: "phone", isPresent: false },
+      { kind: "phone", isPresent: true },
+    ]);
+    expect(screensOf(phone.events, "mic")).toEqual(["screen-0001", "screen-0007"]);
+  });
+
+  it("Quand le téléphone envoie une offre au mic, le système doit la faire passer à la page mic active, pas à la page image", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    const image = connectScreen("screen-0001", 1);
+    const mic = connectScreen("screen-0002", 1, "mic");
+    connectPhone("phone-aaaa");
+    expect(phones.relay({ from: "phone", phoneId: "phone-aaaa", screenKind: "mic", signal: OFFER })).toEqual({
+      ok: true,
+      isDelivered: true,
+    });
+    expect(mic.events.at(-1)).toEqual({ kind: "signal", signal: OFFER });
+    expect(image.events).not.toContainEqual({ kind: "signal", signal: OFFER });
+  });
+
+  it("Quand la page mic répond, le système doit faire passer la réponse au téléphone sous la sorte mic", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    connectScreen("screen-0001", 1);
+    connectScreen("screen-0002", 1, "mic");
+    const phone = connectPhone("phone-aaaa");
+    expect(phones.relay({ from: "screen", screenId: "screen-0002", signal: ANSWER })).toEqual({
+      ok: true,
+      isDelivered: true,
+    });
+    expect(phone.events.at(-1)).toEqual({ kind: "signal", screenKind: "mic", signal: ANSWER });
+  });
+
+  it("Si la page mic n'est pas là, alors le signal du téléphone vers le mic est perdu, même quand la page image y est", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    const image = connectScreen("screen-0001", 1);
+    connectPhone("phone-aaaa");
+    expect(phones.relay({ from: "phone", phoneId: "phone-aaaa", screenKind: "mic", signal: OFFER })).toEqual({
+      ok: true,
+      isDelivered: false,
+    });
+    expect(image.events).not.toContainEqual({ kind: "signal", signal: OFFER });
+  });
+
+  it("dit dans le journal de quelle sorte est la page qui arrive et part", () => {
+    const { logs, connectScreen } = setup();
+    connectScreen("screen-0001", 3).close();
+    connectScreen("screen-0002", 3, "mic").close();
+    expect(logs).toEqual([
+      "Page OBS de la caméra 3 connectée.",
+      "Page OBS de la caméra 3 déconnectée.",
+      "Page mic de la caméra 3 connectée.",
+      "Page mic de la caméra 3 déconnectée.",
+    ]);
+  });
+});
+
+describe("Le mic qui arrive jusqu'à OBS", () => {
+  const heardOf = (phones: ReturnType<typeof setup>["phones"]): boolean[] =>
+    phones.getState().map(({ isHeard }) => isHeard);
+  const receivingOf = (phones: ReturnType<typeof setup>["phones"]): boolean[] =>
+    phones.getState().map(({ isReceiving }) => isReceiving);
+
+  it("dit la page mic ouverte à part de la page image", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    connectPhone("phone-aaaa");
+    connectScreen("screen-0001", 1, "mic");
+    expect(phones.getState().map(({ hasScreen, hasMicScreen }) => [hasScreen, hasMicScreen])).toEqual([
+      [false, true],
+    ]);
+  });
+
+  it("ne dit pas le mic entendu tant que la page mic n'a pas dit sa liaison vive", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    connectPhone("phone-aaaa");
+    expect(heardOf(phones)).toEqual([false]);
+    connectScreen("screen-0001", 1, "mic");
+    expect(heardOf(phones)).toEqual([false]);
+  });
+
+  it("dit le mic entendu quand la page mic de son numéro a une liaison vive et que le téléphone filme, sans dire l'image reçue", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    connectPhone("phone-aaaa");
+    connectScreen("screen-0001", 1);
+    connectScreen("screen-0002", 1, "mic");
+    expect(phones.updateLink({ from: "screen", screenId: "screen-0002", isLinked: true })).toEqual({
+      ok: true,
+    });
+    expect(heardOf(phones)).toEqual([true]);
+    expect(receivingOf(phones)).toEqual([false]);
+    phones.updateLink({ from: "screen", screenId: "screen-0002", isLinked: false });
+    expect(heardOf(phones)).toEqual([false]);
+  });
+
+  it("garde la liaison de chaque sorte à part : la page image vive ne fait pas entendre le mic, la page mic vive ne fait pas recevoir l'image", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    connectPhone("phone-aaaa");
+    connectScreen("screen-0001", 1);
+    connectScreen("screen-0002", 1, "mic");
+    phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
+    expect(receivingOf(phones)).toEqual([true]);
+    expect(heardOf(phones)).toEqual([false]);
+    phones.updateLink({ from: "screen", screenId: "screen-0002", isLinked: true });
+    phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: false });
+    expect(receivingOf(phones)).toEqual([false]);
+    expect(heardOf(phones)).toEqual([true]);
+  });
+
+  it("retire le mic entendu quand le téléphone dit que sa caméra est arrêtée, et le rend quand elle repart", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    connectPhone("phone-aaaa");
+    connectScreen("screen-0001", 1, "mic");
+    phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
+    phones.updateLink({ from: "phone", phoneId: "phone-aaaa", isCamera: true, isFilming: false });
+    expect(heardOf(phones)).toEqual([false]);
+    phones.updateLink({ from: "phone", phoneId: "phone-aaaa", isCamera: true, isFilming: true });
+    expect(heardOf(phones)).toEqual([true]);
+  });
+
+  it("ne compte que la page mic active du numéro : une ancienne page mic vive ne suffit pas", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    connectPhone("phone-aaaa");
+    connectScreen("screen-0001", 1, "mic");
+    connectScreen("screen-0002", 1, "mic");
+    phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
+    expect(heardOf(phones)).toEqual([false]);
+    phones.updateLink({ from: "screen", screenId: "screen-0002", isLinked: true });
+    expect(heardOf(phones)).toEqual([true]);
+  });
+
+  it("repart de zéro quand la page mic se reconnecte ou que sa page active part", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    connectPhone("phone-aaaa");
+    connectScreen("screen-0001", 1, "mic");
+    phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
+    const reopened = connectScreen("screen-0001", 1, "mic");
+    expect(heardOf(phones)).toEqual([false]);
+    phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
+    reopened.close();
+    expect(heardOf(phones)).toEqual([false]);
+  });
+
+  it("ne dit jamais le mic entendu d'un téléphone sans numéro de caméra", () => {
+    const { phones, connectPhone } = setup();
+    connectPhone("phone-cccc", "control");
+    expect(heardOf(phones)).toEqual([false]);
+  });
+
+  it("ne prévient ceux qui écoutent que d'un vrai changement du mic", () => {
+    const { phones, connectPhone, connectScreen } = setup();
+    connectPhone("phone-aaaa");
+    connectScreen("screen-0001", 1, "mic");
+    const notices: string[] = [];
+    phones.subscribe((list) => notices.push(list.map(({ isHeard }) => String(isHeard)).join(",")));
+    phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
+    phones.updateLink({ from: "screen", screenId: "screen-0001", isLinked: true });
+    phones.updateLink({ from: "phone", phoneId: "phone-aaaa", isCamera: true, isFilming: true });
+    expect(notices).toEqual(["true"]);
   });
 });

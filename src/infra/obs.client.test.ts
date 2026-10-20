@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ObsIdentity, ObsRenamed } from "../domain/obs-ids.rules";
+import type { ObsIdsFile } from "../domain/obs-ids.schema";
 import type { PictureItem } from "../domain/picture.rules";
+import { createObsIds, type ObsIdsSettings, type ObsIdsStore } from "../usecase/obs-ids.usecase";
 import {
   createObsClient,
   isOwnPage,
@@ -31,8 +34,14 @@ const createFakeSocket = (connections: ObsConnection[]) => {
   const muteListeners: Array<(name: string, isMuted: boolean) => void> = [];
   const replayListeners: Array<(path: string) => void> = [];
   const sceneListeners: Array<() => void> = [];
+  const renameListeners: Array<(renamed: ObsRenamed) => void> = [];
   const state = {
     attempts: 0,
+    // Les entrées et les scènes avec leur identifiant tels qu'OBS les liste (GetInputList, GetSceneList), et `identityError` : OBS
+    // refuse de les donner.
+    inputIdentities: [] as ObsIdentity[],
+    sceneIdentities: [] as ObsIdentity[],
+    identityError: undefined as Error | undefined,
     pages: [] as ObsPage[],
     listError: undefined as Error | undefined,
     // La scène du programme, et ce que contient chaque scène ou groupe (par son nom) ; `sceneError` : OBS refuse de répondre.
@@ -92,6 +101,15 @@ const createFakeSocket = (connections: ObsConnection[]) => {
       if (state.sceneError) throw state.sceneError;
       return state.sceneNames;
     },
+    async listInputIdentities() {
+      if (state.identityError) throw state.identityError;
+      return state.inputIdentities;
+    },
+    async listSceneIdentities() {
+      if (state.identityError) throw state.identityError;
+      return state.sceneIdentities;
+    },
+    onRenamed: (listener) => renameListeners.push(listener),
     async updateProgramScene(name) {
       if (state.switchError) throw state.switchError;
       state.switched.push(name);
@@ -180,6 +198,14 @@ const createFakeSocket = (connections: ObsConnection[]) => {
     sendSceneChanged: () => {
       for (const listener of sceneListeners) listener();
     },
+    // OBS renomme la source : sa liste change avec son nom, puis l'évènement part.
+    sendRenamed: (renamed: ObsRenamed) => {
+      const identities = renamed.kind === "input" ? state.inputIdentities : state.sceneIdentities;
+      const index = identities.findIndex(({ uuid }) => uuid === renamed.uuid);
+      const identity = identities[index];
+      if (identity) identities[index] = { ...identity, name: renamed.to };
+      for (const listener of renameListeners) listener(renamed);
+    },
     sendInputMute: (name: string, isMuted: boolean) => {
       for (const listener of muteListeners) listener(name, isMuted);
     },
@@ -192,21 +218,58 @@ const createFakeSocket = (connections: ObsConnection[]) => {
   };
 };
 
-const setup = (connections: ObsConnection[], overrides: Partial<ObsClientDeps> = {}) => {
+// Le fichier des identifiants en mémoire : ce qu'il contient, et combien de fois il a été écrit.
+const createMemoryStore = (file?: ObsIdsFile) => {
+  const state = { file, writes: 0 };
+  const store: ObsIdsStore = {
+    get: () => state.file,
+    update(next) {
+      state.file = next;
+      state.writes += 1;
+    },
+  };
+  return { store, state };
+};
+
+// Le suivi des identifiants sur le faux OBS : le mic du PC s'appelle « Mic/Aux » sauf avis contraire.
+const createIds = (
+  fake: Pick<ReturnType<typeof createFakeSocket>, "socket">,
+  settings: ObsIdsSettings = { micName: "Mic/Aux" },
+  disk: { store: ObsIdsStore } = createMemoryStore(),
+  log: (message: string) => void = () => undefined,
+) => createObsIds({ source: fake.socket, store: disk.store, settings, log });
+
+// Le client câblé comme runtime.ts le fait ; les réglages qui nomment une entrée ou une scène, et `file` (les identifiants que la session
+// d'avant a retenus), se donnent avec les autres réglages du client.
+type SetupOverrides = Partial<Omit<ObsClientDeps, "ids">> & Partial<ObsIdsSettings> & { file?: ObsIdsFile };
+
+const setup = (connections: ObsConnection[], overrides: SetupOverrides = {}) => {
   const fake = createFakeSocket(connections);
+  const {
+    micName = "Mic/Aux",
+    desktopName,
+    cameraSlotScene,
+    showEndScene,
+    file,
+    ...clientOverrides
+  } = overrides;
   const messages: string[] = [];
   const exits: string[] = [];
+  const disk = createMemoryStore(file);
+  const ids = createIds(fake, { micName, desktopName, cameraSlotScene, showEndScene }, disk, (message) =>
+    messages.push(message),
+  );
   const deps: ObsClientDeps = {
     address: "ws://127.0.0.1:4455",
-    micName: "Mic/Aux",
+    ids,
     pageHosts: ["localhost:4747", "127.0.0.1:4747"],
     log: (message) => messages.push(message),
     onExit: (reason) => exits.push(reason),
-    ...overrides,
+    ...clientOverrides,
   };
   const client = createObsClient(deps, fake.socket);
   client.start();
-  return { fake, client, messages, exits };
+  return { fake, client, ids, disk, messages, exits };
 };
 
 beforeEach(() => {
@@ -306,7 +369,7 @@ describe("createObsClient : sources navigateur", () => {
     const client = createObsClient(
       {
         address: "ws://x",
-        micName: "Mic/Aux",
+        ids: createIds(fake),
         pageHosts: ["localhost:4747", "127.0.0.1:4747"],
         log: (m) => messages.push(m),
         onExit: () => undefined,
@@ -334,7 +397,7 @@ describe("createObsClient : sources navigateur", () => {
     const client = createObsClient(
       {
         address: "ws://x",
-        micName: "Mic/Aux",
+        ids: createIds(fake),
         pageHosts: ["localhost:4747", "127.0.0.1:4747"],
         log: () => undefined,
         onExit: () => undefined,
@@ -346,6 +409,28 @@ describe("createObsClient : sources navigateur", () => {
     expect(fake.refreshed).toEqual(["Tête", "Caméra du salon", "Caméra de la cuisine", "Décompte"]);
   });
 
+  it("rafraîchit aussi la page mic d'une caméra, qui est sur le même hôte que sa page image", async () => {
+    const fake = createFakeSocket([connected]);
+    fake.state.pages = [
+      { name: "Caméra du salon", url: "http://camera-1.localhost:4747/camera/1" },
+      { name: "Mic du salon", url: "http://camera-1.localhost:4747/camera/1/mic" },
+      { name: "Mic d'essai", url: "http://camera-1.localhost:4748/camera/1/mic" },
+    ];
+    const client = createObsClient(
+      {
+        address: "ws://x",
+        ids: createIds(fake),
+        pageHosts: ["localhost:4747", "127.0.0.1:4747"],
+        log: () => undefined,
+        onExit: () => undefined,
+      },
+      fake.socket,
+    );
+    client.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.refreshed).toEqual(["Caméra du salon", "Mic du salon"]);
+  });
+
   it("journalise l'échec du rafraîchissement avec son contexte, sans arrêter le client", async () => {
     const fake = createFakeSocket([connected]);
     fake.state.listError = new Error("RequestFailed");
@@ -353,7 +438,7 @@ describe("createObsClient : sources navigateur", () => {
     const client = createObsClient(
       {
         address: "ws://x",
-        micName: "Mic/Aux",
+        ids: createIds(fake),
         pageHosts: ["localhost:4747"],
         log: (m) => messages.push(m),
         onExit: () => undefined,
@@ -379,7 +464,7 @@ describe("createObsClient : un serveur d'essai sur un autre port", () => {
     const client = createObsClient(
       {
         address: "ws://x",
-        micName: "Mic/Aux",
+        ids: createIds(fake),
         pageHosts: ["localhost:4748", "127.0.0.1:4748"],
         log: (message) => messages.push(message),
         onExit: () => undefined,
@@ -508,18 +593,18 @@ describe("createObsClient : niveau du son du PC", () => {
   });
 
   it("change de source en direct, le dit dans le journal, et l'efface avec undefined", async () => {
-    const { fake, client, messages } = setup([connected], withDesktop);
+    const { fake, client, ids, messages } = setup([connected], withDesktop);
     await vi.advanceTimersByTimeAsync(0);
     const levels: number[] = [];
     client.desktop.subscribe((level) => levels.push(level));
-    client.updateDesktopName("Musique");
+    ids.update({ micName: "Mic/Aux", desktopName: "Musique" });
     fake.sendLevels([
       { name: "Audio du bureau", peaks: [1] },
       { name: "Musique", peaks: [0.1] },
     ]);
     expect(levels).toHaveLength(1);
     expect(messages).toContain("Entrée du son du PC changée : « Musique ».");
-    client.updateDesktopName(undefined);
+    ids.update({ micName: "Mic/Aux" });
     fake.sendLevels([{ name: "Musique", peaks: [0.1] }]);
     expect(levels).toHaveLength(1);
   });
@@ -557,7 +642,7 @@ describe("createObsClient : une entrée coupée dans OBS", () => {
     const client = createObsClient(
       {
         address: "ws://x",
-        micName: "Mic/Aux",
+        ids: createIds(fake),
         pageHosts: [],
         log: () => undefined,
         onExit: () => undefined,
@@ -599,7 +684,7 @@ describe("createObsClient : une entrée coupée dans OBS", () => {
     const client = createObsClient(
       {
         address: "ws://x",
-        micName: "Mic/Aux",
+        ids: createIds(fake),
         pageHosts: [],
         log: (message) => messages.push(message),
         onExit: () => undefined,
@@ -649,7 +734,7 @@ describe("createObsClient : la diffusion", () => {
     const client = createObsClient(
       {
         address: "ws://127.0.0.1:4455",
-        micName: "Mic/Aux",
+        ids: createIds(fake),
         pageHosts: [],
         log: () => undefined,
         onExit: () => undefined,
@@ -713,7 +798,7 @@ describe("createObsClient : la diffusion", () => {
     const client = createObsClient(
       {
         address: "ws://127.0.0.1:4455",
-        micName: "Mic/Aux",
+        ids: createIds(fake),
         pageHosts: [],
         log: (message) => messages.push(message),
         onExit: () => undefined,
@@ -1147,7 +1232,7 @@ describe("toCameraPages", () => {
       { name: "Autre port", url: "http://camera-3.localhost:4748/camera/3" },
       { name: "Sans adresse", url: undefined },
     ];
-    expect(toCameraPages(pages, hosts)).toEqual([
+    expect(toCameraPages(pages, hosts, "image")).toEqual([
       { number: 1, input: "Caméra du salon" },
       { number: 2, input: "Caméra de la cuisine" },
     ]);
@@ -1158,7 +1243,21 @@ describe("toCameraPages", () => {
       { name: "Salon", url: "http://camera-1.localhost:4747/camera/1" },
       { name: "Salon bis", url: "http://camera-1.localhost:4747/camera/1" },
     ];
-    expect(toCameraPages(pages, hosts)).toEqual([{ number: 1, input: "Salon" }]);
+    expect(toCameraPages(pages, hosts, "image")).toEqual([{ number: 1, input: "Salon" }]);
+  });
+
+  it("sépare les pages image et les pages mic : chaque sorte ne voit que ses sources", () => {
+    const pages: ObsPage[] = [
+      { name: "Salon", url: "http://camera-1.localhost:4747/camera/1" },
+      { name: "Mic du salon", url: "http://camera-1.localhost:4747/camera/1/mic" },
+      { name: "Mic de la cuisine", url: "http://camera-2.localhost:4747/camera/2/mic" },
+      { name: "Mic du salon bis", url: "http://camera-1.localhost:4747/camera/1/mic" },
+    ];
+    expect(toCameraPages(pages, hosts, "image")).toEqual([{ number: 1, input: "Salon" }]);
+    expect(toCameraPages(pages, hosts, "mic")).toEqual([
+      { number: 1, input: "Mic du salon" },
+      { number: 2, input: "Mic de la cuisine" },
+    ]);
   });
 });
 
@@ -1172,19 +1271,31 @@ describe("toCameraSources", () => {
       { name: "Cuisine", url: "http://camera-2.localhost:4747/camera/2" },
       { name: "Salon bis", url: "http://camera-1.localhost:4747/camera/1" },
     ];
-    expect(toCameraSources(pages, hosts)).toEqual([
+    expect(toCameraSources(pages, hosts, "image")).toEqual([
       { number: 1, input: "Salon" },
       { number: 2, input: "Cuisine" },
       { number: 1, input: "Salon bis" },
     ]);
   });
+
+  it("ne prend pas une page mic pour une page image, ni l'inverse", () => {
+    const pages: ObsPage[] = [
+      { name: "Salon", url: "http://camera-1.localhost:4747/camera/1" },
+      { name: "Mic du salon", url: "http://camera-1.localhost:4747/camera/1/mic" },
+    ];
+    expect(toCameraSources(pages, hosts, "image")).toEqual([{ number: 1, input: "Salon" }]);
+    expect(toCameraSources(pages, hosts, "mic")).toEqual([{ number: 1, input: "Mic du salon" }]);
+  });
 });
 
 describe("createObsClient : la régie", () => {
+  // Chaque caméra a sa source image (l'antenne, la place) et sa source mic (la coupure, l'écoute, le boost).
   const cameraPages: ObsPage[] = [
     { name: "Tête", url: "http://localhost:4747/head" },
     { name: "Caméra du salon", url: "http://camera-1.localhost:4747/camera/1" },
     { name: "Caméra de la cuisine", url: "http://camera-2.localhost:4747/camera/2" },
+    { name: "Mic du salon", url: "http://camera-1.localhost:4747/camera/1/mic" },
+    { name: "Mic de la cuisine", url: "http://camera-2.localhost:4747/camera/2/mic" },
   ];
 
   it("n'a rien à dire tant qu'OBS n'est pas joint : hors ligne, sans scène ni micro", async () => {
@@ -1201,12 +1312,12 @@ describe("createObsClient : la régie", () => {
     });
   });
 
-  it("lit la scène du programme, les scènes, la coupure du mic du PC et celle de la source de chaque caméra", async () => {
+  it("lit la scène du programme, les scènes, la coupure du mic du PC et celle de la source mic de chaque caméra", async () => {
     const { fake, client } = setup([connected]);
     fake.state.programScene = "Jeu";
     fake.state.sceneNames = ["Jeu", "Pause"];
     fake.state.pages = cameraPages;
-    fake.state.muted = new Set(["Caméra de la cuisine"]);
+    fake.state.muted = new Set(["Mic de la cuisine"]);
     await vi.advanceTimersByTimeAsync(0);
     expect(await client.control.getState("Mic/Aux")).toEqual({
       isLinked: true,
@@ -1214,12 +1325,41 @@ describe("createObsClient : la régie", () => {
       scenes: ["Jeu", "Pause"],
       isPcMuted: false,
       cameras: [
-        { number: 1, input: "Caméra du salon", isMuted: false },
-        { number: 2, input: "Caméra de la cuisine", isMuted: true },
+        { number: 1, input: "Mic du salon", isMuted: false },
+        { number: 2, input: "Mic de la cuisine", isMuted: true },
       ],
       onAir: [],
       picture: [],
     });
+  });
+
+  it("Quand une caméra n'a que sa source image dans OBS, le système ne doit lui donner aucune source mic", async () => {
+    const { fake, client } = setup([connected]);
+    fake.state.pages = cameraPages.filter(({ name }) => !name.startsWith("Mic"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await client.control.getState("Mic/Aux")).cameras).toEqual([]);
+  });
+
+  it("ne dit pas à l'antenne une caméra dont seule la source mic est visible dans la scène du programme", async () => {
+    const { fake, client } = setup([connected]);
+    fake.state.pages = cameraPages;
+    fake.state.scenes = { jeu: [item("Mic du salon"), item("Mic de la cuisine")] };
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await client.control.getState("Mic/Aux")).onAir).toEqual([]);
+  });
+
+  it("garde la première source mic quand une caméra en a plusieurs, et ignore une source mic d'un autre port", async () => {
+    const { fake, client } = setup([connected]);
+    fake.state.pages = [
+      ...cameraPages,
+      { name: "Mic du salon bis", url: "http://camera-1.localhost:4747/camera/1/mic" },
+      { name: "Mic d'essai", url: "http://camera-3.localhost:4748/camera/3/mic" },
+    ];
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await client.control.getState("Mic/Aux")).cameras.map(({ input }) => input)).toEqual([
+      "Mic du salon",
+      "Mic de la cuisine",
+    ]);
   });
 
   it("dit `null` pour le mic du PC quand OBS ne connaît pas cette entrée, et laisse de côté une caméra dont la coupure est illisible", async () => {
@@ -1261,7 +1401,7 @@ describe("createObsClient : la régie", () => {
     expect((await client.control.getState("Mic/Aux")).onAir).toEqual([]);
   });
 
-  it("dit à l'antenne une caméra dès que l'une de ses sources l'est, même quand ce n'est pas la première (celle de son micro)", async () => {
+  it("dit à l'antenne une caméra dès que l'une de ses sources image l'est, même quand ce n'est pas la première", async () => {
     const { fake, client } = setup([connected]);
     fake.state.pages = [
       ...cameraPages,
@@ -1271,7 +1411,7 @@ describe("createObsClient : la régie", () => {
     await vi.advanceTimersByTimeAsync(0);
     const state = await client.control.getState("Mic/Aux");
     expect(state.onAir).toEqual([1]);
-    expect(state.cameras.map(({ input }) => input)).toEqual(["Caméra du salon", "Caméra de la cuisine"]);
+    expect(state.cameras.map(({ input }) => input)).toEqual(["Mic du salon", "Mic de la cuisine"]);
   });
 
   it("suit la source quand elle apparaît ou disparaît de la scène du programme, ou que le programme change de scène", async () => {
@@ -1424,6 +1564,20 @@ describe("createObsClient : la place caméra", () => {
       { id: "head", label: "Tête", isVisible: false },
       { id: "camera-2", label: "Caméra 2", isVisible: false },
     ]);
+  });
+
+  it("ne prend pas la source mic d'une caméra pour un membre de la place, et n'y touche jamais", async () => {
+    const { fake, client } = setupPlace();
+    fake.state.pages = [...ADDRESSES, { name: "Mic 2", url: "http://camera-2.localhost:4747/camera/2/mic" }];
+    fake.state.places[SCENE] = [...place(), pictureItem(7, "Mic 2", "browser_source", true)];
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await client.control.getState("Mic/Aux")).picture.map(({ id }) => id)).toEqual([
+      "pc",
+      "head",
+      "camera-2",
+    ]);
+    expect(await client.control.updatePicture("head")).toEqual({ ok: true });
+    expect(fake.state.visibility).toEqual(["Master - Webcam:2:visible", "Master - Webcam:1:caché"]);
   });
 
   it("n'a pas de place quand cameraSlotScene n'est pas réglé", async () => {
@@ -1730,5 +1884,238 @@ describe("createObsClient : le retour antenne", () => {
         reason: "OBS rend une image illisible",
       });
     }
+  });
+});
+
+describe("createObsClient : une source ou une scène renommée dans OBS", () => {
+  const MIC: ObsIdentity = { uuid: "u-mic", name: "Mic/Aux" };
+  const DESKTOP: ObsIdentity = { uuid: "u-desktop", name: "Audio du bureau" };
+  const SCENE = "Master - Webcam";
+  const PLACE_SCENE: ObsIdentity = { uuid: "s-webcam", name: SCENE };
+  // Ce que le serveur a retenu à une session d'avant, quand le mic s'appelait encore « Mic/Aux ».
+  const REMEMBERED_MIC: ObsIdsFile = {
+    ids: { micName: { configuredName: "Mic/Aux", uuid: "u-mic", name: "Mic/Aux" } },
+  };
+  const toLevels = () => {
+    const levels: number[] = [];
+    return { levels, listener: (level: number) => levels.push(level) };
+  };
+
+  it("retient les identifiants à la première connexion, dans le fichier", async () => {
+    const { fake, disk } = setup([connected], { desktopName: "Audio du bureau" });
+    fake.state.inputIdentities = [MIC, DESKTOP];
+    await vi.advanceTimersByTimeAsync(0);
+    expect(disk.state.file).toEqual({
+      ids: {
+        micName: { configuredName: "Mic/Aux", uuid: "u-mic", name: "Mic/Aux" },
+        desktopName: { configuredName: "Audio du bureau", uuid: "u-desktop", name: "Audio du bureau" },
+      },
+    });
+  });
+
+  it("fait suivre le level du mic à son nouveau nom quand OBS le renomme pendant la connexion, et le dit", async () => {
+    const { fake, client, ids, messages } = setup([connected]);
+    fake.state.inputIdentities = [MIC, DESKTOP];
+    await vi.advanceTimersByTimeAsync(0);
+    const { levels, listener } = toLevels();
+    client.mic.subscribe(listener);
+    fake.sendRenamed({ kind: "input", uuid: "u-mic", from: "Mic/Aux", to: "Micro PC" });
+    fake.sendLevels([
+      { name: "Mic/Aux", peaks: [1] },
+      { name: "Micro PC", peaks: [0.1] },
+    ]);
+    expect(levels).toHaveLength(1);
+    expect(levels[0]).toBeCloseTo(-20, 6);
+    expect(ids.getNames().micName).toBe("Micro PC");
+    expect(messages).toContain("Entrée du micro renommée dans OBS : « Mic/Aux » → « Micro PC », suivie.");
+    expect(messages).toContain("Niveau du micro « Micro PC » reçu.");
+  });
+
+  it("fait suivre le level du son du PC à son nouveau nom, et lit sa coupure sous ce nom", async () => {
+    const { fake, client } = setup([connected], { desktopName: "Audio du bureau" });
+    fake.state.inputIdentities = [MIC, DESKTOP];
+    await vi.advanceTimersByTimeAsync(0);
+    const { levels, listener } = toLevels();
+    client.desktop.subscribe(listener);
+    fake.state.muted.add("Audio PC");
+    fake.sendRenamed({ kind: "input", uuid: "u-desktop", from: "Audio du bureau", to: "Audio PC" });
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendLevels([
+      { name: "Audio du bureau", peaks: [1] },
+      { name: "Audio PC", peaks: [1] },
+    ]);
+    expect(levels).toEqual([-100]);
+  });
+
+  it("garde la coupure du mic quand OBS le renomme", async () => {
+    const { fake, client } = setup([connected]);
+    fake.state.inputIdentities = [MIC];
+    await vi.advanceTimersByTimeAsync(0);
+    const { levels, listener } = toLevels();
+    client.mic.subscribe(listener);
+    fake.state.muted.add("Micro PC");
+    fake.sendRenamed({ kind: "input", uuid: "u-mic", from: "Mic/Aux", to: "Micro PC" });
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendLevels([{ name: "Micro PC", peaks: [1] }]);
+    expect(levels).toEqual([-100]);
+  });
+
+  it("n'avertit pas que l'entrée est introuvable quand elle est renommée avant les 5 s", async () => {
+    const { fake, messages } = setup([connected]);
+    fake.state.inputIdentities = [MIC];
+    await vi.advanceTimersByTimeAsync(0);
+    fake.sendRenamed({ kind: "input", uuid: "u-mic", from: "Mic/Aux", to: "Micro PC" });
+    fake.sendLevels([{ name: "Micro PC", peaks: [0.2] }]);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(messages.some((message) => message.startsWith("Attention"))).toBe(false);
+  });
+
+  it("ne bouge pas l'entrée écoutée quand la tête écoute la source mic d'une caméra et que le mic du PC est renommé", async () => {
+    const { fake, client } = setup([connected]);
+    fake.state.inputIdentities = [MIC];
+    await vi.advanceTimersByTimeAsync(0);
+    client.updateMicName("Mic du salon");
+    const { levels, listener } = toLevels();
+    client.mic.subscribe(listener);
+    fake.sendRenamed({ kind: "input", uuid: "u-mic", from: "Mic/Aux", to: "Micro PC" });
+    fake.sendLevels([
+      { name: "Micro PC", peaks: [1] },
+      { name: "Mic du salon", peaks: [0.1] },
+    ]);
+    expect(levels).toHaveLength(1);
+    expect(levels[0]).toBeCloseTo(-20, 6);
+  });
+
+  it("ne suit pas la source d'un autre nom quand une entrée qu'aucun réglage ne désigne est renommée", async () => {
+    const { fake, client, ids, messages } = setup([connected]);
+    fake.state.inputIdentities = [MIC, { uuid: "u-autre", name: "Webcam USB" }];
+    await vi.advanceTimersByTimeAsync(0);
+    const { levels, listener } = toLevels();
+    client.mic.subscribe(listener);
+    fake.sendRenamed({ kind: "input", uuid: "u-autre", from: "Webcam USB", to: "Mic/Aux" });
+    fake.sendLevels([{ name: "Mic/Aux", peaks: [0.1] }]);
+    expect(ids.getNames().micName).toBe("Mic/Aux");
+    expect(levels).toHaveLength(1);
+    expect(messages.some((message) => message.includes("renommée dans OBS"))).toBe(false);
+  });
+
+  it("retrouve à la reconnexion une source renommée entre-temps, par l'identifiant retenu", async () => {
+    const { fake, client, ids, messages, disk } = setup([connected], { file: REMEMBERED_MIC });
+    fake.state.inputIdentities = [{ uuid: "u-mic", name: "Micro PC" }];
+    expect(ids.getNames().micName).toBe("Mic/Aux");
+    await vi.advanceTimersByTimeAsync(0);
+    const { levels, listener } = toLevels();
+    client.mic.subscribe(listener);
+    fake.sendLevels([
+      { name: "Mic/Aux", peaks: [1] },
+      { name: "Micro PC", peaks: [0.1] },
+    ]);
+    expect(ids.getNames().micName).toBe("Micro PC");
+    expect(levels).toHaveLength(1);
+    expect(levels[0]).toBeCloseTo(-20, 6);
+    expect(messages).toContain("Entrée du micro renommée dans OBS : « Mic/Aux » → « Micro PC », suivie.");
+    expect(disk.state.file?.ids.micName?.name).toBe("Micro PC");
+  });
+
+  it("démarre sur le dernier nom connu de la source retenue, avant même que OBS réponde", async () => {
+    const { messages } = setup([connected], {
+      file: { ids: { micName: { configuredName: "Mic/Aux", uuid: "u-mic", name: "Micro PC" } } },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(messages.some((message) => message.startsWith("Abonné au niveau du micro « Micro PC »"))).toBe(
+      true,
+    );
+  });
+
+  it("revient au nom des réglages quand la source retenue a été supprimée, avec une ligne de journal une seule fois", async () => {
+    const { fake, client, ids, messages } = setup([connected], {
+      file: { ids: { micName: { configuredName: "Mic/Aux", uuid: "u-mic", name: "Micro PC" } } },
+    });
+    fake.state.inputIdentities = [DESKTOP];
+    await vi.advanceTimersByTimeAsync(0);
+    const { levels, listener } = toLevels();
+    client.mic.subscribe(listener);
+    fake.sendLevels([
+      { name: "Micro PC", peaks: [1] },
+      { name: "Mic/Aux", peaks: [0.1] },
+    ]);
+    expect(ids.getNames().micName).toBe("Mic/Aux");
+    expect(levels).toHaveLength(1);
+    expect(levels[0]).toBeCloseTo(-20, 6);
+    await ids.resolve();
+    expect(messages.filter((message) => message.includes("supprimée dans OBS"))).toEqual([
+      "Entrée du micro « Micro PC » supprimée dans OBS : retour au nom des réglages, « Mic/Aux ».",
+    ]);
+  });
+
+  it("donne la priorité au nom changé à la main dans les réglages, et retient sa source", async () => {
+    const { fake, client, ids, disk } = setup([connected], { micName: "Autre mic", file: REMEMBERED_MIC });
+    fake.state.inputIdentities = [MIC, { uuid: "u-autre", name: "Autre mic" }];
+    await vi.advanceTimersByTimeAsync(0);
+    const { levels, listener } = toLevels();
+    client.mic.subscribe(listener);
+    fake.sendLevels([
+      { name: "Mic/Aux", peaks: [1] },
+      { name: "Autre mic", peaks: [0.1] },
+    ]);
+    expect(ids.getNames().micName).toBe("Autre mic");
+    expect(levels).toHaveLength(1);
+    expect(disk.state.file?.ids.micName).toEqual({
+      configuredName: "Autre mic",
+      uuid: "u-autre",
+      name: "Autre mic",
+    });
+  });
+
+  it("annonce la connexion et garde les noms des réglages quand OBS ne donne pas ses identifiants, en le disant une fois", async () => {
+    const { fake, client, ids, messages } = setup([connected]);
+    fake.state.identityError = new Error("unknown request");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(messages.some((message) => message.startsWith("Connecté à OBS"))).toBe(true);
+    expect(
+      messages.filter((message) => message.startsWith("Suivi d'OBS : identifiants illisibles")),
+    ).toHaveLength(1);
+    expect(ids.getNames().micName).toBe("Mic/Aux");
+    const { levels, listener } = toLevels();
+    client.mic.subscribe(listener);
+    fake.sendLevels([{ name: "Mic/Aux", peaks: [0.1] }]);
+    expect(levels).toHaveLength(1);
+  });
+
+  describe("la place caméra", () => {
+    const ADDRESSES: ObsPage[] = [{ name: "SouthPark", url: "http://localhost:4747/head" }];
+    const place = (): PictureItem[] => [
+      { id: 1, name: "Webcam PC", kind: "input", inputKind: "dshow_input", isEnabled: true },
+      { id: 2, name: "SouthPark", kind: "input", inputKind: "browser_source", isEnabled: false },
+    ];
+
+    it("lit la place sous le nouveau nom de sa scène quand OBS la renomme, et change l'image dans cette scène", async () => {
+      const { fake, client } = setup([connected], { cameraSlotScene: SCENE });
+      fake.state.pages = ADDRESSES;
+      fake.state.places[SCENE] = place();
+      fake.state.sceneIdentities = [PLACE_SCENE];
+      await vi.advanceTimersByTimeAsync(0);
+      fake.state.places["Place caméra"] = place();
+      delete fake.state.places[SCENE];
+      fake.sendRenamed({ kind: "scene", uuid: "s-webcam", from: SCENE, to: "Place caméra" });
+      expect((await client.control.getState("Mic/Aux")).picture.map(({ id }) => id)).toEqual(["pc", "head"]);
+      expect(await client.control.updatePicture("head")).toEqual({ ok: true });
+      expect(fake.state.visibility).toEqual(["Place caméra:2:visible", "Place caméra:1:caché"]);
+    });
+
+    it("retrouve la scène renommée entre-temps à la reconnexion", async () => {
+      const { fake, client, messages } = setup([connected], {
+        cameraSlotScene: SCENE,
+        file: { ids: { cameraSlotScene: { configuredName: SCENE, uuid: "s-webcam", name: SCENE } } },
+      });
+      fake.state.pages = ADDRESSES;
+      fake.state.places["Place caméra"] = place();
+      fake.state.sceneIdentities = [{ uuid: "s-webcam", name: "Place caméra" }];
+      await vi.advanceTimersByTimeAsync(0);
+      expect((await client.control.getState("Mic/Aux")).picture.map(({ id }) => id)).toEqual(["pc", "head"]);
+      expect(messages).toContain(
+        "Scène de la place caméra renommée dans OBS : « Master - Webcam » → « Place caméra », suivie.",
+      );
+    });
   });
 });

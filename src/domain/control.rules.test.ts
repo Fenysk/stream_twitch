@@ -13,8 +13,8 @@ import {
   toLiveMic,
   toMicPlan,
   toMicSources,
-  toMicToggle,
   toProgramScenes,
+  toTakenMicId,
 } from "./control.rules";
 import type { ControlMic } from "./control.schema";
 
@@ -83,27 +83,46 @@ describe("toListenedInput", () => {
     );
 
   it("Quand le mic du PC est ouvert, le système doit faire écouter l'entrée du PC, même si une caméra l'est aussi", () => {
-    expect(toListenedInput(sources(false, true, true), PC)).toBe(PC);
-    expect(toListenedInput(sources(false, false, true), PC)).toBe(PC);
+    expect(toListenedInput(sources(false, true, true), PC, [])).toBe(PC);
+    expect(toListenedInput(sources(false, false, true), PC, [])).toBe(PC);
   });
 
   it("Quand le mic du PC est coupé et celui d'une caméra ouvert, le système doit faire écouter l'entrée de la caméra", () => {
-    expect(toListenedInput(sources(true, false, true), PC)).toBe("C1");
-    expect(toListenedInput(sources(true, true, false), PC)).toBe("C2");
+    expect(toListenedInput(sources(true, false, true), PC, [])).toBe("C1");
+    expect(toListenedInput(sources(true, true, false), PC, [])).toBe("C2");
   });
 
   it("prend la caméra du plus petit numéro quand plusieurs sont ouvertes", () => {
-    expect(toListenedInput(sources(true, false, false), PC)).toBe("C1");
+    expect(toListenedInput(sources(true, false, false), PC, [])).toBe("C1");
   });
 
   it("revient à l'entrée du PC quand aucun micro n'est ouvert : son silence dit que Fenysk est muet", () => {
-    expect(toListenedInput(sources(true, true, true), PC)).toBe(PC);
+    expect(toListenedInput(sources(true, true, true), PC, [])).toBe(PC);
   });
 
   it("garde le nom du PC que les réglages donnent, même quand OBS ne connaît pas cette entrée", () => {
-    expect(toListenedInput(toMicSources("Autre", { isPcMuted: null, cameras: [] }, []), "Autre")).toBe(
+    expect(toListenedInput(toMicSources("Autre", { isPcMuted: null, cameras: [] }, []), "Autre", [])).toBe(
       "Autre",
     );
+  });
+
+  it("Quand le téléphone du mic ouvert se déconnecte, le système doit garder l'écoute sur sa source, restée ouverte dans OBS", () => {
+    const cameras = [
+      { number: 1, input: "C1", isMuted: false },
+      { number: 2, input: "C2", isMuted: true },
+    ];
+    const withoutPhone = toMicSources(PC, { isPcMuted: true, cameras }, []);
+    expect(toListenedInput(withoutPhone, PC, cameras)).toBe("C1");
+    expect(toListenedInput(withoutPhone, PC, [{ number: 1, input: "C1", isMuted: true }])).toBe(PC);
+  });
+
+  it("préfère un mic de la liste, le PC d'abord, à la source ouverte d'un téléphone parti", () => {
+    const cameras = [
+      { number: 1, input: "C1", isMuted: false },
+      { number: 2, input: "C2", isMuted: false },
+    ];
+    expect(toListenedInput(toMicSources(PC, { isPcMuted: false, cameras }, []), PC, cameras)).toBe(PC);
+    expect(toListenedInput(toMicSources(PC, { isPcMuted: true, cameras }, [2]), PC, cameras)).toBe("C2");
   });
 });
 
@@ -268,24 +287,26 @@ describe("toLiveMic", () => {
   });
 });
 
-describe("toMicToggle", () => {
-  it("Quand ce téléphone n'est pas le micro du live, le bouton doit le prendre : le micro de sa caméra", () => {
-    expect(toMicToggle(false, 3)).toBe("camera-3");
-    expect(toMicToggle(false, 1)).toBe(toCameraMicId(1));
+describe("toTakenMicId", () => {
+  it("Quand le bouton micro est touché, le système doit demander le micro de la caméra de ce téléphone", () => {
+    expect(toTakenMicId(3)).toBe("camera-3");
+    expect(toTakenMicId(1)).toBe(toCameraMicId(1));
   });
 
-  it("Quand ce téléphone est le micro du live, le bouton doit rendre le live au micro du PC", () => {
-    expect(toMicToggle(true, 3)).toBe(PC_MIC_ID);
-    expect(toMicToggle(true, null)).toBe(PC_MIC_ID);
+  it("ne rend jamais le micro au PC, quel que soit le numéro : le bouton prend, le menu des micros rend", () => {
+    const ids = [1, 2, 3, 9999].map(toTakenMicId);
+    expect(ids).toEqual(["camera-1", "camera-2", "camera-3", "camera-9999"]);
+    expect(ids).not.toContain(PC_MIC_ID);
   });
 
   it("ne demande rien tant que le téléphone n'a pas de numéro : il n'a pas de micro à prendre", () => {
-    expect(toMicToggle(false, null)).toBeNull();
+    expect(toTakenMicId(null)).toBeNull();
   });
 
-  it("revient à son point de départ : prendre le micro, puis le rendre, laisse le micro du PC", () => {
-    expect(toMicToggle(true, 2)).toBe("pc");
-    expect(toMicToggle(false, 2)).toBe("camera-2");
+  it("redemande le même micro à chaque toucher : la demande est la même que le micro soit déjà celui du live ou non", () => {
+    const first = toTakenMicId(2);
+    expect(first).toBe("camera-2");
+    expect(toTakenMicId(2)).toBe(first);
   });
 });
 

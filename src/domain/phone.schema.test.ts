@@ -42,13 +42,34 @@ describe("les évènements du serveur", () => {
   it("dit à un téléphone son numéro (vide pour la régie), sa page OBS, ses signaux, si sa caméra est à l'antenne et si son mic est celui du live", () => {
     expect(PhoneEventSchema.safeParse({ kind: "number", number: 3 }).success).toBe(true);
     expect(PhoneEventSchema.safeParse({ kind: "number", number: null }).success).toBe(true);
-    expect(PhoneEventSchema.safeParse({ kind: "screen", screenId: "screen-0001" }).success).toBe(true);
-    expect(PhoneEventSchema.safeParse({ kind: "screen", screenId: null }).success).toBe(true);
-    expect(PhoneEventSchema.safeParse({ kind: "signal", signal: OFFER }).success).toBe(true);
+    const image = { screenKind: "image" };
+    expect(PhoneEventSchema.safeParse({ kind: "screen", ...image, screenId: "screen-0001" }).success).toBe(
+      true,
+    );
+    expect(PhoneEventSchema.safeParse({ kind: "screen", ...image, screenId: null }).success).toBe(true);
+    expect(PhoneEventSchema.safeParse({ kind: "signal", ...image, signal: OFFER }).success).toBe(true);
     expect(PhoneEventSchema.safeParse({ kind: "air", isOnAir: true }).success).toBe(true);
     expect(PhoneEventSchema.safeParse({ kind: "air", isOnAir: "oui" }).success).toBe(false);
     expect(PhoneEventSchema.safeParse({ kind: "mic", isLive: true }).success).toBe(true);
     expect(PhoneEventSchema.safeParse({ kind: "mic", isLive: "oui" }).success).toBe(false);
+  });
+
+  it("dit à un téléphone la page active de chaque sorte (image ou mic), et refuse un évènement de page sans sorte ou d'une sorte inconnue", () => {
+    expect(PhoneEventSchema.parse({ kind: "screen", screenKind: "mic", screenId: "screen-0002" })).toEqual({
+      kind: "screen",
+      screenKind: "mic",
+      screenId: "screen-0002",
+    });
+    expect(PhoneEventSchema.parse({ kind: "signal", screenKind: "mic", signal: OFFER })).toEqual({
+      kind: "signal",
+      screenKind: "mic",
+      signal: OFFER,
+    });
+    expect(PhoneEventSchema.safeParse({ kind: "screen", screenId: "screen-0001" }).success).toBe(false);
+    expect(PhoneEventSchema.safeParse({ kind: "signal", signal: OFFER }).success).toBe(false);
+    expect(
+      PhoneEventSchema.safeParse({ kind: "screen", screenKind: "video", screenId: "screen-0001" }).success,
+    ).toBe(false);
   });
 
   it("dit à une page OBS si son téléphone est là, et ses signaux", () => {
@@ -61,12 +82,29 @@ describe("les évènements du serveur", () => {
 describe("les demandes au serveur", () => {
   it("garde de qui vient un signal : un téléphone ou une page OBS", () => {
     expect(
-      SignalRequestSchema.safeParse({ from: "phone", phoneId: "phone-0001", signal: OFFER }).success,
+      SignalRequestSchema.safeParse({
+        from: "phone",
+        phoneId: "phone-0001",
+        screenKind: "image",
+        signal: OFFER,
+      }).success,
     ).toBe(true);
     expect(
       SignalRequestSchema.safeParse({ from: "screen", screenId: "screen-0001", signal: OFFER }).success,
     ).toBe(true);
     expect(SignalRequestSchema.safeParse({ from: "phone", signal: OFFER }).success).toBe(false);
+  });
+
+  it("exige du téléphone à quelle sorte de page il parle, et refuse une sorte inconnue", () => {
+    const toPhone = (screenKind?: string) => ({
+      from: "phone",
+      phoneId: "phone-0001",
+      signal: OFFER,
+      ...(screenKind === undefined ? {} : { screenKind }),
+    });
+    expect(SignalRequestSchema.parse(toPhone("mic"))).toEqual(toPhone("mic"));
+    expect(SignalRequestSchema.safeParse(toPhone()).success).toBe(false);
+    expect(SignalRequestSchema.safeParse(toPhone("video")).success).toBe(false);
   });
 
   it("refuse un numéro de caméra à zéro, décimal ou trop grand", () => {
@@ -96,12 +134,17 @@ describe("l'adresse des flux", () => {
     expect(PhoneQuerySchema.safeParse({ id: "phone-0001", role: "camera", number: "x" }).success).toBe(false);
   });
 
-  it("lit la page OBS : son identifiant et le numéro de sa caméra, exigé", () => {
-    expect(ScreenQuerySchema.parse({ id: "screen-0001", number: "12" })).toEqual({
+  it("lit la page OBS : son identifiant, le numéro de sa caméra et sa sorte, exigés", () => {
+    expect(ScreenQuerySchema.parse({ id: "screen-0001", number: "12", kind: "mic" })).toEqual({
       id: "screen-0001",
       number: 12,
+      kind: "mic",
     });
-    expect(ScreenQuerySchema.safeParse({ id: "screen-0001" }).success).toBe(false);
+    expect(ScreenQuerySchema.safeParse({ id: "screen-0001", kind: "image" }).success).toBe(false);
+    expect(ScreenQuerySchema.safeParse({ id: "screen-0001", number: "12" }).success).toBe(false);
+    expect(ScreenQuerySchema.safeParse({ id: "screen-0001", number: "12", kind: "audio" }).success).toBe(
+      false,
+    );
   });
 });
 
@@ -130,7 +173,14 @@ describe("Filmer : ce que le téléphone dit au serveur", () => {
   });
 
   it("résume un téléphone par son numéro (vide : il ne filme pas), sans rôle", () => {
-    const summary = { id: "phone-0001", number: null, hasScreen: false, isReceiving: false };
+    const summary = {
+      id: "phone-0001",
+      number: null,
+      hasScreen: false,
+      hasMicScreen: false,
+      isReceiving: false,
+      isHeard: false,
+    };
     expect(PhoneSummarySchema.parse(summary)).toEqual(summary);
     expect(PhoneSummarySchema.parse({ ...summary, role: "camera" })).toEqual(summary);
   });

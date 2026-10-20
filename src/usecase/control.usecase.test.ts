@@ -188,11 +188,14 @@ const setup = (overrides: { settings?: Partial<ControlSettings>; obs?: ObsContro
     world.phones = phones;
     for (const listener of phoneListeners) listener(phones);
   };
-  const cameraPhone = (number: number, isReceiving = true): PhoneSummary => ({
+  // `isReceiving` : l'image arrive dans OBS, `isHeard` : le mic y arrive (comme l'image, sauf si le test dit autrement).
+  const cameraPhone = (number: number, isReceiving = true, isHeard = isReceiving): PhoneSummary => ({
     id: `phone-000${number}`,
     number,
     hasScreen: true,
+    hasMicScreen: true,
     isReceiving,
+    isHeard,
   });
   return {
     control,
@@ -362,7 +365,17 @@ describe("les micros des caméras connectées", () => {
     const { control, settle, updatePhones, cameraPhone } = setup();
     control.start();
     await settle();
-    updatePhones([cameraPhone(2), { id: "phone-9999", number: null, hasScreen: false, isReceiving: false }]);
+    updatePhones([
+      cameraPhone(2),
+      {
+        id: "phone-9999",
+        number: null,
+        hasScreen: false,
+        hasMicScreen: false,
+        isReceiving: false,
+        isHeard: false,
+      },
+    ]);
     expect(control.getState().mics.map(({ id }) => id)).toEqual(["pc", "camera-2"]);
     updatePhones([cameraPhone(1), cameraPhone(2)]);
     expect(control.getState().mics.map(({ id }) => id)).toEqual(["pc", "camera-1", "camera-2"]);
@@ -425,7 +438,7 @@ describe("l'entrée que la tête et Jean-Renard écoutent", () => {
     expect(calls.listened).toEqual(["Camera 1 OBS", "Mic/Aux"]);
   });
 
-  it("Si le téléphone dont le mic est ouvert se déconnecte, alors l'écoute doit revenir à l'entrée du PC", async () => {
+  it("Si le téléphone dont le mic est ouvert se déconnecte, alors l'écoute doit rester sur sa source, encore ouverte dans OBS", async () => {
     const { control, settle, calls, updatePhones, cameraPhone, updateObs } = setup();
     control.start();
     await settle();
@@ -436,6 +449,25 @@ describe("l'entrée que la tête et Jean-Renard écoutent", () => {
       cameras: [{ number: 1, input: "Camera 1 OBS", isMuted: false }],
     });
     updatePhones([]);
+    expect(calls.listened).toEqual(["Camera 1 OBS"]);
+  });
+
+  it("revient à l'entrée du PC quand la source du téléphone parti est coupée ou que le micro du PC est rouvert", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone, updateObs } = setup();
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    await updateObs({
+      ...LINKED,
+      isPcMuted: true,
+      cameras: [{ number: 1, input: "Camera 1 OBS", isMuted: false }],
+    });
+    updatePhones([]);
+    await updateObs({
+      ...LINKED,
+      isPcMuted: false,
+      cameras: [{ number: 1, input: "Camera 1 OBS", isMuted: true }],
+    });
     expect(calls.listened).toEqual(["Camera 1 OBS", "Mic/Aux"]);
   });
 
@@ -502,7 +534,7 @@ describe("ouvrir un micro", () => {
       ok: false,
       status: 409,
       message:
-        "la source OBS de Caméra 7 est introuvable : crée-la avec l'adresse de l'onglet Mobile, « Contrôler l'audio via OBS » cochée",
+        "la source mic de Caméra 7 est introuvable : crée-la avec son adresse mic de l'onglet Mobile (celle qui finit par /mic), « Contrôler l'audio via OBS » cochée, dans une scène « Master - Micros » ajoutée à chaque scène",
     });
     expect(calls.mutes).toEqual([]);
   });
@@ -717,15 +749,16 @@ describe("choisir l'image", () => {
     expect(logs).toContain("Régie : Caméra 1 est à l'image.");
   });
 
-  it("rend le micro au PC quand l'image passe au PC ou à la tête", async () => {
-    for (const id of ["pc", "head"]) {
+  it("donne le micro du PC au PC à l'image, et ne touche pas au micro quand l'image passe à la tête", async () => {
+    const mutesOf = { pc: ["Camera 1 OBS:coupé", "Mic/Aux:ouvert"], head: [] };
+    for (const id of ["pc", "head"] as const) {
       const { control, settle, calls, updatePhones, cameraPhone } = setup({ obs: CAMERA_ON_AIR });
       control.start();
       await settle();
       updatePhones([cameraPhone(1)]);
       expect(await control.updatePicture(id), id).toEqual({ ok: true });
       expect(calls.pictures, id).toEqual([id]);
-      expect(calls.mutes, id).toEqual(["Camera 1 OBS:coupé", "Mic/Aux:ouvert"]);
+      expect(calls.mutes, id).toEqual(mutesOf[id]);
     }
   });
 
@@ -803,7 +836,7 @@ describe("choisir l'image", () => {
       ok: false,
       status: 409,
       message:
-        "l'image est passée à Caméra 1, mais la source OBS de Caméra 1 est introuvable : crée-la avec l'adresse de l'onglet Mobile, « Contrôler l'audio via OBS » cochée",
+        "l'image est passée à Caméra 1, mais la source mic de Caméra 1 est introuvable : crée-la avec son adresse mic de l'onglet Mobile (celle qui finit par /mic), « Contrôler l'audio via OBS » cochée, dans une scène « Master - Micros » ajoutée à chaque scène",
     });
     expect(calls.pictures).toEqual(["camera-1"]);
   });
@@ -894,7 +927,7 @@ describe("le repli de l'image sur la tête", () => {
     expect(timers).toHaveLength(0);
   });
 
-  it("ne programme qu'un seul repli, même quand l'état est redit plusieurs fois", async () => {
+  it("ne programme qu'un seul repli de chaque sorte (l'image, le micro), même quand l'état est redit plusieurs fois", async () => {
     const { control, settle, updatePhones, cameraPhone, timers, viewerListeners, world } = setup({
       obs: CAMERA_ON_AIR,
     });
@@ -903,7 +936,7 @@ describe("le repli de l'image sur la tête", () => {
     updatePhones([cameraPhone(1, false)]);
     for (const listener of viewerListeners) listener(world.viewers);
     updatePhones([cameraPhone(1, false)]);
-    expect(timers).toHaveLength(1);
+    expect(timers).toHaveLength(2);
   });
 
   it("n'insiste pas quand OBS refuse le repli : un seul essai tant que la caméra reste à l'image", async () => {
@@ -968,7 +1001,7 @@ describe("la touche Image du Stream Deck", () => {
     expect(calls.pictures).toEqual(["camera-2", "head", "pc"]);
   });
 
-  it("rend le micro au PC en passant à la tête, comme un choix dans le menu", async () => {
+  it("laisse le micro où il est en passant à la tête, comme un choix dans le menu", async () => {
     const { control, settle, calls, updatePhones, cameraPhone } = setup({
       obs: { ...CAMERA_ON_AIR, picture: shown("camera-2") },
     });
@@ -977,7 +1010,7 @@ describe("la touche Image du Stream Deck", () => {
     updatePhones([cameraPhone(1), cameraPhone(2)]);
     await control.updatePictureNext();
     expect(calls.pictures).toEqual(["head"]);
-    expect(calls.mutes).toEqual(["Camera 1 OBS:coupé", "Mic/Aux:ouvert"]);
+    expect(calls.mutes).toEqual([]);
   });
 
   it("refuse (409) quand la place n'a aucune image à choisir", async () => {
@@ -994,7 +1027,7 @@ describe("la touche Image du Stream Deck", () => {
 });
 
 describe("couper la caméra d'un téléphone : la tête prend l'image, le micro reste", () => {
-  it("passe l'image à la tête sans toucher au micro avec isMicKept, alors que le choix de la tête dans le menu rend le micro au PC", async () => {
+  it("passe l'image à la tête sans toucher au micro avec isMicKept, comme le choix de la tête dans le menu, qui ne touche plus au micro", async () => {
     const kept = setup({ obs: CAMERA_ON_AIR });
     kept.control.start();
     await kept.settle();
@@ -1011,7 +1044,7 @@ describe("couper la caméra d'un téléphone : la tête prend l'image, le micro 
     await menu.settle();
     menu.updatePhones([menu.cameraPhone(1)]);
     expect(await menu.control.updatePicture("head")).toEqual({ ok: true });
-    expect(menu.calls.mutes).toEqual(["Camera 1 OBS:coupé", "Mic/Aux:ouvert"]);
+    expect(menu.calls.mutes).toEqual([]);
   });
 
   it("garde le micro même quand le téléphone n'a pas de source audio dans OBS : l'image seule change", async () => {
@@ -1146,7 +1179,7 @@ describe("le micro du live d'un téléphone qui ne filme plus", () => {
     expect(calls.mutes).toEqual(["Camera 1 OBS:coupé", "Mic/Aux:ouvert"]);
   });
 
-  it("ne fait qu'une demande quand la caméra est aussi à l'image : le repli de l'image rend le micro avec elle", async () => {
+  it("fait deux demandes quand la caméra est aussi à l'image : l'image passe à la tête, le micro au PC, chacun avec son attente", async () => {
     const { control, settle, advance, calls, updatePhones, cameraPhone, timers } = setup({
       obs: CAMERA_ON_AIR,
     });
@@ -1154,7 +1187,7 @@ describe("le micro du live d'un téléphone qui ne filme plus", () => {
     await settle();
     updatePhones([cameraPhone(1)]);
     updatePhones([cameraPhone(1, false)]);
-    expect(timers).toHaveLength(1);
+    expect(timers).toHaveLength(2);
     await advance(3000);
     expect(calls.pictures).toEqual(["head"]);
     expect(calls.mutes).toEqual(["Camera 1 OBS:coupé", "Mic/Aux:ouvert"]);
@@ -1177,6 +1210,42 @@ describe("le micro du live d'un téléphone qui ne filme plus", () => {
     await advance(3000);
     expect(calls.pictures).toEqual([]);
     expect(calls.mutes).toEqual(["Camera 2 OBS:coupé", "Mic/Aux:ouvert"]);
+  });
+
+  it("Quand la liaison mic est perdue alors que l'image arrive encore, le système doit rendre le micro au PC au bout de 3 s", async () => {
+    const { control, settle, advance, calls, updatePhones, cameraPhone } = setup({ obs: headOnAir });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    updatePhones([cameraPhone(1, true, false)]);
+    await advance(2999);
+    expect(calls.mutes).toEqual([]);
+    await advance(1);
+    expect(calls.mutes).toEqual(["Camera 1 OBS:coupé", "Mic/Aux:ouvert"]);
+    expect(calls.pictures).toEqual([]);
+  });
+
+  it("ne reprend pas le micro au PC quand seule l'image est perdue : la liaison mic suffit à garder le micro", async () => {
+    const { control, settle, advance, calls, updatePhones, cameraPhone, timers } = setup({ obs: headOnAir });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    updatePhones([cameraPhone(1, false, true)]);
+    expect(timers).toHaveLength(0);
+    await advance(10_000);
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("laisse l'image à la caméra qui la montre quand seule la liaison mic est perdue : le repli de l'image suit la liaison image", async () => {
+    const { control, settle, advance, calls, updatePhones, cameraPhone } = setup({ obs: CAMERA_ON_AIR });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    updatePhones([cameraPhone(1, true, false)]);
+    await advance(10_000);
+    expect(calls.pictures).toEqual([]);
+    expect(calls.mutes).toEqual(["Camera 1 OBS:coupé", "Mic/Aux:ouvert"]);
+    expect(control.getState().picture.currentId).toBe("camera-1");
   });
 
   it("n'attend rien quand le micro du live est celui du PC, même si le téléphone d'une caméra ne filme pas", async () => {
@@ -1210,6 +1279,101 @@ describe("le micro du live d'un téléphone qui ne filme plus", () => {
     control.stop();
     await advance(10_000);
     expect(calls.mutes).toEqual([]);
+  });
+});
+
+describe("l'image décide du micro, aussi quand OBS la change", () => {
+  it("Quand une caméra passe à l'image dans OBS sans l'appli, le système doit ouvrir son mic", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone, updateObs } = setup({ obs: WITH_PICTURE });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    await updateObs({ ...WITH_PICTURE, picture: shown("camera-1") });
+    expect(calls.mutes).toEqual(["Mic/Aux:coupé", "Camera 1 OBS:ouvert"]);
+    expect(calls.pictures).toEqual([]);
+  });
+
+  it("Quand le PC passe à l'image dans OBS, le système doit ouvrir le mic du PC et couper celui de la caméra", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone, updateObs } = setup({ obs: CAMERA_ON_AIR });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    await updateObs({ ...CAMERA_ON_AIR, picture: shown("pc") });
+    expect(calls.mutes).toEqual(["Camera 1 OBS:coupé", "Mic/Aux:ouvert"]);
+  });
+
+  it("ne touche pas au micro quand la tête passe à l'image dans OBS", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone, updateObs } = setup({ obs: CAMERA_ON_AIR });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    await updateObs({ ...CAMERA_ON_AIR, picture: shown("head") });
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("n'envoie aucune demande quand le mic voulu est déjà celui du live", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone, updateObs } = setup({
+      obs: { ...CAMERA_ON_AIR, picture: shown("head") },
+    });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    await updateObs({ ...CAMERA_ON_AIR, picture: shown("camera-1") });
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("ne fait rien à la première lecture d'OBS au démarrage, même quand l'image n'est pas au micro ouvert", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone } = setup({
+      obs: { ...WITH_PICTURE, picture: shown("camera-1") },
+    });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("ne fait rien non plus à la première lecture qui suit une coupure d'OBS : l'image a pu changer pendant ce temps", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone, updateObs } = setup({ obs: WITH_PICTURE });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    await updateObs(OBS_OFFLINE);
+    await updateObs({ ...WITH_PICTURE, picture: shown("camera-1") });
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("ne réagit qu'une fois à un changement d'OBS, même quand l'état est redit par la suite", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone, updateObs } = setup({ obs: WITH_PICTURE });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    await updateObs({ ...WITH_PICTURE, picture: shown("camera-1") });
+    updatePhones([cameraPhone(1)]);
+    await updateObs({ ...WITH_PICTURE, picture: shown("camera-1") });
+    expect(calls.mutes).toEqual(["Mic/Aux:coupé", "Camera 1 OBS:ouvert"]);
+  });
+
+  it("ne fait pas de seconde demande de micro après un choix de l'appli : l'évènement d'OBS qui le suit est le sien", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone } = setup({ obs: WITH_PICTURE });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    expect(await control.updatePicture("camera-1")).toEqual({ ok: true });
+    await settle();
+    await settle();
+    expect(calls.pictures).toEqual(["camera-1"]);
+    expect(calls.mutes).toEqual(["Mic/Aux:coupé", "Camera 1 OBS:ouvert"]);
+  });
+
+  it("réagit de nouveau à un changement d'OBS qui suit un choix de l'appli", async () => {
+    const { control, settle, calls, updatePhones, cameraPhone, updateObs } = setup({ obs: WITH_PICTURE });
+    control.start();
+    await settle();
+    updatePhones([cameraPhone(1)]);
+    await control.updatePicture("head");
+    await settle();
+    await updateObs({ ...WITH_PICTURE, picture: shown("camera-1") });
+    expect(calls.mutes).toEqual(["Mic/Aux:coupé", "Camera 1 OBS:ouvert"]);
   });
 });
 

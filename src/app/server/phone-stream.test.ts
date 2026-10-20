@@ -36,6 +36,7 @@ const describeEvent = (event: PhoneEvent): string => {
   if (event.kind === "control") return `control ${event.state.scene}`;
   if (event.kind === "air") return `air ${event.isOnAir}`;
   if (event.kind === "mic") return `mic ${event.isLive}`;
+  if (event.kind === "screen") return `screen ${event.screenKind}`;
   return event.kind;
 };
 
@@ -84,7 +85,8 @@ describe("openPhoneStream", () => {
       "air false",
       "mic false",
       "picture",
-      "screen",
+      "screen image",
+      "screen mic",
     ]);
   });
 
@@ -97,7 +99,8 @@ describe("openPhoneStream", () => {
       "air false",
       "mic false",
       "picture",
-      "screen",
+      "screen image",
+      "screen mic",
       "control Jeu",
     ]);
   });
@@ -292,9 +295,17 @@ describe("un téléphone, un seul flux qui filme ou non", () => {
     const { phones, received, fake } = setup("control");
     expect(fake.listeners()).toBe(1);
     film(phones, "phone-0001");
-    expect(received).toEqual(["control null", "number", "air false", "mic false", "picture", "screen"]);
+    expect(received).toEqual([
+      "control null",
+      "number",
+      "air false",
+      "mic false",
+      "picture",
+      "screen image",
+      "screen mic",
+    ]);
     fake.publish({ ...IDLE_CONTROL, scene: "Jeu", onAir: [1] });
-    expect(received.slice(6)).toEqual(["air true", "control Jeu"]);
+    expect(received.slice(7)).toEqual(["air true", "control Jeu"]);
     expect(fake.listeners()).toBe(1);
     expect(phones.getState()).toHaveLength(1);
   });
@@ -317,13 +328,20 @@ describe("un téléphone, un seul flux qui filme ou non", () => {
     fake.publish({ ...IDLE_CONTROL, onAir: [] });
     const before = received.length;
     film(phones, "phone-0001");
-    expect(received.slice(before)).toEqual(["number", "air false", "mic false", "picture", "screen"]);
+    expect(received.slice(before)).toEqual([
+      "number",
+      "air false",
+      "mic false",
+      "picture",
+      "screen image",
+      "screen mic",
+    ]);
   });
 
   it("ne dit pas le numéro au téléphone qui ne filme pas, mais le rend à la page OBS quand il part", () => {
     const { phones } = setup("camera");
     const screenEvents: string[] = [];
-    phones.openScreen({ id: "screen-0001", number: 1 }, (event) =>
+    phones.openScreen({ id: "screen-0001", number: 1, kind: "image" }, (event) =>
       screenEvents.push(event.kind === "phone" ? `phone ${event.isPresent}` : event.kind),
     );
     expect(screenEvents).toEqual(["phone true"]);

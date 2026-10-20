@@ -4,7 +4,8 @@ import { toEventStream } from "./event-stream";
 import { getSearch } from "./http";
 import { getRuntime } from "./runtime";
 
-// Flux SSE de la page OBS d'une caméra (`?id=…&number=…`) : si son téléphone est là, et ses signaux. Une seule connexion par page.
+// Flux SSE d'une page OBS d'une caméra (`?id=…&number=…&kind=image|mic`) : si son téléphone est là, et ses signaux. Une seule connexion par
+// page, image ou mic.
 export default defineHandler((event) => {
   const opening = getSearch(event.req, ScreenQuerySchema);
   if (opening instanceof Response) return opening;

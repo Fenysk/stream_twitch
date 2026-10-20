@@ -64,7 +64,8 @@ Les touches +10 et −10 règlent la fin prévue du live par crans de 10 min, à
 
 La touche Image montre qui est au Plan de la place caméra d'OBS. Le téléphone appelle cela le Plan ([telephone](telephone.md)).
 
-- L'appui passe au membre suivant : PC, les caméras disponibles par numéro, Tête, puis PC. Le micro suit.
+- L'appui passe au membre suivant : PC, les caméras disponibles par numéro, Tête, puis PC.
+- L'image décide du micro : une caméra prend le sien, le PC prend celui du PC, la Tête n'y touche pas.
 - Avant le premier message du serveur, la touche écrit « Image … ».
 - Sans place caméra dans OBS, elle écrit « Place inconnue ». Quand personne n'est au Plan, « Image – ».
 - Un refus ou un serveur éteint fait clignoter l'alerte de la touche. Un succès ne dit rien, car le titre change.
@@ -121,7 +122,8 @@ La commande `pnpm exec streamdeck restart com.fenysk.stream-twitch` peut répond
 
 ## Limites connues
 
-- Le plugin n'a pas de touche micro. Une touche Elgato qui coupe « Micro PC » ou cache une source de la place caméra agit sur OBS sans passer par la régie. Le serveur suit la coupure, mais la règle « un seul micro ouvert » n'est pas appliquée.
+- Le plugin n'a pas de touche micro. Une touche Elgato qui coupe « Micro PC » agit sur OBS sans passer par la régie. Le serveur suit la coupure, mais la règle « un seul micro ouvert » n'est pas appliquée.
+- Une touche Elgato qui change la source visible de la place caméra agit aussi sans la régie. Le serveur suit : l'image décide du micro, sauf si ce micro est déjà ouvert.
 - Les touches de fin écrivent une heure absolue au relâché. Un changement fait ailleurs pendant l'appui, par exemple depuis le téléphone, est écrasé.
 - Le plugin parle à n'importe quel serveur sur le port 4747, donc aussi à un serveur de branche.
 

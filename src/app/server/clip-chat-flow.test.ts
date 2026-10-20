@@ -22,6 +22,7 @@ import { createObsClient, type ObsSocket } from "../../infra/obs.client";
 import { createClipLibrary } from "../../usecase/clip.usecase";
 import { createClipAnalysis } from "../../usecase/clip-analysis.usecase";
 import { createClipChat } from "../../usecase/clip-chat.usecase";
+import { createObsIds } from "../../usecase/obs-ids.usecase";
 
 const folders: string[] = [];
 
@@ -53,6 +54,9 @@ const startStack = () => {
     refreshPage: async () => undefined,
     getProgramScene: async () => "Scène",
     listScenes: async () => [],
+    listInputIdentities: async () => [],
+    listSceneIdentities: async () => [],
+    onRenamed: noop,
     updateProgramScene: async () => undefined,
     listSceneItems: async () => [],
     listPictureItems: async () => [],
@@ -73,8 +77,14 @@ const startStack = () => {
     onExitStarted: noop,
     onClosed: noop,
   };
+  const ids = createObsIds({
+    source: socket,
+    store: { get: () => undefined, update: noop },
+    settings: { micName: "Mic" },
+    log: (line) => logs.push(line),
+  });
   const obs = createObsClient(
-    { address: "ws://test", micName: "Mic", pageHosts: [], log: (line) => logs.push(line), onExit: noop },
+    { address: "ws://test", ids, pageHosts: [], log: (line) => logs.push(line), onExit: noop },
     socket,
   );
   const state = { now: SAVED_AT - 150_000 };

@@ -80,7 +80,7 @@ L'onglet Émission règle l'émission et prépare les clips.
 
 « Durée estimée » suit le curseur. C'est l'émission la plus courte et la plus longue que le tirage peut faire, arrondies à la minute.
 
-« Scène après l'émission » propose « Rester sur la scène de l'émission » (par défaut), puis chaque scène d'OBS. À la fin normale seulement, le serveur fait passer le programme d'OBS sur cette scène. La transition réglée dans OBS fait le fondu. Une émission coupée, arrêtée après 20 s ou par l'arrêt du serveur ne change pas de scène. Si OBS refuse, rien ne change et `server.log` le dit.
+« Scène après l'émission » propose « Rester sur la scène de l'émission » (par défaut), puis chaque scène d'OBS. Le serveur suit la scène choisie par son identifiant OBS ([obs](obs.md)). Renommée dans OBS, elle reste la scène de fin, et `showEndScene` prend son nouveau nom. À la fin normale seulement, le serveur fait passer le programme d'OBS sur cette scène. La transition réglée dans OBS fait le fondu. Une émission coupée, arrêtée après 20 s ou par l'arrêt du serveur ne change pas de scène. Si OBS refuse, rien ne change et `server.log` le dit.
 
 Deux réglages n'ont pas de champ : `showClipsFolder` (le dossier des clips) et `showChatLead`. `settings.local.json` peut les changer.
 

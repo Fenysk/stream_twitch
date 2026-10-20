@@ -13,6 +13,7 @@ import {
   PhoneEventSchema,
   type ScreenEvent,
   ScreenEventSchema,
+  type ScreenKind,
   type Signal,
   type SignalRequest,
 } from "../domain/phone.schema";
@@ -89,7 +90,7 @@ type PhoneWatch = {
 };
 
 // Le flux d'un téléphone, ouvert une fois qu'il filme ou non : l'état de la régie et un battement qui dit qu'il est vivant, puis, quand il
-// filme, son numéro, la page OBS de ce numéro et les signaux de cette page.
+// filme, son numéro, la page OBS de ce numéro pour chaque sorte (image, mic) et les signaux de ces pages.
 export const watchPhone = ({ id, getNumber, onEvent, onOpen, onStale }: PhoneWatch): (() => void) =>
   watchStream(
     () => {
@@ -103,14 +104,15 @@ export const watchPhone = ({ id, getNumber, onEvent, onOpen, onStale }: PhoneWat
     onStale,
   );
 
-// Le flux de la page OBS d'une caméra : si son téléphone est là, et ses signaux.
+// Le flux d'une page OBS d'une caméra, image ou mic : si son téléphone est là, et ses signaux.
 export const watchScreen = (
   id: string,
   number: number,
+  kind: ScreenKind,
   onEvent: (event: ScreenEvent) => void,
 ): (() => void) =>
   watchStream(
-    () => `/api/mobile/screen?${new URLSearchParams({ id, number: String(number) })}`,
+    () => `/api/mobile/screen?${new URLSearchParams({ id, number: String(number), kind })}`,
     ScreenEventSchema,
     onEvent,
   );
@@ -119,7 +121,10 @@ export const watchScreen = (
 export const watchMobileState = (onState: (state: MobileState) => void): (() => void) =>
   watchStream(() => "/api/mobile/state", MobileStateSchema, onState);
 
-export type SignalSource = { from: "phone"; phoneId: string } | { from: "screen"; screenId: string };
+// Le téléphone dit à quelle sorte de page il parle (une liaison par sorte) ; une page OBS n'en dit pas, son identifiant la désigne.
+export type SignalSource =
+  | { from: "phone"; phoneId: string; screenKind: ScreenKind }
+  | { from: "screen"; screenId: string };
 
 // Les signaux d'un côté partent un par un, dans l'ordre où ils sont donnés : l'autre côté veut l'offre avant ses candidats.
 export const createSignalSender = (source: SignalSource): ((signal: Signal) => void) => {

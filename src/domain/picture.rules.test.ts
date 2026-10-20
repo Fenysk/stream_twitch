@@ -312,10 +312,10 @@ describe("le repli sur la tête", () => {
 });
 
 describe("le micro qui suit l'image", () => {
-  it("rend le micro de la caméra choisie, et celui du PC pour le PC et la tête", () => {
+  it("rend le micro de la caméra choisie et celui du PC pour le PC, et aucun pour la tête : elle ne touche plus au micro", () => {
     expect(toPictureMicId("camera-3")).toBe("camera-3");
     expect(toPictureMicId("pc")).toBe("pc");
-    expect(toPictureMicId("head")).toBe("pc");
+    expect(toPictureMicId("head")).toBeNull();
   });
 });
 
