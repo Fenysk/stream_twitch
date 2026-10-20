@@ -1,6 +1,7 @@
 import { toSortedChatViewers } from "../domain/chat-viewers.rules";
 import type { ChatViewer } from "../domain/chat-viewers.schema";
 import {
+  isMicSilent,
   type ObsMics,
   PC_MIC_ID,
   toControlMics,
@@ -125,7 +126,8 @@ export type Control = {
   // Arrête le live dans OBS : refusé (409) quand il n'est pas en cours, ou qu'OBS refuse.
   stopLive(): Promise<ControlResult>;
   // Ce membre de la place caméra (`pc`, `head`, `camera-3`) passe à l'image, les autres sont cachés, et l'image décide du micro : la caméra
-  // à l'image prend le sien, le PC prend celui du PC, la tête n'y touche pas ; avec `isMicKept`, le micro du live reste où il est.
+  // à l'image prend le sien, le PC prend celui du PC, la tête n'y touche pas ; avec `isMicKept`, le micro du live reste où il est. En Muet
+  // (aucun micro entendu), l'image ne rouvre aucun micro : seul `updateMic` en sort.
   // Refusé : 404 membre inconnu, 409 caméra dont le téléphone ne filme pas vers OBS, ou OBS refuse.
   updatePicture(id: string, keep?: MicKeep): Promise<ControlResult>;
   // Le membre suivant sur la touche du Stream Deck : PC, les caméras disponibles par numéro, la tête, puis PC.
@@ -208,6 +210,10 @@ export function createControl({
   const getHeard = (): number[] => listNumbers(({ isHeard }) => isHeard);
 
   const getPicture = (): PictureState => toPictureState(obsState.picture, getReceiving());
+
+  // Muet : aucun micro ne s'entend. Ni l'image, ni son repli, ni OBS ne rouvrent alors un micro tout seul ; `updateMic` en sort.
+  const isSilent = (): boolean =>
+    isMicSilent({ isLinked: obsState.isLinked, mics: toControlMics(getSources()) }, obsState.cameras);
 
   const getState = (): ControlState => ({
     isLinked: obsState.isLinked,
@@ -317,7 +323,7 @@ export function createControl({
   };
 
   // Le membre passe seul à l'image dans OBS, puis l'image décide du micro : la caméra prend le sien, le PC celui du PC, la tête n'y touche
-  // pas. Le micro qui refuse (la source mic d'une caméra manque) laisse l'image où elle est : le refus le dit.
+  // pas, et rien ne s'ouvre en Muet. Le micro qui refuse (la source mic d'une caméra manque) laisse l'image où elle est : le refus le dit.
   const updatePicture = async (id: string, keep: MicKeep = {}): Promise<ControlResult> => {
     const refusal = toPictureRefusal(id);
     if (refusal) return refusal;
@@ -332,6 +338,10 @@ export function createControl({
     log(`Régie : ${label} est à l'image.`);
     const micId = toPictureMicId(id);
     if (keep.isMicKept || micId === null) return { ok: true };
+    if (isSilent()) {
+      log("Régie : Muet, le micro ne s'ouvre pas avec l'image.");
+      return { ok: true };
+    }
     const heard = await updateMic(micId);
     return heard.ok ? heard : refuse(heard.status, `l'image est passée à ${label}, mais ${heard.message}`);
   };
@@ -387,9 +397,22 @@ export function createControl({
   // Le micro du live : celui qu'une caméra encore ouverte dans OBS garde même si son téléphone est parti.
   const getLiveId = (mics: ControlState["mics"]): string | null => toLiveMic(mics)?.id ?? liveCameraId;
 
+  // Le micro que l'image changée dans OBS demande : il s'ouvre, sauf en Muet.
+  const followPictureMic = (pictureId: string, micId: string): void => {
+    const label = toPictureLabel(pictureId);
+    if (isSilent()) {
+      log(`Régie : ${label} est passé à l'image dans OBS, Muet : le micro reste coupé.`);
+      return;
+    }
+    log(`Régie : ${label} est passé à l'image dans OBS, son micro suit.`);
+    void updateMic(micId).then((result) => {
+      if (!result.ok) log(`Régie : le micro de l'image n'est pas ouvert (${result.message}).`);
+    });
+  };
+
   // Une image que l'appli n'a pas demandée vient d'OBS (l'œil d'un élément de la place) : elle décide du micro comme un choix de l'appli.
   // Rien à la première lecture d'OBS ni à la première après une coupure (l'image a pu changer entre-temps), ni quand le micro voulu est
-  // déjà celui du live.
+  // déjà celui du live, ni en Muet.
   const followPicture = ({ picture, mics }: ControlState): void => {
     if (!obsState.isLinked || picture.members.length === 0) {
       seenPictureId = undefined;
@@ -403,11 +426,7 @@ export function createControl({
     askedPictureId = null;
     if (isAsked || currentId === null) return;
     const wanted = toDirectMicId(currentId, getLiveId(mics));
-    if (wanted === null) return;
-    log(`Régie : ${toPictureLabel(currentId)} est passé à l'image dans OBS, son micro suit.`);
-    void updateMic(wanted).then((result) => {
-      if (!result.ok) log(`Régie : le micro de l'image n'est pas ouvert (${result.message}).`);
-    });
+    if (wanted !== null) followPictureMic(currentId, wanted);
   };
 
   return {

@@ -18,7 +18,7 @@ import {
   toReopenMicId,
   toStopMemory,
 } from "../../domain/alert.rules";
-import { toLiveMic, toTakenMicId } from "../../domain/control.rules";
+import { isMicMuted, toLiveMic, toTakenMicId } from "../../domain/control.rules";
 import type { ControlMic, ControlState } from "../../domain/control.schema";
 import type { PhoneRole } from "../../domain/phone.schema";
 import { IDLE_STANDING, type PictureStanding } from "../../domain/picture.schema";
@@ -28,7 +28,7 @@ import type { ShownAlert } from "./alert-line";
 import { toAlertActionLabel, toAlertText } from "./alert-text";
 import type { CameraStatus } from "./camera-control";
 import { toSentence } from "./control-keys";
-import { type ControlView, isMicMuted, toMicName } from "./control-view";
+import { type ControlView, toMicName } from "./control-view";
 import { getStopAskedAt } from "./stop-asked";
 import type { CameraStream } from "./use-camera-stream";
 import type { PhoneLink } from "./use-phone-link";

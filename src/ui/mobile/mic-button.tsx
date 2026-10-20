@@ -1,7 +1,8 @@
 import { Mic, MicOff } from "lucide-react";
+import { isMicMuted } from "../../domain/control.rules";
 import type { ControlState } from "../../domain/control.schema";
 import { Button } from "../design/button";
-import { isMicMuted, toMicText } from "./control-view";
+import { toMicText } from "./control-view";
 
 type MicButtonProps = {
   state: ControlState;

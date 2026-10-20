@@ -1,5 +1,5 @@
 import { toCameraName } from "./camera.rules";
-import type { ControlMic } from "./control.schema";
+import type { ControlMic, ControlState } from "./control.schema";
 
 // Ce qu'OBS dit des micros de la régie : la coupure du mic du PC (`null` : OBS ne connaît pas cette entrée), et la source navigateur mic
 // (`/camera/<n>/mic`) de chaque caméra, avec sa coupure. Une caméra sans source mic dans OBS n'y est pas.
@@ -62,6 +62,17 @@ export const toLiveMic = (mics: readonly ControlMic[]): ControlMic | null =>
 // Rend le micro à ouvrir (`camera-3`), ou `null` quand le téléphone n'a pas de numéro (le serveur ne l'a pas encore donné).
 export const toTakenMicId = (number: number | null): string | null =>
   number === null ? null : toCameraMicId(number);
+
+// Muet : OBS est joint, il connaît des micros, et aucun n'est ouvert. OBS non joint ou rien de connu n'est pas Muet : on ne sait pas.
+export const isMicMuted = ({ isLinked, mics }: Pick<ControlState, "isLinked" | "mics">): boolean =>
+  isLinked && mics.some(({ isAvailable }) => isAvailable) && toLiveMic(mics) === null;
+
+// Rien ne s'entend : Muet, et aucune source mic de caméra ouverte dans OBS (celle d'un téléphone parti n'est plus dans `mics`). C'est l'état
+// où rien ne rouvre un micro tout seul : seul un choix de micro, ou une entrée rouverte à la main dans OBS, en sort.
+export const isMicSilent = (
+  state: Pick<ControlState, "isLinked" | "mics">,
+  cameras: ObsMics["cameras"],
+): boolean => isMicMuted(state) && cameras.every(({ isMuted }) => isMuted);
 
 // Ce téléphone, de ce numéro, est-il le micro du live ?
 export const isLiveMicOf = (mics: readonly ControlMic[], number: number | null): boolean =>

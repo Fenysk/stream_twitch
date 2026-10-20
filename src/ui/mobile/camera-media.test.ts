@@ -5,6 +5,8 @@ import {
   toCameraFailure,
   toOtherFacing,
   toPreferredCodecs,
+  toReframeConstraints,
+  toTrackFraming,
   toVideoConstraints,
   VIDEO_MAX_BITRATE,
 } from "./camera-media";
@@ -29,6 +31,59 @@ describe("toVideoConstraints", () => {
       aspectRatio: { ideal: 9 / 16 },
       frameRate: { ideal: 30 },
     });
+  });
+});
+
+describe("toTrackFraming", () => {
+  it("dit le cadrage d'une piste d'après ses réglages : en largeur (16:9) ou en hauteur (9:16)", () => {
+    expect(toTrackFraming({ width: 1920, height: 1080 })).toBe("landscape");
+    expect(toTrackFraming({ width: 1080, height: 1920 })).toBe("portrait");
+    expect(toTrackFraming({ width: 1280, height: 720 })).toBe("landscape");
+    expect(toTrackFraming({ width: 720, height: 1280 })).toBe("portrait");
+  });
+
+  it("ne dit rien quand le navigateur ne donne pas la taille, ou qu'elle est carrée", () => {
+    expect(toTrackFraming({})).toBeNull();
+    expect(toTrackFraming({ width: 1920 })).toBeNull();
+    expect(toTrackFraming({ height: 1080 })).toBeNull();
+    expect(toTrackFraming({ width: 1080, height: 1080 })).toBeNull();
+  });
+});
+
+describe("toReframeConstraints", () => {
+  it("Quand l'image doit rester en 16:9, le système doit redemander 1920 × 1080 en 16:9, sans toucher à l'objectif ni à la cadence", () => {
+    expect(toReframeConstraints("landscape", false)).toEqual({
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      aspectRatio: { ideal: 16 / 9 },
+    });
+  });
+
+  it("Quand l'image doit rester en 9:16, le système doit redemander 1080 × 1920 en 9:16", () => {
+    expect(toReframeConstraints("portrait", false)).toEqual({
+      width: { ideal: 1080 },
+      height: { ideal: 1920 },
+      aspectRatio: { ideal: 9 / 16 },
+    });
+  });
+
+  it("retourne la largeur et la hauteur quand Safari les entend dans l'autre sens", () => {
+    expect(toReframeConstraints("landscape", true)).toEqual({
+      width: { ideal: 1080 },
+      height: { ideal: 1920 },
+      aspectRatio: { ideal: 9 / 16 },
+    });
+    expect(toReframeConstraints("portrait", true)).toEqual(toReframeConstraints("landscape", false));
+  });
+
+  it("ne porte ni objectif ni cadence : la piste reste ouverte, sur la même caméra", () => {
+    for (const framing of ["landscape", "portrait"] as const) {
+      for (const isFlipped of [false, true]) {
+        const constraints = toReframeConstraints(framing, isFlipped);
+        expect(constraints).not.toHaveProperty("facingMode");
+        expect(constraints).not.toHaveProperty("frameRate");
+      }
+    }
   });
 });
 

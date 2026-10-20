@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { isMicMuted } from "../../domain/control.rules";
 import { IDLE_CONTROL } from "../../domain/control.schema";
 import {
   CHAT_VIEWERS_NOTE,
   hasPicture,
-  isMicMuted,
   toAntennaText,
   toChatViewersCountText,
   toEndText,

@@ -11,6 +11,12 @@ Format : 5 lignes maximum. Si ça demande plus, la décision n'est pas mûre.
 
 ---
 
+## 2026-10-20 — En Muet, rien ne rouvre un micro tout seul : le Plan ne décide plus du micro quand aucun micro n'est entendu (modifie la règle « le Plan décide du micro » du 19/10)
+
+**Contexte.** Le 20/10 (`server.log`), après « Muet », deux changements de Plan ont rouvert le micro de Caméra 1, puis « Arrêter de filmer » l'a rendu au PC : Alexis avait coupé son micro, le PC s'est rouvert.
+**Décision.** `lexique.json` et `architecture.json` ne bougent pas. Muet = OBS joint, des micros connus, aucun ouvert, aucune source mic de caméra ouverte (`isMicSilent` de `control.rules.ts`, qui reprend `isMicMuted` remonté de `control-view.ts`). Dans cet état, ni l'image (appli, Stream Deck, OBS à la main) ni son repli n'ouvrent de micro (`updatePicture`, `followPicture`) ; seuls `updateMic` (feuille Micro, « Rallumer », « Prendre ») ou une entrée rouverte à la main dans OBS en sortent. Hors Muet, rien ne change.
+**Renoncement.** Un indicateur « Muet » tenu par le serveur : il se perdrait à la relance et divergerait de « Micro : Muet » ; l'état d'OBS suffit.
+
 ## 2026-10-19 — Les sources et scènes désignées par un réglage sont suivies par leur identifiant d'OBS : renommées dans OBS, elles restent trouvées (`data/obs-ids.json`) ; reprise de `91419ef` sur la refonte de /mobile
 
 **Contexte.** Le 19/10, Alexis a renommé « Mic/Aux » en « Micro PC » et « Audio du bureau » en « Audio PC » dans OBS : le serveur cherchait les anciens noms (`micName`, `desktopName`), la tête et Jean-Renard n'entendaient plus rien jusqu'à une correction à la main de `settings.json`. Le commit est repris tel quel (il ne touche aucun fichier de /mobile), après les trois lots de `feat/mic-page`.

@@ -1,11 +1,17 @@
 // Les touches de la régie, générées toutes seules de l'état d'OBS et de la soundboard : aucun réglage. Le texte et l'état de chaque
 // touche se calculent ici ; son geste (`KeyAction`) est exécuté ailleurs (use-control-actions.ts).
 
-import { MUTE_MIC_ID, toCameraMicId, toLiveMic, toProgramScenes } from "../../domain/control.rules";
+import {
+  isMicMuted,
+  MUTE_MIC_ID,
+  toCameraMicId,
+  toLiveMic,
+  toProgramScenes,
+} from "../../domain/control.rules";
 import type { ControlState } from "../../domain/control.schema";
 import { END_STEP_MINUTES, type EndDirection } from "../../domain/hours.rules";
 import type { SoundSummary } from "../../domain/sound.schema";
-import { isMicMuted, toMicName } from "./control-view";
+import { toMicName } from "./control-view";
 
 export type KeyAction =
   | { kind: "scene"; name: string }

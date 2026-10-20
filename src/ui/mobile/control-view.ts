@@ -2,7 +2,7 @@
 // navigateur.
 
 import type { PhoneChatMark } from "../../domain/chat-phone.rules";
-import { isLiveMicOf, PC_MIC_ID, toDurationText, toLiveMic } from "../../domain/control.rules";
+import { isLiveMicOf, isMicMuted, PC_MIC_ID, toDurationText, toLiveMic } from "../../domain/control.rules";
 import { type ControlMic, type ControlState, IDLE_CONTROL } from "../../domain/control.schema";
 import { toEndClock } from "../../domain/hours.rules";
 import type { ViewersState } from "../../domain/viewers.types";
@@ -32,10 +32,6 @@ export const MUTE_TEXT = "Muet";
 // Le nom d'un micro à l'écran : « PC » ou « Caméra 1 ».
 export const toMicName = ({ id, label }: Pick<ControlMic, "id" | "label">): string =>
   id === PC_MIC_ID ? "PC" : label;
-
-// Muet : OBS est joint, il connaît des micros, et aucun n'est ouvert. OBS non joint ou rien de connu n'est pas Muet : on ne sait pas.
-export const isMicMuted = ({ isLinked, mics }: ControlState): boolean =>
-  isLinked && mics.some(({ isAvailable }) => isAvailable) && toLiveMic(mics) === null;
 
 // Le bouton Micro de la barre du bas : « Micro : PC », « Micro : Caméra 1 »… ; « Micro : ce tél. » quand c'est la caméra de ce téléphone
 // (`ownNumber`, son numéro s'il filme) ; « Micro : Muet » quand aucun micro n'est ouvert ; OBS non joint ou rien de connu, un tiret.

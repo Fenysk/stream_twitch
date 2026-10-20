@@ -1377,6 +1377,187 @@ describe("l'image décide du micro, aussi quand OBS la change", () => {
   });
 });
 
+describe("Muet : rien ne rouvre un micro tout seul", () => {
+  const CAMERAS_MUTED: ObsControlState["cameras"] = [
+    { number: 1, input: "Camera 1 OBS", isMuted: true },
+    { number: 2, input: "Camera 2 OBS", isMuted: true },
+  ];
+  // Aucun micro ouvert (le PC et les deux caméras sont coupés), le PC à l'image : ce qu'Alexis laisse après « Couper le micro ».
+  const SILENT: ObsControlState = { ...WITH_PICTURE, isPcMuted: true, cameras: CAMERAS_MUTED };
+  const silentOn = (id: string): ObsControlState => ({ ...SILENT, picture: shown(id) });
+  const OPENED_CAMERAS: ObsControlState["cameras"] = [
+    { number: 1, input: "Camera 1 OBS", isMuted: false },
+    { number: 2, input: "Camera 2 OBS", isMuted: true },
+  ];
+
+  const start = async (obs: ObsControlState, ...numbers: number[]) => {
+    const made = setup({ obs });
+    made.control.start();
+    await made.settle();
+    made.updatePhones(numbers.map((number) => made.cameraPhone(number)));
+    return made;
+  };
+
+  // Le journal du 20/10 : Muet, puis deux fois « Caméra 1 est à l'image ».
+  const muteThenShowTwice = async () => {
+    const made = await start(WITH_PICTURE, 1);
+    await made.control.updateMic(MUTE_MIC_ID);
+    await made.updateObs(SILENT);
+    expect(made.calls.mutes).toEqual(["Mic/Aux:coupé"]);
+    made.calls.mutes.length = 0;
+    await made.control.updatePicture("camera-1");
+    await made.settle();
+    await made.control.updatePicture("camera-1");
+    await made.settle();
+    return made;
+  };
+
+  it("Quand le Plan change depuis le téléphone ou le menu en Muet, le système doit montrer le membre sans ouvrir aucun micro", async () => {
+    for (const id of ["camera-1", "camera-2", "pc", "head"]) {
+      const { control, settle, calls, logs } = await start(SILENT, 1, 2);
+      expect(await control.updatePicture(id), id).toEqual({ ok: true });
+      await settle();
+      expect(calls.pictures, id).toEqual([id]);
+      expect(calls.mutes, id).toEqual([]);
+      expect(control.getState().picture.currentId, id).toBe(id);
+      expect(
+        control.getState().mics.some(({ isOpen }) => isOpen),
+        id,
+      ).toBe(false);
+      if (id !== "head") expect(logs, id).toContain("Régie : Muet, le micro ne s'ouvre pas avec l'image.");
+    }
+  });
+
+  it("Quand la touche Image du Stream Deck change le Plan en Muet, le système doit le changer sans ouvrir aucun micro", async () => {
+    const { control, settle, calls } = await start(SILENT, 1);
+    expect(await control.updatePictureNext()).toEqual({ ok: true });
+    await settle();
+    expect(calls.pictures).toEqual(["camera-1"]);
+    expect(await control.updatePictureNext()).toEqual({ ok: true });
+    await settle();
+    expect(calls.pictures).toEqual(["camera-1", "head"]);
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("Quand le Plan change à la main dans OBS en Muet, le système doit laisser tous les micros coupés", async () => {
+    for (const [id, label] of [
+      ["camera-1", "Caméra 1"],
+      ["pc", "PC"],
+    ] as const) {
+      const { calls, updateObs, logs } = await start(silentOn("head"), 1);
+      await updateObs(silentOn(id));
+      expect(calls.mutes, id).toEqual([]);
+      expect(logs, id).toContain(
+        `Régie : ${label} est passé à l'image dans OBS, Muet : le micro reste coupé.`,
+      );
+    }
+    const head = await start(SILENT, 1);
+    await head.updateObs(silentOn("head"));
+    expect(head.calls.mutes).toEqual([]);
+  });
+
+  it("Quand Alexis coupe le micro dans OBS à la main, le Plan qui change ensuite n'en ouvre aucun", async () => {
+    const { control, updateObs, calls } = await start(WITH_PICTURE, 1);
+    await updateObs({ ...WITH_PICTURE, isPcMuted: true });
+    expect(await control.updatePicture("camera-1")).toEqual({ ok: true });
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("Quand la caméra à l'image ne filme plus en Muet, le système doit replier le Plan sur la tête sans ouvrir de micro", async () => {
+    const { advance, calls, updatePhones, cameraPhone, control } = await start(silentOn("camera-1"), 1);
+    updatePhones([cameraPhone(1, false)]);
+    await advance(3000);
+    expect(calls.pictures).toEqual(["head"]);
+    expect(control.getState().picture.currentId).toBe("head");
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("replie le Plan sur le PC faute de tête, sans lui ouvrir son micro en Muet", async () => {
+    const withoutHead = silentOn("camera-1").picture.filter(({ id }) => id !== "head");
+    const { advance, calls, updatePhones } = await start({ ...SILENT, picture: withoutHead }, 1);
+    updatePhones([]);
+    await advance(3000);
+    expect(calls.pictures).toEqual(["pc"]);
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("Quand le téléphone qui filme s'arrête ou part en Muet, le système doit laisser le micro du PC coupé", async () => {
+    for (const leaves of ["stops", "disconnects"] as const) {
+      const { advance, calls, updatePhones, cameraPhone, timers, control } = await muteThenShowTwice();
+      updatePhones(leaves === "stops" ? [cameraPhone(1, false)] : []);
+      await advance(10_000);
+      expect(calls.pictures, leaves).toEqual(["camera-1", "camera-1", "head"]);
+      expect(calls.mutes, leaves).toEqual([]);
+      expect(timers, leaves).toHaveLength(0);
+      expect(
+        control.getState().mics.some(({ isOpen }) => isOpen),
+        leaves,
+      ).toBe(false);
+    }
+  });
+
+  it("Quand le micro d'une caméra ne filme plus alors qu'Alexis vient de couper tous les micros, le système doit laisser le PC coupé", async () => {
+    const live: ObsControlState = { ...CAMERA_ON_AIR, picture: shown("head") };
+    const { control, updateObs, advance, calls, updatePhones, cameraPhone, timers } = await start(live, 1);
+    updatePhones([cameraPhone(1, false, false)]);
+    expect(timers).toHaveLength(1);
+    expect(await control.updateMic(MUTE_MIC_ID)).toEqual({ ok: true });
+    await updateObs({ ...live, cameras: CAMERAS_MUTED });
+    expect(timers).toHaveLength(0);
+    calls.mutes.length = 0;
+    await advance(10_000);
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("sort du Muet par un choix explicite de micro, la feuille Micro ou le bouton d'un téléphone", async () => {
+    const { control, calls } = await start(SILENT, 1);
+    expect(await control.updateMic("camera-1")).toEqual({ ok: true });
+    expect(calls.mutes).toEqual(["Camera 1 OBS:ouvert"]);
+    expect(await control.updateMic("pc")).toEqual({ ok: true });
+    expect(calls.mutes).toEqual(["Camera 1 OBS:ouvert", "Mic/Aux:ouvert"]);
+  });
+
+  it("sort du Muet quand Alexis rouvre une entrée à la main dans OBS : le Plan décide de nouveau du micro", async () => {
+    const { control, updateObs, calls } = await start(SILENT, 1);
+    await updateObs({ ...SILENT, isPcMuted: false });
+    expect(await control.updatePicture("camera-1")).toEqual({ ok: true });
+    expect(calls.mutes).toEqual(["Mic/Aux:coupé", "Camera 1 OBS:ouvert"]);
+  });
+
+  it("sort du Muet quand la source d'une caméra est rouverte à la main, puis suit le Plan comme avant", async () => {
+    const { control, updateObs, calls } = await start(SILENT, 1);
+    await updateObs({ ...SILENT, cameras: OPENED_CAMERAS });
+    expect(await control.updatePicture("pc")).toEqual({ ok: true });
+    expect(calls.mutes).toEqual(["Camera 1 OBS:coupé", "Mic/Aux:ouvert"]);
+  });
+
+  it("n'est pas Muet tant que la source mic d'un téléphone parti reste ouverte dans OBS : le Plan décide du micro", async () => {
+    const { control, calls } = await start({ ...SILENT, cameras: OPENED_CAMERAS, picture: shown("head") });
+    expect(await control.updatePicture("pc")).toEqual({ ok: true });
+    expect(calls.mutes).toEqual(["Camera 1 OBS:coupé", "Mic/Aux:ouvert"]);
+  });
+
+  it("garde le refus quand OBS ne connaît aucun micro : ce n'est pas Muet, la source manque", async () => {
+    const { control, calls } = await start({ ...WITH_PICTURE, isPcMuted: null, cameras: [] });
+    expect(await control.updatePicture("pc")).toEqual({
+      ok: false,
+      status: 409,
+      message:
+        "l'image est passée à PC, mais l'entrée « Mic/Aux » est introuvable dans OBS : vérifie micName dans settings.json",
+    });
+    expect(calls.mutes).toEqual([]);
+  });
+
+  it("ne change rien hors Muet : le Plan décide du micro, la tête n'y touche pas", async () => {
+    const { control, calls } = await start(CAMERA_ON_AIR, 1);
+    expect(await control.updatePicture("pc")).toEqual({ ok: true });
+    expect(calls.mutes).toEqual(["Camera 1 OBS:coupé", "Mic/Aux:ouvert"]);
+    const head = await start(CAMERA_ON_AIR, 1);
+    expect(await head.control.updatePicture("head")).toEqual({ ok: true });
+    expect(head.calls.mutes).toEqual([]);
+  });
+});
+
 describe("passer une scène à l'antenne", () => {
   it("demande la scène à OBS", async () => {
     const { control, calls } = setup();

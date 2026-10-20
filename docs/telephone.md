@@ -87,7 +87,9 @@ Le téléphone filme en paysage :
 
 - Portrait : objectif avant, 9:16, 1080 × 1920, jamais recadré.
 - Paysage : objectif arrière, 16:9, 1920 × 1080.
-- Tourner ensuite le téléphone ne change que la disposition. Ni l'objectif, ni le cadrage, ni le flux ne changent.
+- Tourner ensuite le téléphone ne change que la disposition. Ni l'objectif, ni le flux ne changent, et le cadrage de l'image dans OBS non plus : 16:9 reste horizontal, 9:16 reste vertical.
+- Le cadrage gardé est celui de la première image reçue après « Filmer ». Si Safari retourne l'image à la rotation, l'appli la remet dans ce cadrage sur la piste en marche, par `applyConstraints`. Elle vérifie 0, 0,3, 1 et 2,5 s après la rotation, et fait au plus 4 demandes. La caméra n'est pas relancée, l'antenne ne coupe pas.
+- Un autre objectif ou une caméra relancée reprennent le même cadrage.
 - Le micro a le traitement vocal d'iOS : écho annulé, bruit réduit, gain automatique.
 - L'aperçu est muet. Il est en miroir pour l'objectif avant seulement. L'image envoyée à OBS ne l'est jamais.
 - L'écran ne se met pas en veille tant que le téléphone filme.
@@ -99,7 +101,7 @@ La pastille « Caméra N » ouvre la feuille Caméra :
 
 - Le choix du numéro, avec « Prendre ce numéro ». Un numéro déjà pris est refusé.
 - « Arrêter de filmer », qui rend le numéro.
-- Si ce téléphone a le Plan ou le micro entendu, une confirmation dit le résultat. Exemple : « Le plan passe à Tête, le micro au PC. ».
+- Si ce téléphone a le Plan ou le micro entendu, une confirmation dit le résultat. Exemple : « Le plan passe à Tête, le micro au PC. ». En Muet, elle ne parle pas de micro : « Le plan passe à Tête. ».
 
 À côté du nom, la pastille dit où en est la caméra :
 
@@ -179,11 +181,13 @@ Les règles :
 
 1. Un seul micro est ouvert à la fois.
 2. La tête et Jean-Renard écoutent le micro ouvert, celui du PC avant les caméras.
-3. Le Plan décide du micro. Une caméra au Plan prend son micro, le PC au Plan prend celui du PC, la Tête au Plan n'y touche pas.
-4. Un Plan changé à la main dans OBS décide du micro de la même façon, sauf si ce micro est déjà ouvert. Rien ne change au démarrage du serveur, ni à la première lecture d'OBS qui suit une coupure.
+3. Le Plan décide du micro. Une caméra au Plan prend son micro, le PC au Plan prend celui du PC, la Tête au Plan n'y touche pas. Rien de cela en Muet (règle 8).
+4. Un Plan changé à la main dans OBS décide du micro de la même façon, sauf si ce micro est déjà ouvert ou en Muet. Rien ne change au démarrage du serveur, ni à la première lecture d'OBS qui suit une coupure.
 5. Un téléphone ne fait que prendre le micro. Le bouton « Prendre » de l'alerte « Le micro est au PC » redemande celui de sa caméra. Aucun bouton du téléphone ne rend le micro au PC. Le rendre passe par le choix « PC » de la feuille Micro.
 6. Un micro ouvert ou coupé à la main dans OBS est suivi. Si plusieurs sont ouverts, la tête écoute le premier : le PC avant les caméras.
 7. Un téléphone qui se déconnecte laisse sa source mic ouverte dans OBS. La tête continue de l'écouter tant qu'elle est ouverte, jusqu'au repli du micro (voir « Le Plan »).
+8. En Muet, rien ne rouvre un micro tout seul. Muet veut dire qu'aucun micro n'est ouvert et qu'aucune source mic de caméra ne l'est dans OBS. Ni un changement de Plan (le téléphone, la touche Image du Stream Deck, OBS à la main) ni un repli (caméra qui ne filme plus, « Arrêter de filmer », téléphone parti) n'ouvre alors un micro. Le serveur écrit « Régie : Muet, le micro ne s'ouvre pas avec l'image. » dans son journal.
+9. Seul un choix de micro sort du Muet : la feuille Micro, « Rallumer » ou « Prendre » sur un téléphone, ou une entrée rouverte à la main dans OBS. Après cela, le Plan décide de nouveau du micro.
 
 ## Le Plan
 
@@ -197,7 +201,7 @@ Le Plan est ce qui occupe la place caméra d'OBS : PC, Caméra N ou Tête.
 
 « Montrer » et « Cacher » sont les boutons du téléphone qui filme :
 
-- « Montrer » met cette caméra au Plan. Le Plan décide du micro : elle prend le sien.
+- « Montrer » met cette caméra au Plan. Le Plan décide du micro : elle prend le sien, sauf en Muet.
 - « Cacher » rend le Plan à la Tête. La Tête ne touche pas au micro : il reste au téléphone, dont la source mic reste entendue caméra cachée.
 - Le téléphone continue d'envoyer son image, et l'aperçu écrit « Caméra cachée · Tête au plan ».
 - Le bouton suit l'état réel d'OBS, quel que soit le geste qui a changé le Plan.
@@ -208,7 +212,8 @@ Repli automatique, au bout de 3 s. Chaque repli suit sa propre liaison : l'image
 - Un micro de caméra dont le mic n'arrive plus dans OBS revient au PC. C'est le cas d'un téléphone déconnecté, d'une caméra arrêtée ou d'une liaison mic perdue.
 - Une liaison image perdue alors que le mic arrive encore ne déplace donc pas le micro.
 - Une caméra au Plan et au micro qui ne filme plus déclenche deux demandes : le Plan vers la Tête, le micro vers le PC.
-- Faute de Tête dans la place, le Plan se replie vers le PC. Une seule demande part : le PC prend son micro avec le Plan.
+- Faute de Tête dans la place, le Plan se replie vers le PC. Une seule demande part : le PC prend son micro avec le Plan, sauf en Muet.
+- En Muet, aucun repli n'ouvre de micro : le Plan se replie, le micro du PC reste coupé.
 - La source mic d'un téléphone parti est coupée à l'ouverture du PC. Une source coupée à la main dans OBS, ou un autre micro ouvert, annule l'attente.
 - Rien ne revient tout seul quand le téléphone revient. Fenysk reprend le Plan avec « Montrer ».
 

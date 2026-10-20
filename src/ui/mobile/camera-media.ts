@@ -25,6 +25,27 @@ export const toVideoConstraints = (facing: Facing, orientation: Orientation): Me
   };
 };
 
+// La taille d'une piste telle que le navigateur la donne (`getSettings`) : absente quand il ne la dit pas.
+export type TrackSize = { width?: number | undefined; height?: number | undefined };
+
+// Le cadrage d'une piste d'après sa taille : en largeur (16:9), en hauteur (9:16), ou `null` quand la taille manque ou qu'elle est carrée.
+export const toTrackFraming = ({ width, height }: TrackSize): Orientation | null => {
+  if (width === undefined || height === undefined || width === height) return null;
+  return width > height ? "landscape" : "portrait";
+};
+
+// Ce qui remet une piste en marche dans son cadrage, sans la rouvrir (`applyConstraints`) : la taille du cadrage, ou la taille retournée quand
+// Safari entend largeur et hauteur dans l'autre sens. Ni l'objectif ni la cadence : ils ne changent pas.
+export const toReframeConstraints = (framing: Orientation, isFlipped: boolean): MediaTrackConstraints => {
+  const { width, height } = IMAGE_SIZES[framing];
+  const [wantedWidth, wantedHeight] = isFlipped ? [height, width] : [width, height];
+  return {
+    width: { ideal: wantedWidth },
+    height: { ideal: wantedHeight },
+    aspectRatio: { ideal: wantedWidth / wantedHeight },
+  };
+};
+
 // L'aperçu de la caméra avant se voit en miroir, comme dans un miroir ; l'image envoyée à OBS ne l'est jamais.
 export const isPreviewMirrored = (facing: Facing): boolean => facing === "user";
 

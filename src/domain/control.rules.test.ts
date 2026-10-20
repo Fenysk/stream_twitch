@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   isLiveMicOf,
   isMasterScene,
+  isMicMuted,
+  isMicSilent,
   type MicSource,
   MUTE_MIC_ID,
   type ObsMics,
@@ -326,5 +328,38 @@ describe("isLiveMicOf", () => {
   it("dit non quand aucun micro n'est ouvert", () => {
     expect(isLiveMicOf([mic("pc", false), mic("camera-2", false)], 2)).toBe(false);
     expect(isLiveMicOf([], 2)).toBe(false);
+  });
+});
+
+describe("isMicSilent", () => {
+  const linked = (mics: ControlMic[]) => ({ isLinked: true, mics });
+  const closed = [mic("pc", false), mic("camera-1", false)];
+  const muted = [{ number: 1, input: "Camera 1 OBS", isMuted: true }];
+  const open = [{ number: 1, input: "Camera 1 OBS", isMuted: false }];
+
+  it("est vrai quand OBS est joint, connaît des micros, et que ni eux ni une source de caméra n'est ouvert : Muet", () => {
+    expect(isMicSilent(linked(closed), muted)).toBe(true);
+    expect(isMicSilent(linked(closed), [])).toBe(true);
+  });
+
+  it("est faux dès qu'un micro est ouvert : le Plan décide alors du micro", () => {
+    expect(isMicSilent(linked([mic("pc", true), mic("camera-1", false)]), muted)).toBe(false);
+    expect(isMicSilent(linked([mic("pc", false), mic("camera-1", true)]), open)).toBe(false);
+  });
+
+  it("est faux quand la source mic d'un téléphone parti est restée ouverte dans OBS : elle s'entend encore", () => {
+    expect(isMicSilent(linked([mic("pc", false)]), open)).toBe(false);
+  });
+
+  it("est faux quand OBS n'est pas joint ou ne connaît aucun micro : on ne sait pas", () => {
+    expect(isMicSilent({ isLinked: false, mics: closed }, muted)).toBe(false);
+    expect(isMicSilent(linked([]), [])).toBe(false);
+    expect(isMicSilent(linked([{ ...mic("pc", false), isAvailable: false }]), [])).toBe(false);
+  });
+
+  it("dit comme isMicMuted pour les micros listés : le seul écart est la source de caméra restée ouverte", () => {
+    for (const mics of [closed, [mic("pc", true)], []]) {
+      expect(isMicSilent(linked(mics), [])).toBe(isMicMuted(linked(mics)));
+    }
   });
 });

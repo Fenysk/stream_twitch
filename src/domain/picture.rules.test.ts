@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isLiveMicOf, isMicMuted } from "./control.rules";
 import type { ControlMic } from "./control.schema";
 import {
   canCutCamera,
@@ -476,5 +477,14 @@ describe("toStopFilmText : ce que dit « Arrêter de filmer » avant d'agir", ()
   it("ne demande rien quand le téléphone n'a ni le plan ni le micro : rien ne change à l'antenne", () => {
     expect(toStopFilmText(standing(false), false)).toBeNull();
     expect(toStopFilmText({ hasPlace: false, isCurrent: false, shown: null }, false)).toBeNull();
+  });
+
+  it("Quand aucun micro n'est entendu (Muet), le système ne doit pas parler de micro : le téléphone n'a pas le micro du live", () => {
+    const closed = { id: "pc", label: "Micro du PC", isOpen: false, isAvailable: true };
+    const muted: ControlMic[] = [closed, { ...closed, id: "camera-1", label: "Caméra 1" }];
+    expect(isMicMuted({ isLinked: true, mics: muted })).toBe(true);
+    const isLiveMic = isLiveMicOf(muted, 1);
+    expect(toStopFilmText(standing(true), isLiveMic)).toBe("Le plan passe à Tête.");
+    expect(toStopFilmText(standing(false), isLiveMic)).toBeNull();
   });
 });

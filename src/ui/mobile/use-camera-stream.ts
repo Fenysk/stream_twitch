@@ -1,6 +1,7 @@
 // La caméra et le mic du téléphone dans la page : démarrés par Filmer (`film`, l'objectif et le cadrage pris à l'appui), arrêtés quand `film`
 // redevient vide. La logique est dans `camera-control.ts` ; ici, le navigateur (`getUserMedia`, Safari en arrière-plan). `film` est la seule
-// entrée : l'orientation du téléphone n'en est pas une, la rotation ne relance jamais la caméra.
+// entrée qui démarre ou arrête la caméra : la rotation du téléphone ne la relance jamais, elle remet seulement l'image de la piste en marche
+// dans son cadrage (`reframe`).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Facing, FilmStart } from "../../domain/phone-layout.rules";
@@ -10,6 +11,7 @@ import {
   type CameraStatus,
   createCameraControl,
 } from "./camera-control";
+import { watchPortrait } from "./use-portrait";
 
 export type CameraStream = {
   stream: MediaStream | null;
@@ -32,6 +34,10 @@ export const useCameraStream = (film: FilmStart | null): CameraStream => {
       getMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
       joinMedia: (video, audio) => new MediaStream([...video.getVideoTracks(), ...audio.getAudioTracks()]),
       onChange: setState,
+      schedule: (callback, ms) => {
+        const timer = setTimeout(callback, ms);
+        return () => clearTimeout(timer);
+      },
       log: (message, error) => console.warn(message, error),
     });
     control.current = next;
@@ -39,7 +45,9 @@ export const useCameraStream = (film: FilmStart | null): CameraStream => {
       if (document.visibilityState === "hidden") next.interrupt();
     };
     document.addEventListener("visibilitychange", onVisibility);
+    const stopWatching = watchPortrait(() => next.reframe());
     return () => {
+      stopWatching();
       document.removeEventListener("visibilitychange", onVisibility);
       next.stop();
       control.current = null;
